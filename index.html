@@ -273,6 +273,7 @@ function fileCalc(f) {
   return { paid, ip, cost, due: Math.max(0, n(f.total) - paid), profit: n(f.total) - cost };
 }
 // joma date থেকে পরের (বা সেদিনই) পেমেন্ট-ডে
+function addD(s, k) { const d = pd(s); d.setDate(d.getDate() + k); return ymd(d); }
 function payDayFor(s) { const d = pd(s); let g = 0; while (d.getDay() !== +S.settings.payDay && g++ < 8) d.setDate(d.getDate() + 1); return ymd(d); }
 function ipGroups() {
   const g = {}; let noJoma = [];
@@ -397,7 +398,7 @@ function vPass() {
     return true;
   }).sort((a, b) => (b.appDate || '').localeCompare(a.appDate || '') || (b.createdAt || 0) - (a.createdAt || 0));
   const totalDue = files.reduce((s, f) => s + fileCalc(f).due, 0);
-  let ipHtml = weekCard();
+  let ipHtml = ipTotals() + weekCard();
   return ipHtml
     + ipHistory() + '<div class="card row between"><span class="mut">ক্লায়েন্টদের কাছে মোট বাকি</span><b class="num ' + (totalDue ? 'bad' : 'good') + '">' + money(totalDue) + '</b></div>'
     + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="নাম, ফোন, Gmail বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="chips">' + [['all', 'সব'], ['due', 'টাকা বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা']].map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
@@ -406,6 +407,11 @@ function vPass() {
 }
 const UIW = { off: 0 };
 function weekBounds() { const e = pd(payDayFor(today())); e.setDate(e.getDate() + UIW.off * 7); const st = new Date(e); st.setDate(st.getDate() - 6); return [ymd(st), ymd(e)]; }
+function ipTotals() {
+  const fs = Object.values(S.files).filter(f => f.ipOn && f.jomaDate);
+  const tot = fs.reduce((s, f) => s + n(f.ipAmt), 0), paid = fs.filter(f => f.ipPaidDate).reduce((s, f) => s + n(f.ipAmt), 0);
+  return '<div class="card stack" style="gap:10px"><div class="row between"><b>সব মিলিয়ে IP</b><span class="sm mut">joma হওয়া ' + fs.length + 'টি ফাইল</span></div><div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>মোট দিতে হবে</small><b>' + money(tot) + '</b></div><div><small>দিয়েছি</small><b class="good">' + money(paid) + '</b></div><div><small>এখনও বাকি</small><b class="' + (tot - paid ? 'bad' : 'good') + '">' + money(tot - paid) + '</b></div></div></div>';
+}
 function weekCard() {
   const [a, z] = weekBounds(); const st = S.settings;
   const fs = Object.values(S.files).filter(f => f.ipOn && f.jomaDate && f.jomaDate >= a && f.jomaDate <= z).sort((x, y) => x.jomaDate.localeCompare(y.jomaDate));
@@ -435,7 +441,7 @@ function passCards(list) {
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
       + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
-      + '<div class="row between wrapr"><div class="row wrapr" style="gap:6px">' + ipb + (f.jomaDate ? '<span class="pill">joma ' + fd(f.jomaDate) + '</span>' : '') + '</div>' + '<span class="row" style="gap:6px">' + (f.ipOn && !f.ipPaidDate && f.jomaDate ? '<button class="btn sm warnb" onclick="event.stopPropagation();ipOne(\'' + f.id + '\')">IP দিলাম</button>' : '') + (c.due ? '<button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '') + '</span>' + '</div>'
+      + '<div class="row between wrapr"><div class="row wrapr" style="gap:6px">' + ipb + (f.jomaDate ? '<span class="pill">joma ' + fd(f.jomaDate) + '</span>' : '') + '</div>' + '<span class="row" style="gap:6px">' + (f.ipOn && !f.jomaDate ? '<button class="btn sm ghost" onclick="event.stopPropagation();jomaOne(\'' + f.id + '\')">joma করলাম</button>' : '') + (f.ipOn && !f.ipPaidDate && f.jomaDate ? '<button class="btn sm warnb" onclick="event.stopPropagation();ipOne(\'' + f.id + '\')">IP দিলাম</button>' : '') + (c.due ? '<button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '') + '</span>' + '</div>'
       + (f.note ? '<div class="sm" style="background:var(--warnbg);color:var(--warn);padding:7px 10px;border-radius:11px">📝 ' + esc(f.note) + '</div>' : '') + '</div>';
   }).join('');
 }
@@ -449,7 +455,8 @@ function fileForm(id, keep) {
     + '<div class="field"><label for="f_phone">ফোন নম্বর</label><input id="f_phone" type="tel" inputmode="tel" value="' + esc(f.phone) + '"></div>'
     + '<div class="field"><label>কোন Gmail দিয়ে করা হয়েছে</label><div class="chips" id="ch_gmail">' + gmailChips() + '</div></div>'
     + '<div class="field"><label>রেফারেন্স (কে কাজটা এনেছে)</label><div class="chips" id="ch_ref">' + refChips() + '</div></div>'
-    + '<div class="grid2"><div class="field"><label for="f_app">আবেদনের তারিখ</label><input id="f_app" type="date" value="' + f.appDate + '"></div><div class="field"><label for="f_joma">ফাইল joma তারিখ</label><input id="f_joma" type="date" value="' + (f.jomaDate || '') + '"></div></div>'
+    + '<div class="field"><label for="f_app">আবেদনের তারিখ (আজকের তারিখ নিজে বসেছে, বদলানো যায়)</label><input id="f_app" type="date" value="' + f.appDate + '"></div>'
+    + '<div class="ipbox stack" style="gap:8px"><label for="f_joma" style="margin:0;color:var(--ink);font-size:14px">ফাইল joma দেওয়ার তারিখ</label><div class="row"><input id="f_joma" type="date" value="' + (f.jomaDate || '') + '" onchange="fmCalc()"><button type="button" class="btn sm ghost" onclick="$(\'f_joma\').value=today();fmCalc()">আজ</button><button type="button" class="btn sm danger" onclick="$(\'f_joma\').value=\'\';fmCalc()">মুছুন</button></div><div class="sm" id="f_jnote"></div></div>'
     + '<div class="grid2"><div class="field"><label for="f_total">মোট বিল (৳)</label><input id="f_total" type="number" inputmode="decimal" value="' + (f.total === '' ? '' : n(f.total)) + '" oninput="fmCalc()"></div><div class="field"><label for="f_fee">পাসপোর্ট ফি (৳)</label><input id="f_fee" type="number" inputmode="decimal" value="' + (f.passFee === '' ? '' : n(f.passFee)) + '" oninput="fmCalc()"></div></div>'
     + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ipon" type="checkbox" style="width:auto" ' + (f.ipOn ? 'checked' : '') + ' onchange="fmCalc()"> এই ফাইলে IP আছে</label>'
     + '<div class="grid2"><div class="field"><label for="f_ipamt">IP এর টাকা (৳)</label><input id="f_ipamt" type="number" inputmode="decimal" value="' + n(f.ipAmt) + '" oninput="fmCalc()"></div><div class="field"><label for="f_ippaid">IP কে দেওয়ার তারিখ</label><input id="f_ippaid" type="date" value="' + (f.ipPaidDate || '') + '"></div></div>'
@@ -490,7 +497,8 @@ function fmCalc() {
   const c = fileCalc(f); const pays = fm.payments;
   $('f_prev').innerHTML = kv('মোট বিল', money(f.total)) + kv('− পাসপোর্ট ফি', money(f.passFee)) + kv('− IP', money(c.ip)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad') + kv('ক্লায়েন্ট দিয়েছে', money(c.paid), 'good') + kv('এখনও বাকি', money(c.due), c.due ? 'bad' : '');
   $('f_pays').innerHTML = pays.length ? pays.map((p, i) => '<div class="kv" style="align-items:center"><span>' + fd(p.date) + '</span><span class="row"><b class="num">' + money(p.amt) + '</b><button class="x" onclick="rmPay(' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') : '<div class="mut sm">এখনও কোনো জমা নেই</div>';
-  const j = val('f_joma'); $('f_ipnote').textContent = !$('f_ipon').checked ? 'IP নেই, তাই কোনো IP খরচ ধরা হবে না।' : (j ? 'IP দিতে হবে ' + fd(payDayFor(j)) + ' (' + DAYS[S.settings.payDay] + ')' : 'joma তারিখ দিলে তবেই IP দেওয়ার তারিখ আসবে।');
+  const j = val('f_joma'); $('f_ipnote').textContent = !$('f_ipon').checked ? 'IP নেই, তাই কোনো IP খরচ ধরা হবে না।' : (j ? 'এই IP যাবে ' + fd(addD(payDayFor(j), -6)) + ' – ' + fd(payDayFor(j)) + ' সপ্তাহে, পেমেন্ট ' + fd(payDayFor(j)) + ' (' + DAYS[S.settings.payDay] + ')' : 'joma তারিখ না দিলে IP হিসাবে ধরা হবে না।');
+  const jn = $('f_jnote'); if (jn) { jn.className = 'sm ' + (j ? 'good' : 'warnc'); jn.textContent = !$('f_ipon').checked ? 'IP নেই, joma তারিখ শুধু রেকর্ডের জন্য।' : (j ? '✓ IP হিসাবে ধরা হবে: ' + fd(addD(payDayFor(j), -6)) + ' – ' + fd(payDayFor(j)) + ' সপ্তাহে' : '⏸ joma তারিখ দিলে তবেই IP হিসাবে যাবে'); }
 }
 function addPay() { const a = n(val('p_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } grab(); fm.payments.push({ id: uid(), date: val('p_date') || today(), amt: a }); fileForm(fm.id, true); }
 function rmPay(i) { grab(); fm.payments.splice(i, 1); fileForm(fm.id, true); }
@@ -505,6 +513,13 @@ function quickPay(id) {
   sheet('জমা নিলাম — ' + esc(f.name), '<div class="mut sm">বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div><button class="btn block" onclick="doQuickPay(\'' + id + '\')">জমা করুন</button>');
 }
 function doQuickPay(id) { const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } S.files[id].payments.push({ id: uid(), date: val('q_date') || today(), amt: a }); S.files[id].updatedAt = Date.now(); save('files', id); closeSheet(); toast('জমা হয়েছে'); }
+function jomaOne(id) {
+  const f = S.files[id];
+  sheet('ফাইল joma — ' + esc(f.name), '<div class="mut sm">joma date দিলে এই ফাইলের IP ' + money(f.ipAmt) + ' ওই তারিখের সপ্তাহের হিসাবে যাবে।</div><div class="field"><label for="jm_date">joma এর তারিখ</label><input id="jm_date" type="date" value="' + today() + '" onchange="jmNote()"></div><div class="sm good" id="jm_note"></div><button class="btn block" onclick="doJoma(\'' + id + '\')">joma সেভ করুন</button>');
+  jmNote();
+}
+function jmNote() { const d = val('jm_date'); const e = $('jm_note'); if (e && d) e.textContent = 'IP যাবে ' + fd(addD(payDayFor(d), -6)) + ' – ' + fd(payDayFor(d)) + ' সপ্তাহে, পেমেন্ট ' + fd(payDayFor(d)); }
+function doJoma(id) { const d = val('jm_date'); if (!d) { toast('তারিখ দিন'); return; } const f = S.files[id]; f.jomaDate = d; f.updatedAt = Date.now(); save('files', id); closeSheet(); toast('joma ধরা হয়েছে'); }
 function ipOne(id) {
   const f = S.files[id];
   sheet('IP কে দিলাম — ' + esc(f.name), '<div class="mut sm">IP ' + money(f.ipAmt) + '</div><div class="field"><label for="ip_date">কবে দিয়েছেন</label><input id="ip_date" type="date" value="' + today() + '"></div><button class="btn block" onclick="doIpOne(\'' + id + '\')">দেওয়া হয়ে গেছে</button>' + (f.ipPaidDate ? '<button class="btn danger block" onclick="undoIp(\'' + id + '\')">পরিশোধ বাতিল (আবার বাকি)</button>' : ''));
