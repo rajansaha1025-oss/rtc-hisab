@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>RTC হিসাব</title>
+<meta name="theme-color" content="#0b132b">
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: ছোট স্ক্রিন-প্রথম অ্যাপ। উপরে হেডার, মাঝে একটা কলাম, নিচে ৫ ট্যাবের বার। শিট নিচ থেকে ওঠে। */
+:root{
+  --bg:#f2f5f9; --card:#ffffff; --ink:#0b132b; --mut:#5b6577; --line:#e0e6ee; --soft:#eaf2f8;
+  --acc:#0077b6; --onacc:#ffffff; --good:#0d8f60; --bad:#d12a47; --warn:#b86e00;
+  --goodbg:#e3f6ee; --badbg:#fde9ed; --warnbg:#fdf1dc; --shadow:0 1px 2px rgba(11,19,43,.06),0 4px 14px rgba(11,19,43,.05);
+  --f-body:'Hind Siliguri','Noto Sans Bengali',system-ui,sans-serif; --f-num:'JetBrains Mono',ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0a1020; --card:#121a30; --ink:#e8edf7; --mut:#93a0b8; --line:#243049; --soft:#17243f;
+  --acc:#4cbaea; --onacc:#06121f; --good:#3ccf98; --bad:#ff7088; --warn:#f0b04a;
+  --goodbg:#10302a; --badbg:#3a1a24; --warnbg:#392c12; --shadow:none; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a1020; --card:#121a30; --ink:#e8edf7; --mut:#93a0b8; --line:#243049; --soft:#17243f;
+  --acc:#4cbaea; --onacc:#06121f; --good:#3ccf98; --bad:#ff7088; --warn:#f0b04a;
+  --goodbg:#10302a; --badbg:#3a1a24; --warnbg:#392c12; --shadow:none; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));padding-block:0 92px}
+button,input,select,textarea{font:inherit;color:inherit}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.wrap{max-width:760px;margin:0 auto}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--bg);display:flex;align-items:center;gap:10px;padding:12px 0 10px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:30}
+header.top h1{font-size:19px;margin:0;font-weight:700;flex:1;min-width:0}
+header.top h1 small{display:block;font-size:11px;font-weight:500;color:var(--mut)}
+.ib{border:1px solid var(--line);background:var(--card);border-radius:10px;width:38px;height:38px;cursor:pointer;font-size:16px;display:grid;place-items:center}
+.sync{font-size:11px;font-weight:600;padding:4px 9px;border-radius:99px;background:var(--soft);color:var(--mut);white-space:nowrap}
+.sync.ok{background:var(--goodbg);color:var(--good)} .sync.bad{background:var(--badbg);color:var(--bad)} .sync.warn{background:var(--warnbg);color:var(--warn)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);min-width:0}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:10px;align-items:center;min-width:0}
+.between{justify-content:space-between}
+.wrapr{flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mut{color:var(--mut)} .sm{font-size:12px} .b{font-weight:700}
+.good{color:var(--good)} .bad{color:var(--bad)} .warnc{color:var(--warn)}
+h2{font-size:13px;font-weight:700;margin:6px 2px 0;color:var(--mut);letter-spacing:.04em}
+.hero{background:var(--ink);color:var(--bg);border:0;padding:18px}
+.hero .big{font-size:34px;font-weight:700;line-height:1.1;margin:4px 0}
+.hero .mut{color:inherit;opacity:.7}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--mut)}
+.pill{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;background:var(--soft);color:var(--mut);white-space:nowrap}
+.pill.good{background:var(--goodbg);color:var(--good)} .pill.bad{background:var(--badbg);color:var(--bad)} .pill.warn{background:var(--warnbg);color:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:6px 13px;cursor:pointer;font-size:13px;font-weight:500}
+.chip.on{background:var(--acc);border-color:var(--acc);color:var(--onacc);font-weight:600}
+.chip.rm{padding-right:9px}
+.btn{border:0;background:var(--acc);color:var(--onacc);border-radius:11px;padding:10px 16px;font-weight:700;cursor:pointer}
+.btn.ghost{background:var(--soft);color:var(--acc)}
+.btn.danger{background:var(--badbg);color:var(--bad)}
+.btn.sm{padding:6px 12px;font-size:13px;border-radius:9px}
+.btn.block{width:100%}
+label{display:block;font-size:12px;font-weight:600;color:var(--mut);margin:0 0 4px}
+input,select,textarea{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 11px;min-width:0}
+input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+textarea{resize:vertical;min-height:62px}
+.field{display:flex;flex-direction:column;min-width:0}
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:15;box-shadow:0 6px 18px rgba(0,0,0,.25);border-radius:99px;padding:13px 20px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--card);border-top:1px solid var(--line);display:flex;
+  padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px))}
+nav.tabs button{flex:1;border:0;background:none;padding:6px 2px;cursor:pointer;color:var(--mut);font-size:11.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:10px}
+nav.tabs button i{font-style:normal;font-size:19px}
+nav.tabs button.on{color:var(--acc);background:var(--soft)}
+.item{display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.item .nm{font-weight:700;font-size:16px;word-break:break-word}
+.mini{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+.mini div{background:var(--bg);border-radius:9px;padding:6px 2px;min-width:0}
+.mini small{display:block;font-size:10.5px;color:var(--mut)} .mini b{font-size:13px}
+#sheet{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center}
+#sheet[hidden]{display:none}
+.sh-bg{position:absolute;inset:0;background:rgba(5,10,25,.55)}
+.sh{position:relative;background:var(--card);width:100%;max-width:640px;max-height:92dvh;border-radius:20px 20px 0 0;display:flex;flex-direction:column;border:1px solid var(--line)}
+.sh-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);font-size:16px}
+.sh-b{padding:14px 16px calc(18px + env(safe-area-inset-bottom,0px));overflow:auto;display:flex;flex-direction:column;gap:12px}
+.x{border:0;background:none;font-size:18px;cursor:pointer;color:var(--mut)}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(86px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:13px;font-weight:600;z-index:60;max-width:90vw}
+#toast[hidden]{display:none}
+.bar{height:6px;border-radius:9px;background:var(--soft);overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;background:var(--acc)}
+.login{min-height:100dvh;display:grid;place-items:center;padding:20px 0}
+.login .card{width:100%;max-width:380px;display:flex;flex-direction:column;gap:12px;text-align:center}
+.empty{text-align:center;color:var(--mut);padding:26px 10px}
+.ipbox{border:1px solid var(--line);border-radius:11px;padding:10px;background:var(--bg)}
+.seg{display:flex;background:var(--soft);border-radius:11px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:7px 4px;font-weight:600;font-size:13px;cursor:pointer;color:var(--mut)}
+.seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+@media (prefers-reduced-motion:no-preference){.sh{animation:up .18s ease-out}@keyframes up{from{transform:translateY(40px);opacity:.4}}}
+</style>
+</head>
+<body>
+<div id="app" class="wrap"></div>
+<div id="sheet" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+/* ============================================================
+   RTC হিসাব — দোকানের হিসাব + পাসপোর্ট ফাইল + IP সাপ্তাহিক হিসাব
+   ডাটা: Firebase Realtime DB (/rtc_hisab) — ভিসা অ্যাপের একই প্রজেক্ট ও লগইন
+   ============================================================ */
+const FB = { key: 'AIzaSyCHSXIS5eCX-pQ9N-L2u5W1jSS7VoTRP1w', db: 'https://rtcvisa-fdbb5-default-rtdb.firebaseio.com', root: '/rtc_hisab', visa: '/rtc_visa_files' };
+const K = { data: 'rtc_hisab_v1', q: 'rtc_hisab_q', auth: 'rtc_hisab_auth', mode: 'rtc_hisab_mode', visa: 'rtc_hisab_visa' };
+const DAYS = ['রবিবার','সোমবার','মঙ্গলবার','বুধবার','বৃহস্পতিবার','শুক্রবার','শনিবার'];
+const KIND = { shop: 'দোকান খরচ', personal: 'ব্যক্তিগত খরচ', income: 'অন্য আয়' };
+
+const DEF = () => ({
+  settings: { payDay: 4, payTime: '18:00', defaultIp: 1200, gmails: [], refs: ['মামা', 'Rajan', 'Omey'],
+    cats: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন', 'অন্যান্য'], personal: ['বাসা খরচ', 'টুকটাক', 'অন্যান্য'], income: ['অন্য সার্ভিসের লাভ', 'অন্যান্য'] } },
+  expenses: {}, loans: {}, files: {}
+});
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+
+let S = norm(lsGet(K.data, null));
+let Q = lsGet(K.q, []);
+let AUTH = lsGet(K.auth, null);        // {email, refresh}
+let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
+let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
+let tab = 'home', fm = null;
+const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '' };
+
+function norm(d) {
+  const base = DEF(); if (!d || typeof d !== 'object') return base;
+  const s = Object.assign({}, base.settings, d.settings || {});
+  s.cats = Object.assign({}, base.settings.cats, (d.settings && d.settings.cats) || {});
+  ['gmails', 'refs'].forEach(k => { s[k] = arr(s[k]); });
+  ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
+  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {} };
+  Object.values(out.files).forEach(f => { f.payments = arr(f.payments); });
+  Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
+  return out;
+}
+function arr(x) { return !x ? [] : (Array.isArray(x) ? x.filter(v => v != null) : Object.values(x)); }
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const n = v => parseFloat(v) || 0;
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const money = v => { v = Math.round(n(v)); return (v < 0 ? '−' : '') + '৳' + Math.abs(v).toLocaleString('en-US'); };
+const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const today = () => ymd(new Date());
+const pd = s => new Date(s + 'T00:00:00');
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fd = s => { if (!s) return ''; const d = pd(s); return d.getDate() + ' ' + MON[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''); };
+function toast(t) { const e = $('toast'); e.textContent = t; e.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => e.hidden = true, 2200); }
+function persist() { lsSet(K.data, S); }
+
+/* ---------- ক্লাউড (Firebase REST) ---------- */
+async function signIn(email, pass) {
+  const r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password: pass, returnSecureToken: true }) });
+  const j = await r.json(); if (!r.ok) throw new Error((j.error && j.error.message) || 'LOGIN_FAILED');
+  AUTH = { email: j.email, refresh: j.refreshToken }; lsSet(K.auth, AUTH); idTok = j.idToken; idExp = Date.now() + (+j.expiresIn) * 1000;
+}
+async function token() {
+  if (idTok && Date.now() < idExp - 60000) return idTok;
+  if (!AUTH) throw new Error('AUTH');
+  const r = await fetch('https://securetoken.googleapis.com/v1/token?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(AUTH.refresh) });
+  const j = await r.json(); if (!r.ok) { throw new Error('AUTH'); }
+  idTok = j.id_token; idExp = Date.now() + (+j.expires_in) * 1000; AUTH.refresh = j.refresh_token; lsSet(K.auth, AUTH); return idTok;
+}
+async function cloud(method, path, body) {
+  const t = await token();
+  const r = await fetch(FB.db + path + '.json?auth=' + encodeURIComponent(t), { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (r.status === 401 || r.status === 403) { const e = new Error('PERM'); e.perm = true; throw e; }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function enqueue(m, p, b) {
+  if (MODE !== 'cloud') return;
+  Q = Q.filter(o => o.p !== p); Q.push({ m, p, b }); lsSet(K.q, Q); flush();
+}
+let flushing = false;
+async function flush() {
+  if (MODE !== 'cloud' || flushing) return; flushing = true; setSync(Q.length ? 'pending' : 'ok');
+  try {
+    while (Q.length) { const o = Q[0]; await cloud(o.m, o.p, o.m === 'DELETE' ? undefined : o.b); Q.shift(); lsSet(K.q, Q); }
+    setSync('ok');
+  } catch (e) { setSync(e.perm ? 'perm' : 'err'); if (!e.perm) setTimeout(flush, 15000); }
+  flushing = false;
+}
+function setSync(s) { syncSt = s; const e = $('syncPill'); if (e) { const m = { ok: ['✓ ক্লাউডে সেভ', 'ok'], pending: ['⏳ সেভ হচ্ছে…', 'warn'], err: ['⚠ নেট নেই, পরে হবে', 'warn'], perm: ['⛔ ডাটাবেস পারমিশন নেই', 'bad'], idle: ['', ''], local: ['শুধু এই ফোনে', ''] }[s] || ['', '']; e.textContent = m[0]; e.className = 'sync ' + m[1]; } }
+async function pull(quiet) {
+  if (MODE !== 'cloud') return;
+  try {
+    await flush(); if (Q.length) return;
+    const d = await cloud('GET', FB.root);
+    if (d == null) { pushAll(); }
+    else { S = norm(d); persist(); }
+    setSync('ok'); if (!document.querySelector('#sheet:not([hidden])')) render();
+  } catch (e) { setSync(e.perm ? 'perm' : 'err'); if (!quiet && e.perm) toast('Firebase rules এ /rtc_hisab এর পারমিশন দিন'); if (e.message === 'AUTH') { logout(true); } }
+}
+function pushAll() {
+  enqueue('PUT', FB.root + '/settings', S.settings);
+  ['expenses', 'loans', 'files'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
+}
+function save(coll, id) { persist(); enqueue('PUT', FB.root + '/' + coll + '/' + id, S[coll][id]); }
+function remove(coll, id) { delete S[coll][id]; persist(); enqueue('DELETE', FB.root + '/' + coll + '/' + id); }
+function saveSettings() { persist(); enqueue('PUT', FB.root + '/settings', S.settings); }
+
+async function loadVisa(force) {
+  if (MODE !== 'cloud') { VISA = { at: 0, rows: [], err: 'LOCAL' }; return; }
+  if (!force && VISA.at && Date.now() - VISA.at < 120000) return;
+  try {
+    const raw = await cloud('GET', FB.visa);
+    const list = (!raw || typeof raw !== 'object') ? [] : (Array.isArray(raw) ? raw : Object.values(raw)).filter(x => x && typeof x === 'object' && x.id);
+    VISA = { at: Date.now(), rows: list.map(visaRow), err: '' }; lsSet(K.visa, VISA);
+  } catch (e) { VISA.err = e.perm ? 'PERM' : 'NET'; }
+}
+// ভিসা অ্যাপের "হিসাব" ট্যাবের একই নিয়ম
+function visaRow(f) {
+  const ret = !!f.isReturned, del = !ret && !!f.isDelivered, appt = !!(f.isAppointed || f.appointmentDate);
+  const paid = n(f.billAdvance); let bill, due, profit, kept = 0;
+  if (ret) { kept = n(f.keptCharge); bill = kept; due = 0; profit = kept; }
+  else { bill = n(f.billTotal); due = Math.max(0, bill - paid); const w = n(f.baseVisaFee) + n(f.softwareCharge); profit = (del || appt) ? bill - w : 0; }
+  const ts = /^SET_(\d+)$/.test(f.id) ? +f.id.slice(4) : 0;
+  return { id: f.id, serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, date: ts ? ymd(new Date(ts)) : '' };
+}
+
+/* ---------- হিসাবের নিয়ম ---------- */
+function fileCalc(f) {
+  const paid = (f.payments || []).reduce((s, p) => s + n(p.amt), 0);
+  const ip = f.ipOn ? n(f.ipAmt) : 0;
+  const cost = n(f.passFee) + ip;
+  return { paid, ip, cost, due: Math.max(0, n(f.total) - paid), profit: n(f.total) - cost };
+}
+// joma date থেকে পরের (বা সেদিনই) পেমেন্ট-ডে
+function payDayFor(s) { const d = pd(s); let g = 0; while (d.getDay() !== +S.settings.payDay && g++ < 8) d.setDate(d.getDate() + 1); return ymd(d); }
+function ipGroups() {
+  const g = {}; let noJoma = [];
+  Object.values(S.files).forEach(f => {
+    if (!f.ipOn || f.ipPaidDate) return;
+    if (!f.jomaDate) { noJoma.push(f); return; }
+    const pdte = payDayFor(f.jomaDate); (g[pdte] = g[pdte] || []).push(f);
+  });
+  return { groups: Object.keys(g).sort().map(d => ({ date: d, files: g[d], total: g[d].reduce((s, f) => s + n(f.ipAmt), 0) })), noJoma };
+}
+function range() {
+  const now = new Date(), y = now.getFullYear(), m = now.getMonth(); const p = UI.period;
+  if (p === 'month') return [ymd(new Date(y, m, 1)), ymd(new Date(y, m + 1, 0))];
+  if (p === 'last') return [ymd(new Date(y, m - 1, 1)), ymd(new Date(y, m, 0))];
+  if (p === 'year') return [y + '-01-01', y + '-12-31'];
+  if (p === 'custom') return [UI.from || '', UI.to || ''];
+  return ['', ''];
+}
+const inR = (d, r) => d && (!r[0] || d >= r[0]) && (!r[1] || d <= r[1]);
+
+function overall() {
+  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0 };
+  Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; p.n++; p.bill += n(f.total); p.paid += c.paid; p.due += c.due; p.fee += n(f.passFee); p.ip += c.ip; p.profit += c.profit; });
+  Object.values(S.expenses).forEach(e => { if (!inR(e.date, r)) return; o.exp[e.kind] += n(e.amt); if (e.kind === 'shop') o.byCat[e.cat] = (o.byCat[e.cat] || 0) + n(e.amt); });
+  VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; } });
+  o.income = o.pp.profit + o.visa + o.exp.income; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
+  let get = 0, give = 0; Object.values(S.loans).forEach(l => { const b = loanBal(l); if (b > 0) get += b; else give -= b; });
+  o.get = get; o.give = give; return o;
+}
+const loanBal = l => (l.entries || []).reduce((s, e) => s + (e.dir === 'gave' ? n(e.amt) : -n(e.amt)), 0);   // + মানে সে আমাকে দেবে
+
+/* ---------- শিট / ইউটিলিটি ---------- */
+function sheet(title, body) { $('sheet').innerHTML = '<div class="sh-bg" onclick="closeSheet()"></div><div class="sh"><div class="sh-h"><b>' + title + '</b><button class="x" onclick="closeSheet()" aria-label="বন্ধ">✕</button></div><div class="sh-b">' + body + '</div></div>'; $('sheet').hidden = false; }
+function closeSheet() { $('sheet').hidden = true; $('sheet').innerHTML = ''; fm = null; render(); }
+function arm(btn, fn) { if (btn.dataset.a) { fn(); return; } btn.dataset.a = 1; const t = btn.textContent; btn.textContent = 'আবার চাপুন'; setTimeout(() => { btn.textContent = t; delete btn.dataset.a; }, 2500); }
+const val = id => { const e = $(id); return e ? e.value : ''; };
+function chipRow(list, sel, fn, extra) { return list.map(v => '<button type="button" class="chip' + (v === sel ? ' on' : '') + '" onclick="' + fn + '(' + esc(JSON.stringify(JSON.stringify(v))) + ')">' + esc(v) + '</button>').join('') + (extra || ''); }
+
+/* ---------- রেন্ডার ---------- */
+function render() {
+  if (MODE === '') { renderLogin(); return; }
+  const tabs = [['home', '📊', 'হিসাব'], ['pass', '🛂', 'পাসপোর্ট'], ['exp', '🧾', 'খরচ'], ['loan', '🤝', 'লেনদেন'], ['visa', '✈️', 'ভিসা']];
+  const titles = { home: 'ওভারঅল হিসাব', pass: 'পাসপোর্ট ফাইল', exp: 'খরচ ও আয়', loan: 'বাকি লেনদেন', visa: 'ভিসা (অটো)', set: 'সেটিংস' };
+  let body = ({ home: vHome, pass: vPass, exp: vExp, loan: vLoan, visa: vVisa, set: vSet })[tab]();
+  $('app').innerHTML = '<header class="top"><h1>RTC হিসাব<small>' + titles[tab] + '</small></h1><span id="syncPill" class="sync"></span><button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">⚙️</button></header><main class="stack">' + body + '</main>'
+    + '<nav class="tabs">' + tabs.map(t => '<button class="' + (tab === t[0] ? 'on' : '') + '" onclick="go(\'' + t[0] + '\')"><i>' + t[1] + '</i>' + t[2] + '</button>').join('') + '</nav>';
+  setSync(MODE === 'local' ? 'local' : syncSt);
+}
+function go(t) { tab = t; render(); window.scrollTo(0, 0); if (t === 'visa') loadVisa().then(() => { if (tab === 'visa') render(); }); if (t === 'home') loadVisa().then(() => { if (tab === 'home') render(); }); }
+
+function renderLogin() {
+  $('app').innerHTML = '<div class="login"><div class="card"><div style="font-size:34px">📒</div><h1 style="margin:0;font-size:22px">RTC হিসাব</h1><p class="mut sm" style="margin:0">ভিসা অ্যাপের একই ইমেইল ও পাসওয়ার্ড দিন</p>'
+    + '<input id="lg_e" type="email" placeholder="Email" autocomplete="username"><input id="lg_p" type="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doLogin()">'
+    + '<button class="btn block" onclick="doLogin()">লগইন করুন</button><p id="lg_err" class="bad sm" style="margin:0"></p>'
+    + '<button class="btn ghost block" onclick="useLocal()">লগইন ছাড়া চালান (শুধু এই ফোনে সেভ)</button></div></div>';
+}
+async function doLogin() {
+  try { $('lg_err').textContent = 'অপেক্ষা করুন…'; await signIn(val('lg_e').trim(), val('lg_p')); MODE = 'cloud'; try { localStorage.setItem(K.mode, 'cloud'); } catch (e) { } render(); pull(); }
+  catch (e) { $('lg_err').textContent = 'লগইন হয়নি: ' + (/INVALID|PASSWORD|EMAIL/.test(e.message) ? 'ইমেইল বা পাসওয়ার্ড ভুল' : 'নেট বা সার্ভার সমস্যা'); }
+}
+function useLocal() { MODE = 'local'; try { localStorage.setItem(K.mode, 'local'); } catch (e) { } render(); }
+function logout(silent) { AUTH = null; idTok = ''; MODE = ''; try { localStorage.removeItem(K.auth); localStorage.removeItem(K.mode); } catch (e) { } if (!silent) toast('লগআউট হয়েছে'); render(); }
+
+/* ===== ১) ওভারঅল ===== */
+function vHome() {
+  const o = overall(); const p = UI.period;
+  const per = '<div class="card stack" style="gap:10px"><div class="seg">' + [['month', 'এই মাস'], ['last', 'গত মাস'], ['year', 'এই বছর'], ['all', 'সব'], ['custom', 'বাছাই']].map(x => '<button class="' + (p === x[0] ? 'on' : '') + '" onclick="UI.period=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
+    + (p === 'custom' ? '<div class="grid2"><div class="field"><label for="c_from">থেকে</label><input id="c_from" type="date" value="' + UI.from + '" onchange="UI.from=this.value;render()"></div><div class="field"><label for="c_to">পর্যন্ত</label><input id="c_to" type="date" value="' + UI.to + '" onchange="UI.to=this.value;render()"></div></div>' : '') + '</div>';
+  const cats = Object.entries(o.byCat).sort((a, b) => b[1] - a[1]); const mx = cats.length ? cats[0][1] : 1;
+  const v = VISA;
+  return per
+    + '<div class="card hero"><div class="mut sm">দোকানের নিট লাভ (সব আয় − দোকান খরচ)</div><div class="big num ' + '">' + money(o.net) + '</div>'
+    + '<div class="mut sm">ব্যক্তিগত খরচের পর হাতে থাকল <b class="num" style="opacity:1">' + money(o.left) + '</b></div></div>'
+    + '<h2>আয়ের উৎস</h2><div class="card">'
+    + kv('🛂 পাসপোর্ট লাভ (' + o.pp.n + 'টি ফাইল)', money(o.pp.profit), o.pp.profit >= 0 ? 'good' : 'bad')
+    + kv('✈️ ভিসা লাভ (অটো' + (o.visaN ? ', ' + o.visaN + 'টি' : '') + ')', MODE === 'cloud' ? money(o.visa) : '—', 'good')
+    + kv('🧩 অন্য সার্ভিসের লাভ', money(o.exp.income), 'good')
+    + kv('<b>মোট আয়</b>', '<b>' + money(o.income) + '</b>') + '</div>'
+    + '<h2>খরচ</h2><div class="card">'
+    + kv('🏪 দোকান খরচ', money(o.exp.shop), 'bad')
+    + (cats.length ? '<div style="padding:6px 0 4px">' + cats.map(c => '<div class="sm" style="margin-top:7px"><div class="row between"><span>' + esc(c[0]) + '</span><span class="num">' + money(c[1]) + '</span></div><div class="bar"><i style="width:' + Math.max(3, c[1] / mx * 100) + '%"></i></div></div>').join('') + '</div>' : '')
+    + kv('🏠 ব্যক্তিগত খরচ', money(o.exp.personal), 'bad') + '</div>'
+    + '<h2>পাসপোর্ট ফাইলের সারাংশ</h2><div class="card">'
+    + kv('মোট বিল', money(o.pp.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.pp.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.pp.due), o.pp.due ? 'bad' : '')
+    + kv('পাসপোর্ট ফি (খরচ)', money(o.pp.fee)) + kv('IP (খরচ)', money(o.pp.ip)) + '</div>'
+    + '<h2>বাকি লেনদেন (সব সময়)</h2><div class="card">' + kv('আমি পাব', money(o.get), 'good') + kv('আমি দেব', money(o.give), o.give ? 'bad' : '') + '</div>'
+    + (MODE === 'cloud' && v.err === 'PERM' ? '<div class="card sm bad">ভিসা ফাইল পড়ার পারমিশন নেই</div>' : '')
+    + '<p class="mut sm" style="text-align:center;margin:4px 0">ভিসা লাভ ফাইলের তৈরির তারিখ ধরে মাসে ধরা হয়; "সব" বাছলে সব ফাইল ধরা হয়।</p>';
+}
+function kv(a, b, c) { return '<div class="kv"><span>' + a + '</span><span class="num ' + (c || '') + '">' + b + '</span></div>'; }
+
+/* ===== ২) পাসপোর্ট ===== */
+function vPass() {
+  const files = Object.values(S.files); const q = UI.pq.trim().toLowerCase();
+  const { groups, noJoma } = ipGroups(); const st = S.settings;
+  let list = files.filter(f => {
+    const c = fileCalc(f);
+    if (UI.pf === 'due' && !c.due) return false;
+    if (UI.pf === 'ip' && !(f.ipOn && !f.ipPaidDate && f.jomaDate)) return false;
+    if (UI.pf === 'clear' && (c.due || !n(f.total))) return false;
+    if (q && !(f.name + ' ' + (f.phone || '') + ' ' + (f.gmail || '') + ' ' + (f.ref || '')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a, b) => (b.appDate || '').localeCompare(a.appDate || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  const totalDue = files.reduce((s, f) => s + fileCalc(f).due, 0);
+  let ipHtml = '<div class="card stack" style="gap:10px"><div class="row between wrapr"><b>IP সাপ্তাহিক হিসাব</b><span class="pill">প্রতি ' + DAYS[st.payDay] + ', ' + fmtTime(st.payTime) + '</span></div>';
+  if (!groups.length) ipHtml += '<div class="mut sm">এখন কোনো IP বাকি নেই।</div>';
+  groups.forEach(g => {
+    const late = g.date < today();
+    ipHtml += '<div class="ipbox"><div class="row between wrapr"><div><b>' + fd(g.date) + '</b> <span class="pill ' + (late ? 'bad' : 'warn') + '">' + (late ? 'আগের বাকি' : (g.date === today() ? 'আজ দিতে হবে' : 'আসছে')) + '</span></div><b class="num">' + money(g.total) + '</b></div>'
+      + '<div class="sm mut" style="margin:6px 0">' + g.files.map(f => esc(f.name) + ' <span class="num">' + n(f.ipAmt) + '</span> <span>(joma ' + fd(f.jomaDate) + ')</span>').join(' · ') + '</div>'
+      + '<button class="btn sm" onclick="ipPaySheet(\'' + g.date + '\')">IP কে দিলাম</button></div>';
+  });
+  if (noJoma.length) ipHtml += '<div class="sm mut">⏸ ' + noJoma.length + 'টি ফাইলে joma date নেই, তাই এখন IP দিতে হবে না: ' + noJoma.slice(0, 4).map(f => esc(f.name)).join(', ') + (noJoma.length > 4 ? '…' : '') + '</div>';
+  ipHtml += '</div>';
+  return ipHtml
+    + '<div class="card row between"><span class="mut">ক্লায়েন্টদের কাছে মোট বাকি</span><b class="num ' + (totalDue ? 'bad' : 'good') + '">' + money(totalDue) + '</b></div>'
+    + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="নাম, ফোন, Gmail বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="chips">' + [['all', 'সব'], ['due', 'টাকা বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা']].map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
+    + '<div id="plist" class="stack">' + passCards(list) + '</div>'
+    + '<button class="btn fab" onclick="fileForm()">＋ নতুন ফাইল</button>';
+}
+function renderListOnly() { const q = UI.pq.trim().toLowerCase(); const el = $('plist'); if (!el) return; render(); const i = $('p_q'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
+function fmtTime(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'রাত/বিকাল' : 'সকাল'; return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h >= 12 ? ' PM' : ' AM'); }
+function passCards(list) {
+  if (!list.length) return '<div class="empty">কোনো ফাইল নেই। নিচের "নতুন ফাইল" চেপে প্রথম পাসপোর্ট যোগ করুন।</div>';
+  return list.map(f => {
+    const c = fileCalc(f);
+    let ipb = '<span class="pill">IP নেই</span>';
+    if (f.ipOn) ipb = f.ipPaidDate ? '<span class="pill good">IP দেওয়া ' + fd(f.ipPaidDate) + '</span>' : (f.jomaDate ? '<span class="pill warn">IP দেবো ' + fd(payDayFor(f.jomaDate)) + '</span>' : '<span class="pill">joma হয়নি</span>');
+    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')"><div class="row between"><span class="nm">' + esc(f.name) + '</span><span class="mut sm">' + fd(f.appDate) + '</span></div>'
+      + '<div class="row wrapr sm mut" style="gap:6px 12px">' + (f.phone ? '<span>📞 ' + esc(f.phone) + '</span>' : '') + (f.gmail ? '<span style="word-break:break-all">✉ ' + esc(f.gmail) + '</span>' : '') + (f.ref ? '<span class="pill">রেফ: ' + esc(f.ref) + '</span>' : '') + '</div>'
+      + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
+      + '<div class="row between wrapr"><div class="row wrapr" style="gap:6px">' + ipb + (f.jomaDate ? '<span class="pill">joma ' + fd(f.jomaDate) + '</span>' : '') + '</div>' + (c.due ? '<button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">＋ জমা নিলাম</button>' : '') + '</div>'
+      + (f.note ? '<div class="sm" style="background:var(--warnbg);color:var(--warn);padding:6px 9px;border-radius:9px">📝 ' + esc(f.note) + '</div>' : '') + '</div>';
+  }).join('');
+}
+
+/* ফাইল ফর্ম */
+function fileForm(id, keep) {
+  if (!keep) { const f = id ? S.files[id] : null; fm = f ? JSON.parse(JSON.stringify(f)) : { id: '', name: '', phone: '', gmail: '', ref: '', appDate: today(), jomaDate: '', total: '', passFee: '', ipOn: true, ipAmt: S.settings.defaultIp, ipPaidDate: '', note: '', payments: [] }; }
+  const f = fm;
+  sheet(f.id ? 'ফাইল এডিট' : 'নতুন পাসপোর্ট ফাইল',
+    '<div class="field"><label for="f_name">কার নামে পাসপোর্ট</label><input id="f_name" value="' + esc(f.name) + '" placeholder="ক্লায়েন্টের নাম"></div>'
+    + '<div class="field"><label for="f_phone">ফোন নম্বর</label><input id="f_phone" type="tel" inputmode="tel" value="' + esc(f.phone) + '"></div>'
+    + '<div class="field"><label>কোন Gmail দিয়ে করা হয়েছে</label><div class="chips" id="ch_gmail">' + gmailChips() + '</div></div>'
+    + '<div class="field"><label>রেফারেন্স (কে কাজটা এনেছে)</label><div class="chips" id="ch_ref">' + refChips() + '</div></div>'
+    + '<div class="grid2"><div class="field"><label for="f_app">আবেদনের তারিখ</label><input id="f_app" type="date" value="' + f.appDate + '"></div><div class="field"><label for="f_joma">ফাইল joma তারিখ</label><input id="f_joma" type="date" value="' + (f.jomaDate || '') + '"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="f_total">মোট বিল (৳)</label><input id="f_total" type="number" inputmode="decimal" value="' + (f.total === '' ? '' : n(f.total)) + '" oninput="fmCalc()"></div><div class="field"><label for="f_fee">পাসপোর্ট ফি (৳)</label><input id="f_fee" type="number" inputmode="decimal" value="' + (f.passFee === '' ? '' : n(f.passFee)) + '" oninput="fmCalc()"></div></div>'
+    + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ipon" type="checkbox" style="width:auto" ' + (f.ipOn ? 'checked' : '') + ' onchange="fmCalc()"> এই ফাইলে IP আছে</label>'
+    + '<div class="grid2"><div class="field"><label for="f_ipamt">IP এর টাকা (৳)</label><input id="f_ipamt" type="number" inputmode="decimal" value="' + n(f.ipAmt) + '" oninput="fmCalc()"></div><div class="field"><label for="f_ippaid">IP কে দেওয়ার তারিখ</label><input id="f_ippaid" type="date" value="' + (f.ipPaidDate || '') + '"></div></div>'
+    + '<div class="sm mut" id="f_ipnote"></div></div>'
+    + '<div class="card" style="box-shadow:none;background:var(--bg)" id="f_prev"></div>'
+    + '<div class="field"><label>ক্লায়েন্ট কত দিয়েছে</label><div id="f_pays"></div>'
+    + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳"><button class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
+    + '<div class="field"><label for="f_note">নোট</label><textarea id="f_note" placeholder="যেকোনো নোট">' + esc(f.note) + '</textarea></div>'
+    + '<button class="btn block" onclick="saveFile()">সেভ করুন</button>'
+    + (f.id ? '<button class="btn danger block" onclick="arm(this,delFile)">ফাইল মুছে ফেলুন</button>' : ''));
+  fmCalc();
+}
+function gmailChips() {
+  const l = S.settings.gmails.slice(); if (fm.gmail && !l.includes(fm.gmail)) l.unshift(fm.gmail);
+  return chipRow(l, fm.gmail, 'pickG', '<button type="button" class="chip" onclick="addList(\'gmails\',\'gmail\')">＋ নতুন Gmail</button>');
+}
+function refChips() {
+  const l = S.settings.refs.slice(); if (fm.ref && !l.includes(fm.ref)) l.unshift(fm.ref);
+  return chipRow(l, fm.ref, 'pickR', '<button type="button" class="chip" onclick="addList(\'refs\',\'ref\')">＋ নতুন নাম</button>');
+}
+function pickG(s) { const v = JSON.parse(s); fm.gmail = fm.gmail === v ? '' : v; $('ch_gmail').innerHTML = gmailChips(); }
+function pickR(s) { const v = JSON.parse(s); fm.ref = fm.ref === v ? '' : v; $('ch_ref').innerHTML = refChips(); }
+function addList(listKey, field) {
+  const host = $(field === 'gmail' ? 'ch_gmail' : 'ch_ref');
+  host.insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="nl_in" placeholder="' + (field === 'gmail' ? 'example@gmail.com' : 'নাম') + '"><button class="btn sm" onclick="commitList(\'' + listKey + '\',\'' + field + '\')">যোগ</button></div>');
+  $('nl_in').focus();
+}
+function commitList(listKey, field) {
+  const v = val('nl_in').trim(); if (!v) return; if (!S.settings[listKey].includes(v)) S.settings[listKey].push(v); saveSettings(); fm[field] = v;
+  $('ch_gmail').innerHTML = gmailChips(); $('ch_ref').innerHTML = refChips();
+}
+function grab() {
+  fm.name = val('f_name').trim(); fm.phone = val('f_phone').trim(); fm.appDate = val('f_app') || today(); fm.jomaDate = val('f_joma'); fm.total = val('f_total'); fm.passFee = val('f_fee');
+  fm.ipOn = $('f_ipon').checked; fm.ipAmt = val('f_ipamt'); fm.ipPaidDate = val('f_ippaid'); fm.note = val('f_note').trim();
+}
+function fmCalc() {
+  const f = { total: val('f_total'), passFee: val('f_fee'), ipOn: $('f_ipon') && $('f_ipon').checked, ipAmt: val('f_ipamt'), payments: fm.payments };
+  const c = fileCalc(f); const pays = fm.payments;
+  $('f_prev').innerHTML = kv('মোট বিল', money(f.total)) + kv('− পাসপোর্ট ফি', money(f.passFee)) + kv('− IP', money(c.ip)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad') + kv('ক্লায়েন্ট দিয়েছে', money(c.paid), 'good') + kv('এখনও বাকি', money(c.due), c.due ? 'bad' : '');
+  $('f_pays').innerHTML = pays.length ? pays.map((p, i) => '<div class="kv" style="align-items:center"><span>' + fd(p.date) + '</span><span class="row"><b class="num">' + money(p.amt) + '</b><button class="x" onclick="rmPay(' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') : '<div class="mut sm">এখনও কোনো জমা নেই</div>';
+  const j = val('f_joma'); $('f_ipnote').textContent = !$('f_ipon').checked ? 'IP নেই, তাই কোনো IP খরচ ধরা হবে না।' : (j ? 'IP দিতে হবে ' + fd(payDayFor(j)) + ' (' + DAYS[S.settings.payDay] + ')' : 'joma তারিখ দিলে তবেই IP দেওয়ার তারিখ আসবে।');
+}
+function addPay() { const a = n(val('p_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } grab(); fm.payments.push({ id: uid(), date: val('p_date') || today(), amt: a }); fileForm(fm.id, true); }
+function rmPay(i) { grab(); fm.payments.splice(i, 1); fileForm(fm.id, true); }
+function saveFile() {
+  grab(); if (!fm.name) { toast('নাম লিখুন'); return; }
+  const id = fm.id || uid(); const rec = Object.assign({}, fm, { id, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
+  S.files[id] = rec; save('files', id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('সেভ হয়েছে');
+}
+function delFile() { remove('files', fm.id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('মুছে গেছে'); }
+function quickPay(id) {
+  const f = S.files[id], c = fileCalc(f);
+  sheet('জমা নিলাম — ' + esc(f.name), '<div class="mut sm">বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div><button class="btn block" onclick="doQuickPay(\'' + id + '\')">জমা করুন</button>');
+}
+function doQuickPay(id) { const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } S.files[id].payments.push({ id: uid(), date: val('q_date') || today(), amt: a }); S.files[id].updatedAt = Date.now(); save('files', id); closeSheet(); toast('জমা হয়েছে'); }
+function ipPaySheet(date) {
+  const g = ipGroups().groups.find(x => x.date === date); if (!g) return;
+  sheet('IP কে দিলাম', '<div class="mut sm">' + g.files.length + 'টি ফাইল · মোট <b class="num">' + money(g.total) + '</b></div>' + g.files.map(f => '<label class="row" style="color:var(--ink);font-size:14px;margin:0"><input type="checkbox" style="width:auto" class="ipck" value="' + f.id + '" checked> ' + esc(f.name) + ' <span class="num mut">' + n(f.ipAmt) + '</span></label>').join('')
+    + '<div class="field"><label for="ip_date">কবে দিয়েছেন</label><input id="ip_date" type="date" value="' + today() + '"></div><button class="btn block" onclick="doIpPay()">দেওয়া হয়ে গেছে</button>');
+}
+function doIpPay() { const d = val('ip_date') || today(); document.querySelectorAll('.ipck:checked').forEach(c => { const f = S.files[c.value]; if (f) { f.ipPaidDate = d; f.updatedAt = Date.now(); save('files', f.id); } }); closeSheet(); toast('IP পরিশোধ ধরা হয়েছে'); }
+
+/* ===== ৩) খরচ / আয় ===== */
+function vExp() {
+  if (!UI.ym) UI.ym = today().slice(0, 7);
+  const k = UI.ek; const list = Object.values(S.expenses).filter(e => e.kind === k && (e.date || '').slice(0, 7) === UI.ym).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0));
+  const total = list.reduce((s, e) => s + n(e.amt), 0); const bc = {}; list.forEach(e => bc[e.cat] = (bc[e.cat] || 0) + n(e.amt));
+  const [y, m] = UI.ym.split('-').map(Number);
+  return '<div class="seg">' + Object.keys(KIND).map(x => '<button class="' + (k === x ? 'on' : '') + '" onclick="UI.ek=\'' + x + '\';render()">' + KIND[x] + '</button>').join('') + '</div>'
+    + '<div class="card row between"><button class="ib" onclick="shiftM(-1)" aria-label="আগের মাস">‹</button><div style="text-align:center"><b>' + MON[m - 1] + ' ' + y + '</b><div class="num b ' + (k === 'income' ? 'good' : 'bad') + '" style="font-size:22px">' + money(total) + '</div></div><button class="ib" onclick="shiftM(1)" aria-label="পরের মাস">›</button></div>'
+    + (Object.keys(bc).length ? '<div class="card">' + Object.entries(bc).sort((a, b) => b[1] - a[1]).map(c => kv(esc(c[0]), money(c[1]))).join('') + '</div>' : '')
+    + (list.length ? '<div class="card" style="padding:4px 14px">' + list.map(e => '<div class="kv" style="cursor:pointer;align-items:center" onclick="expForm(\'' + e.id + '\')"><span style="color:var(--ink)"><b>' + esc(e.cat) + '</b><div class="mut sm">' + fd(e.date) + (e.note ? ' · ' + esc(e.note) : '') + '</div></span><b class="num">' + money(e.amt) + '</b></div>').join('') + '</div>' : '<div class="empty">এই মাসে কিছু নেই</div>')
+    + '<button class="btn fab" onclick="expForm()">＋ ' + KIND[k] + '</button>';
+}
+function shiftM(d) { const [y, m] = UI.ym.split('-').map(Number); UI.ym = ymd(new Date(y, m - 1 + d, 1)).slice(0, 7); render(); }
+function expForm(id) {
+  const e = id ? S.expenses[id] : null; const kind = e ? e.kind : UI.ek; fm = e ? Object.assign({}, e) : { id: '', kind, date: today(), cat: S.settings.cats[kind][0] || '', amt: '', note: '' };
+  sheet((e ? 'এডিট — ' : 'নতুন ') + KIND[kind], '<div class="field"><label>ক্যাটেগরি</label><div class="chips" id="ch_cat">' + catChips(kind) + '</div></div>'
+    + '<div class="grid2"><div class="field"><label for="e_date">তারিখ</label><input id="e_date" type="date" value="' + fm.date + '"></div><div class="field"><label for="e_amt">টাকা (৳)</label><input id="e_amt" type="number" inputmode="decimal" value="' + (fm.amt === '' ? '' : n(fm.amt)) + '"></div></div>'
+    + '<div class="field"><label for="e_note">নোট</label><input id="e_note" value="' + esc(fm.note) + '" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="saveExp()">সেভ করুন</button>'
+    + (e ? '<button class="btn danger block" onclick="arm(this,delExp)">মুছে ফেলুন</button>' : ''));
+}
+function catChips(kind) { const l = S.settings.cats[kind].slice(); if (fm.cat && !l.includes(fm.cat)) l.unshift(fm.cat); return chipRow(l, fm.cat, 'pickC', '<button type="button" class="chip" onclick="newCat(\'' + kind + '\')">＋ নতুন</button>'); }
+function pickC(s) { fm.cat = JSON.parse(s); $('ch_cat').innerHTML = catChips(fm.kind); }
+function newCat(kind) { const c = $('ch_cat'); c.insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="nc_in" placeholder="ক্যাটেগরির নাম"><button class="btn sm" onclick="commitCat(\'' + kind + '\')">যোগ</button></div>'); $('nc_in').focus(); }
+function commitCat(kind) { const v = val('nc_in').trim(); if (!v) return; if (!S.settings.cats[kind].includes(v)) S.settings.cats[kind].push(v); saveSettings(); fm.cat = v; $('ch_cat').innerHTML = catChips(kind); }
+function saveExp() {
+  const a = n(val('e_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (!fm.cat) { toast('ক্যাটেগরি বাছুন'); return; }
+  const id = fm.id || uid(); S.expenses[id] = { id, kind: fm.kind, cat: fm.cat, date: val('e_date') || today(), amt: a, note: val('e_note').trim(), createdAt: fm.createdAt || Date.now() };
+  save('expenses', id); UI.ym = S.expenses[id].date.slice(0, 7); closeSheet(); toast('সেভ হয়েছে');
+}
+function delExp() { remove('expenses', fm.id); closeSheet(); toast('মুছে গেছে'); }
+
+/* ===== ৪) বাকি লেনদেন ===== */
+function vLoan() {
+  const ls = Object.values(S.loans).sort((a, b) => Math.abs(loanBal(b)) - Math.abs(loanBal(a)));
+  const get = ls.reduce((s, l) => s + Math.max(0, loanBal(l)), 0), give = ls.reduce((s, l) => s + Math.max(0, -loanBal(l)), 0);
+  return '<div class="grid2"><div class="card"><div class="mut sm">আমি পাব</div><div class="num b good" style="font-size:20px">' + money(get) + '</div></div><div class="card"><div class="mut sm">আমি দেব</div><div class="num b bad" style="font-size:20px">' + money(give) + '</div></div></div>'
+    + (ls.length ? ls.map(l => { const b = loanBal(l); return '<div class="card row between item" style="flex-direction:row" onclick="loanSheet(\'' + l.id + '\')"><div style="min-width:0"><div class="nm">' + esc(l.person) + '</div><div class="mut sm">' + (l.entries.length) + 'টি এন্ট্রি' + (l.phone ? ' · ' + esc(l.phone) : '') + '</div></div><div style="text-align:right"><b class="num ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></div></div>'; }).join('') : '<div class="empty">কারো সাথে বাকি লেনদেন নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।</div>')
+    + '<button class="btn fab" onclick="personForm()">＋ নতুন ব্যক্তি</button>';
+}
+function personForm() { sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name"></div><div class="field"><label for="n_phone">ফোন (ঐচ্ছিক)</label><input id="n_phone" type="tel"></div><button class="btn block" onclick="savePerson()">যোগ করুন</button>'); }
+function savePerson() { const nm = val('n_name').trim(); if (!nm) { toast('নাম লিখুন'); return; } const id = uid(); S.loans[id] = { id, person: nm, phone: val('n_phone').trim(), entries: [], createdAt: Date.now() }; save('loans', id); loanSheet(id); }
+function loanSheet(id) {
+  const l = S.loans[id]; const b = loanBal(l); const es = l.entries.slice().sort((a, c) => c.date.localeCompare(a.date));
+  sheet(esc(l.person), '<div class="card" style="box-shadow:none;background:var(--bg);text-align:center"><div class="mut sm">' + (b > 0 ? 'আমি পাব' : (b < 0 ? 'আমি দেব' : 'হিসাব মিটে গেছে')) + '</div><div class="num b ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : '')) + '" style="font-size:26px">' + money(Math.abs(b)) + '</div></div>'
+    + '<div class="seg"><button id="d_gave" class="on" onclick="setDir(\'gave\')">আমি দিলাম</button><button id="d_got" onclick="setDir(\'got\')">আমি পেলাম</button></div>'
+    + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal"></div></div>'
+    + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\')">এন্ট্রি যোগ করুন</button>'
+    + (es.length ? '<div>' + es.map(e => '<div class="kv" style="align-items:center"><span style="color:var(--ink)">' + fd(e.date) + ' <span class="pill ' + (e.dir === 'gave' ? 'warn' : 'good') + '">' + (e.dir === 'gave' ? 'দিলাম' : 'পেলাম') + '</span>' + (e.note ? '<div class="mut sm">' + esc(e.note) + '</div>' : '') + '</span><span class="row"><b class="num">' + money(e.amt) + '</b><button class="x" onclick="rmEntry(\'' + id + '\',\'' + e.id + '\')" aria-label="মুছুন">✕</button></span></div>').join('') + '</div>' : '')
+    + '<button class="btn danger block" onclick="arm(this,function(){delPerson(\'' + id + '\')})">এই ব্যক্তির পুরো হিসাব মুছুন</button>');
+  window._dir = 'gave';
+}
+function setDir(d) { window._dir = d; $('d_gave').className = d === 'gave' ? 'on' : ''; $('d_got').className = d === 'got' ? 'on' : ''; }
+function addEntry(id) { const a = n(val('l_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } S.loans[id].entries.push({ id: uid(), date: val('l_date') || today(), amt: a, dir: window._dir || 'gave', note: val('l_note').trim() }); save('loans', id); loanSheet(id); }
+function rmEntry(id, eid) { S.loans[id].entries = S.loans[id].entries.filter(e => e.id !== eid); save('loans', id); loanSheet(id); }
+function delPerson(id) { remove('loans', id); closeSheet(); }
+
+/* ===== ৫) ভিসা (অটো) ===== */
+function vVisa() {
+  if (MODE !== 'cloud') return '<div class="card stack"><b>ভিসা ফাইলের হিসাব অটো আসতে লগইন লাগবে</b><span class="mut sm">ভিসা অ্যাপে যে ফাইল আপলোড করেন, তার বিল, জমা ও লাভ এখানে নিজে নিজে আসে। ভিসা অ্যাপের ইমেইল দিয়ে লগইন করুন।</span><button class="btn" onclick="logout(true)">লগইন পেজে যান</button></div>';
+  const r = VISA.rows; const t = r.reduce((a, x) => { a.bill += x.bill; a.paid += x.paid; a.due += x.due; a.profit += x.profit; return a; }, { bill: 0, paid: 0, due: 0, profit: 0 });
+  const mc = { DELIVERED: ['ডেলিভারড', 'good'], APPOINTED: ['অ্যাপয়েন্টেড', 'warn'], RUNNING: ['চলমান', ''], RETURNED: ['ফেরত', 'bad'] };
+  return (VISA.err ? '<div class="card sm ' + (VISA.err === 'PERM' ? 'bad' : 'warnc') + '">' + (VISA.err === 'PERM' ? 'ভিসা ফাইল পড়ার পারমিশন নেই' : 'নেট সমস্যা, আগের তথ্য দেখাচ্ছে') + '</div>' : '')
+    + '<div class="card hero"><div class="mut sm">ভিসা থেকে মোট লাভ</div><div class="big num">' + money(t.profit) + '</div><div class="mut sm">বিল ' + money(t.bill) + ' · জমা ' + money(t.paid) + ' · বাকি ' + money(t.due) + '</div></div>'
+    + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
+    + (r.length ? r.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>বিল</small><b>' + Math.round(x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div></div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
+    + '<p class="mut sm" style="text-align:center">লাভ ধরা হয় ডেলিভারড বা অ্যাপয়েন্টেড ফাইলে (বিল − ভিসা ফি − সফটওয়্যার চার্জ), ফেরত ফাইলে রাখা চার্জ।</p>';
+}
+
+/* ===== সেটিংস ===== */
+function vSet() {
+  const st = S.settings;
+  const lst = (title, key, arrRef) => '<div class="card stack" style="gap:8px"><b>' + title + '</b><div class="chips">' + arrRef.map((v, i) => '<span class="chip rm">' + esc(v) + ' <button class="x" style="font-size:14px" onclick="rmItem(\'' + key + '\',' + i + ')" aria-label="মুছুন">✕</button></span>').join('') + '</div><div class="row"><input id="add_' + key + '" placeholder="নতুন যোগ করুন" onkeydown="if(event.key===\'Enter\')addItem(\'' + key + '\')"><button class="btn sm" onclick="addItem(\'' + key + '\')">যোগ</button></div></div>';
+  return '<button class="btn ghost" onclick="go(\'home\')">← ফিরে যান</button>'
+    + '<div class="card stack"><b>IP পেমেন্টের সময়</b><div class="grid2"><div class="field"><label for="s_day">সপ্তাহের কোন দিন</label><select id="s_day" onchange="setSt()">' + DAYS.map((d, i) => '<option value="' + i + '"' + (i === +st.payDay ? ' selected' : '') + '>' + d + '</option>').join('') + '</select></div><div class="field"><label for="s_time">সময়</label><input id="s_time" type="time" value="' + st.payTime + '" onchange="setSt()"></div></div>'
+    + '<div class="field"><label for="s_ip">সাধারণ IP (প্রতি ফাইল ৳)</label><input id="s_ip" type="number" value="' + n(st.defaultIp) + '" onchange="setSt()"></div><span class="mut sm">নতুন ফাইলে এই টাকা বসবে। ফাইলে আলাদা করে বদলানো যায়।</span></div>'
+    + lst('Gmail লিস্ট', 'gmails', st.gmails) + lst('রেফারেন্স লিস্ট', 'refs', st.refs)
+    + lst('দোকান খরচের ক্যাটেগরি', 'cats.shop', st.cats.shop) + lst('ব্যক্তিগত খরচের ক্যাটেগরি', 'cats.personal', st.cats.personal) + lst('অন্য আয়ের ক্যাটেগরি', 'cats.income', st.cats.income)
+    + '<div class="card stack"><b>অ্যাকাউন্ট ও ডাটা</b><span class="mut sm">' + (MODE === 'cloud' ? 'লগইন: ' + esc(AUTH ? AUTH.email : '') + ' · ডাটা ক্লাউডে সেভ হচ্ছে' : 'লোকাল মোড: ডাটা শুধু এই ফোনে') + '</span>'
+    + (MODE === 'cloud' ? '<button class="btn ghost" onclick="pull()">🔄 ক্লাউড থেকে আবার আনুন</button>' : '<button class="btn ghost" onclick="logout(true)">লগইন করুন</button>')
+    + '<button class="btn ghost" onclick="backup()">⬇ ব্যাকআপ ফাইল নামান</button>' + (MODE !== '' ? '<button class="btn danger" onclick="arm(this,logout)">লগআউট</button>' : '') + '</div>';
+}
+function setSt() { S.settings.payDay = +val('s_day'); S.settings.payTime = val('s_time') || '18:00'; S.settings.defaultIp = n(val('s_ip')); saveSettings(); toast('সেভ হয়েছে'); }
+function listRef(key) { return key.startsWith('cats.') ? S.settings.cats[key.slice(5)] : S.settings[key]; }
+function addItem(key) { const v = val('add_' + key).trim(); if (!v) return; const l = listRef(key); if (!l.includes(v)) l.push(v); saveSettings(); render(); }
+function rmItem(key, i) { listRef(key).splice(i, 1); saveSettings(); render(); }
+function backup() { const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'rtc-hisab-backup-' + today() + '.json'; a.click(); }
+
+/* ---------- শুরু ---------- */
+render();
+if (MODE === 'cloud') { pull(true); loadVisa().then(() => { if (tab === 'home') render(); }); setInterval(() => { if (!document.hidden) pull(true); }, 60000); window.addEventListener('online', () => flush()); }
+</script>
+</body>
+</html>
