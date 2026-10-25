@@ -262,6 +262,9 @@ function visaRow(f) {
   return { id: f.id, serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, date: ts ? ymd(new Date(ts)) : '' };
 }
 
+/* ---------- 📲 ফোন → WhatsApp (wa.me/88 + নম্বর) ---------- */
+function waNum(p) { let d = String(p || '').replace(/\D/g, ''); if (!d) return ''; if (d.startsWith('00')) d = d.slice(2); if (d.startsWith('88')) return d; if (d.startsWith('0')) return '88' + d; if (d.length === 10 && d[0] === '1') return '880' + d; return '88' + d; }
+function waPhone(p) { const raw = String(p || '').trim(); const w = waNum(raw); if (!w) return esc(raw); return '<a href="https://wa.me/' + w + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--good);font-weight:600;text-decoration:none">' + esc(raw) + ' <span style="background:#25d366;color:#fff;border-radius:99px;font-size:10px;padding:1px 7px;font-weight:700">WA</span></a>'; }
 /* ---------- হিসাবের নিয়ম ---------- */
 function fileCalc(f) {
   const paid = (f.payments || []).reduce((s, p) => s + n(p.amt), 0);
@@ -428,7 +431,7 @@ function passCards(list) {
     let ipb = '<span class="pill">IP নেই</span>';
     if (f.ipOn) ipb = f.ipPaidDate ? '<span class="pill good">IP দেওয়া ' + fd(f.ipPaidDate) + '</span>' : (f.jomaDate ? '<span class="pill warn">IP দেবো ' + fd(payDayFor(f.jomaDate)) + '</span>' : '<span class="pill">joma হয়নি</span>');
     const st = !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
-    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')"><div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + esc(f.phone) : '') + (f.ref ? ' · রেফ: ' + esc(f.ref) : '') + '</div></div>' + st + '</div>'
+    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')"><div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '') + (f.ref ? ' · রেফ: ' + esc(f.ref) : '') + '</div></div>' + st + '</div>'
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
       + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
@@ -592,7 +595,7 @@ function loanSheet(id) {
   let run = 0; const withBal = chron.map(e => { run += e.dir === 'gave' ? n(e.amt) : -n(e.amt); return { e, run }; }).reverse();
   const took = l.entries.filter(e => e.dir === 'gave').reduce((s, e) => s + n(e.amt), 0), back = l.entries.filter(e => e.dir === 'got').reduce((s, e) => s + n(e.amt), 0);
   window._dir = window._dir || 'gave';
-  sheet(esc(l.person) + (l.phone ? ' <span class="mut sm">' + esc(l.phone) + '</span>' : ''),
+  sheet(esc(l.person) + (l.phone ? ' <span class="sm">' + waPhone(l.phone) + '</span>' : ''),
     '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">মোট নিয়েছে</div><b class="num">' + money(took) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">ফেরত দিয়েছে</div><b class="num good">' + money(back) + '</b></div></div>'
     + '<div class="card" style="box-shadow:none;background:' + (b > 0 ? 'var(--goodbg)' : (b < 0 ? 'var(--badbg)' : 'var(--soft)')) + ';text-align:center"><div class="sm ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + (b > 0 ? 'এখনও বাকি, আমি পাব' : (b < 0 ? 'আমি দেব' : 'হিসাব মিটে গেছে')) + '</div><div class="num b ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : '')) + '" style="font-size:30px">' + money(Math.abs(b)) + '</div></div>'
     + dirSeg(window._dir)
