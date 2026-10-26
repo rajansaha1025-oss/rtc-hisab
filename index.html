@@ -130,6 +130,14 @@ nav.tabs button.on{color:var(--acc);background:var(--soft)}
 .seg button{flex:1;border:0;background:none;border-radius:11px;padding:9px 4px;font-weight:600;font-size:13.5px;cursor:pointer;color:var(--mut)}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 @media (prefers-reduced-motion:no-preference){.sh{animation:up .18s ease-out}@keyframes up{from{transform:translateY(40px);opacity:.4}}}
+[hidden]{display:none!important}
+main{padding-bottom:64px}
+.notetop{background:var(--warnbg);color:var(--warn);padding:8px 11px;border-radius:11px;font-size:13.5px;font-weight:600;word-break:break-word;white-space:pre-wrap}
+.hs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.hs::-webkit-scrollbar{display:none}
+.hs .chip{white-space:nowrap;flex:none}
+nav.tabs button{font-size:11px;padding-left:0;padding-right:0}
+details.ipbox summary{font-size:13.5px}
 </style>
 </head>
 <body>
@@ -150,8 +158,10 @@ const KIND = { shop: 'দোকান খরচ', personal: 'ব্যক্ত�
 
 const DEF = () => ({
   settings: { payDay: 4, payTime: '18:00', defaultIp: 1200, gmails: [], refs: ['মামা', 'Rajan', 'Omey'],
+    docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: [], pin: '',
+    services: [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }],
     cats: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন', 'অন্যান্য'], personal: ['বাসা খরচ', 'টুকটাক', 'অন্যান্য'], income: ['অন্য সার্ভিসের লাভ', 'অন্যান্য'] } },
-  expenses: {}, loans: {}, files: {}, ipPays: {}
+  expenses: {}, loans: {}, files: {}, ipPays: {}, docs: {}, cnt: {}
 });
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
@@ -162,17 +172,20 @@ let AUTH = lsGet(K.auth, null);        // {email, refresh}
 let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
 let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
 let tab = 'home', fm = null;
-const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card' };
+const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false };
 
 function norm(d) {
   const base = DEF(); if (!d || typeof d !== 'object') return base;
   const s = Object.assign({}, base.settings, d.settings || {});
   s.cats = Object.assign({}, base.settings.cats, (d.settings && d.settings.cats) || {});
-  ['gmails', 'refs'].forEach(k => { s[k] = arr(s[k]); });
+  ['gmails', 'refs', 'docCats', 'staff'].forEach(k => { s[k] = arr(s[k]); });
+  s.services = arr(s.services).filter(x => x && x.n).map(x => ({ n: String(x.n), r: parseFloat(x.r) || 0 })); s.pin = s.pin || '';
   ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
-  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {} };
+  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {} };
   Object.values(out.files).forEach(f => { f.payments = arr(f.payments); });
   Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
+  Object.values(out.docs).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); f.log = arr(f.log); });
+  Object.values(out.cnt).forEach(f => { f.payments = arr(f.payments); f.log = arr(f.log); });
   return out;
 }
 function arr(x) { return !x ? [] : (Array.isArray(x) ? x.filter(v => v != null) : Object.values(x)); }
@@ -232,12 +245,12 @@ async function pull(quiet) {
     const d = await cloud('GET', FB.root);
     if (d == null) { pushAll(); }
     else { S = norm(d); persist(); }
-    setSync('ok'); if (!document.querySelector('#sheet:not([hidden])')) render();
+    setSync('ok'); const ae = document.activeElement; if (!document.querySelector('#sheet:not([hidden])') && !(ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))) render();
   } catch (e) { setSync(e.perm ? 'perm' : 'err'); if (!quiet && e.perm) toast('Firebase rules এ /rtc_hisab এর পারমিশন দিন'); if (e.message === 'AUTH') { logout(true); } }
 }
 function pushAll() {
   enqueue('PUT', FB.root + '/settings', S.settings);
-  ['expenses', 'loans', 'files', 'ipPays'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
+  ['expenses', 'loans', 'files', 'ipPays', 'docs', 'cnt'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
 }
 function save(coll, id) { persist(); enqueue('PUT', FB.root + '/' + coll + '/' + id, S[coll][id]); }
 function remove(coll, id) { delete S[coll][id]; persist(); enqueue('DELETE', FB.root + '/' + coll + '/' + id); }
@@ -302,11 +315,17 @@ function range() {
 const inR = (d, r) => d && (!r[0] || d >= r[0]) && (!r[1] || d <= r[1]);
 
 function overall() {
-  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0 };
+  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 } };
   Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; p.n++; p.bill += n(f.total); p.paid += c.paid; p.due += c.due; p.fee += n(f.passFee); p.ip += c.ip; p.profit += c.profit; });
   Object.values(S.expenses).forEach(e => { if (!inR(e.date, r)) return; o.exp[e.kind] += n(e.amt); if (e.kind === 'shop') o.byCat[e.cat] = (o.byCat[e.cat] || 0) + n(e.amt); });
+  Object.values(S.docs).forEach(d => {
+    const c = docCalc(d); const x = o.doc;
+    if (inR(d.recvDate, r)) { x.cnt++; x.bill += c.bill; x.paid += c.paid; x.due += c.due; x.cost += c.cost; }
+    if (c.real && inR(docProfitDate(d), r)) { x.n++; x.profit += c.profit; const b = x.byCat[d.cat] = x.byCat[d.cat] || { n: 0, profit: 0 }; b.n++; b.profit += c.profit; }
+  });
+  Object.values(S.cnt).forEach(cc => { if (!inR(cc.date, r)) return; const k = cntCalc(cc); const x = o.cn; x.n++; x.bill += k.total; x.paid += k.paid; x.due += k.due; x.cost += k.cost; x.profit += k.profit; });
   VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; } });
-  o.income = o.pp.profit + o.visa + o.exp.income; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
+  o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
   let get = 0, give = 0; Object.values(S.loans).forEach(l => { const b = loanBal(l); if (b > 0) get += b; else give -= b; });
   o.get = get; o.give = give; return o;
 }
@@ -325,7 +344,9 @@ const ICONS = {
   receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>', swap: '<path d="M7 8h12l-3.5-3.5M17 16H5l3.5 3.5"/>',
   plane: '<path d="M21 3L3 10.5l6.5 2.5L12 20z"/><path d="M9.5 13L21 3"/>', gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',
   plus: '<path d="M12 5v14M5 12h14"/>', coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.9-2.5.9-2.5 1.9 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/>',
-  down: '<path d="M12 4v13M6 12l6 6 6-6"/>', up: '<path d="M12 20V7M6 12l6-6 6 6"/>', bell: '<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>'
+  down: '<path d="M12 4v13M6 12l6 6 6-6"/>', up: '<path d="M12 20V7M6 12l6-6 6 6"/>', bell: '<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  doc: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>', print: '<path d="M7 9V3h10v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'
 };
 const ic = (nm) => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[nm] + '</svg>';
 const avatarCls = s => ['', 'g', 'r', 'w'][(String(s).charCodeAt(0) || 0) % 4];
@@ -333,16 +354,21 @@ const initial = s => esc((String(s || '?').trim()[0] || '?').toUpperCase());
 
 function render() {
   if (MODE === '') { renderLogin(); return; }
-  const tabs = [['home', 'chart', 'হিসাব'], ['pass', 'id', 'পাসপোর্ট'], ['exp', 'receipt', 'খরচ'], ['loan', 'swap', 'বাকি'], ['visa', 'plane', 'ভিসা']];
-  const titles = { home: 'RTC হিসাব', pass: 'পাসপোর্ট ফাইল', exp: 'খরচ ও আয়', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', set: 'সেটিংস' };
-  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), pass: 'ক্লায়েন্ট, IP ও জমা', exp: 'দোকান ও ব্যক্তিগত', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', set: 'লিস্ট ও IP এর সময়' };
-  const body = ({ home: vHome, pass: vPass, exp: vExp, loan: vLoan, visa: vVisa, set: vSet })[tab]();
-  $('app').innerHTML = '<header class="top"><div class="wrap pad hd"><img class="logo" src="'+LOGO+'" alt="RTC"><h1>' + titles[tab] + '<small>' + subs[tab] + '</small></h1><span id="syncPill" class="sync"></span><button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">' + ic('gear') + '</button></div></header><main class="wrap pad stack">' + body + '</main>'
-    + '<nav class="tabs">' + tabs.map(t => '<button class="' + (tab === t[0] ? 'on' : '') + '" onclick="go(\'' + t[0] + '\')">' + ic(t[1]) + t[2] + '</button>').join('') + '</nav>';
+  if (isStaff() && !STAFF_TABS.includes(tab)) tab = 'doc';
+  const tabs = isStaff() ? [['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার']]
+    : [['home', 'chart', 'হিসাব'], ['pass', 'id', 'পাসপোর্ট'], ['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার'], ['exp', 'receipt', 'খরচ'], ['more', 'more', 'আরও']];
+  const titles = { home: 'RTC হিসাব', pass: 'পাসপোর্ট ফাইল', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার সার্ভিস', exp: 'খরচ ও আয়', more: 'আরও', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', set: 'সেটিংস' };
+  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), pass: 'ক্লায়েন্ট, IP ও জমা', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'ফটোকপি, অনলাইন, টাইপিং, CV…', exp: 'দোকান ও ব্যক্তিগত', more: 'বাকি খাতা, ভিসা, সেটিংস, রিপোর্ট', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', set: 'লিস্ট ও IP এর সময়' };
+  if (isStaff()) subs[tab] = 'স্টাফ মোড' + (ME ? ' · ' + ME : '');
+  const body = ({ home: vHome, pass: vPass, doc: vDoc, cnt: vCnt, exp: vExp, loan: vLoan, visa: vVisa, more: vMore, set: vSet })[tab]();
+  const on = k => tab === k || (k === 'more' && ['loan', 'visa', 'set'].includes(tab));
+  $('app').innerHTML = '<header class="top"><div class="wrap pad hd"><img class="logo" src="'+LOGO+'" alt="RTC"><h1>' + titles[tab] + '<small>' + subs[tab] + '</small></h1><span id="syncPill" class="sync"></span>'
+    + (isStaff() ? '<button class="ib" onclick="unlockSheet()" aria-label="মালিক মোড">' + ic('lock') + '</button>' : '<button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">' + ic('gear') + '</button>') + '</div></header><main class="wrap pad stack">' + body + '</main>'
+    + '<nav class="tabs">' + tabs.map(t => '<button class="' + (on(t[0]) ? 'on' : '') + '" onclick="go(\'' + t[0] + '\')">' + ic(t[1]) + t[2] + '</button>').join('') + '</nav>';
   setSync(MODE === 'local' ? 'local' : syncSt);
 }
 
-function go(t) { tab = t; render(); window.scrollTo(0, 0); if (t === 'visa') loadVisa().then(() => { if (tab === 'visa') render(); }); if (t === 'home') loadVisa().then(() => { if (tab === 'home') render(); }); }
+function go(t) { if (isStaff() && !STAFF_TABS.includes(t)) t = 'doc'; tab = t; render(); window.scrollTo(0, 0); if (t === 'visa' || t === 'home') loadVisa().then(() => { if (tab === t) render(); }); }
 
 function renderLogin() {
   $('app').innerHTML = '<div class="login wrap pad"><div class="card"><img class="logo" src="'+LOGO+'" alt="RTC" style="margin:0 auto;width:76px;height:76px;border-radius:20px"><h1 style="margin:0;font-size:22px">RTC হিসাব</h1><p class="mut sm" style="margin:0">ভিসা অ্যাপের একই ইমেইল ও পাসওয়ার্ড দিন</p>'
@@ -374,11 +400,22 @@ function vHome() {
   if (dues.length) alerts += '<div class="alert" onclick="UI.pf=\'due\';go(\'pass\')"><span class="avatar r">' + ic('down') + '</span><div style="flex:1;min-width:0"><b>ক্লায়েন্টের কাছে বাকি</b><div class="sm mut">' + dues.length + ' জন · সবচেয়ে বেশি ' + esc(dues[0].f.name) + '</div></div><b class="num bad">' + money(dueTot) + '</b></div>';
   if (o.get) alerts += '<div class="alert" onclick="go(\'loan\')"><span class="avatar g">' + ic('up') + '</span><div style="flex:1"><b>বাকি খাতায় আমি পাব</b></div><b class="num good">' + money(o.get) + '</b></div>';
   if (o.give) alerts += '<div class="alert" onclick="go(\'loan\')"><span class="avatar r">' + ic('down') + '</span><div style="flex:1"><b>বাকি খাতায় আমি দেব</b></div><b class="num bad">' + money(o.give) + '</b></div>';
+  const dl = Object.values(S.docs).map(d => ({ d, c: docCalc(d) })); const t0 = today();
+  const dDue = dl.filter(x => x.c.due > 0), dRun = dl.filter(x => x.d.status === 'run'), dLate = dRun.filter(x => x.d.promiseDate && x.d.promiseDate < t0), dRef = dl.filter(x => x.c.refundDue > 0), dCost = dl.filter(x => x.d.status !== 'ret' && n(x.d.cost) > 0 && !x.d.costDone);
+  const cDue = Object.values(S.cnt).filter(c => cntCalc(c).due > 0);
+  const al = (cls, icn, ttl, sub, amt, amtCls, js) => '<div class="alert" onclick="' + js + '"><span class="avatar ' + cls + '">' + ic(icn) + '</span><div style="flex:1;min-width:0"><b>' + ttl + '</b><div class="sm mut">' + sub + '</div></div>' + (amt != null ? '<b class="num ' + amtCls + '">' + money(amt) + '</b>' : '') + '</div>';
+  if (dRun.length) alerts += al(dLate.length ? 'r' : 'w', 'doc', 'ডকুমেন্ট কাজ ডেলিভারি বাকি', dRun.length + 'টি চলমান' + (dLate.length ? ' · ' + dLate.length + 'টি দেরি' : ''), null, '', "UI.df='" + (dLate.length ? 'late' : 'run') + "';UI.dc='all';UI.dm='all';go('doc')");
+  if (dDue.length) alerts += al('r', 'down', 'ডকুমেন্ট কাজে বাকি টাকা', dDue.length + ' জনের কাছে', dDue.reduce((s, x) => s + x.c.due, 0), 'bad', "UI.df='due';UI.dc='all';UI.dm='all';go('doc')");
+  if (dCost.length) alerts += al('w', 'receipt', 'ডকুমেন্টের খরচ এখনও হয়নি', dCost.length + 'টি কাজে', dCost.reduce((s, x) => s + n(x.d.cost), 0), 'warnc', "UI.df='cost';UI.dc='all';UI.dm='all';go('doc')");
+  if (dRef.length) alerts += al('r', 'swap', 'ক্লায়েন্টকে ফেরত দিতে বাকি', dRef.length + 'টি ফেরত কাজে', dRef.reduce((s, x) => s + x.c.refundDue, 0), 'bad', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')");
+  if (cDue.length) alerts += al('r', 'print', 'কাউন্টারে বাকি টাকা', cDue.length + 'টি এন্ট্রি', cDue.reduce((s, c) => s + cntCalc(c).due, 0), 'bad', "UI.cDue=true;go('cnt')");
   const att = alerts ? '<h2>এখন নজর দিন</h2><div class="card stack" style="gap:8px;padding:10px">' + alerts + '</div>' : '';
   return per + hero + quick + att
     + '<h2>আয়ের উৎস</h2><div class="card">'
     + kv('পাসপোর্ট লাভ (' + o.pp.n + 'টি ফাইল)', money(o.pp.profit), o.pp.profit >= 0 ? 'good' : 'bad')
     + kv('ভিসা লাভ (অটো' + (o.visaN ? ', ' + o.visaN + 'টি' : '') + ')', MODE === 'cloud' ? money(o.visa) : '—', 'good')
+    + kv('ডকুমেন্ট কাজের লাভ (' + o.doc.n + 'টি ডেলিভারড/ফেরত)', money(o.doc.profit), o.doc.profit >= 0 ? 'good' : 'bad')
+    + kv('কাউন্টার সার্ভিসের লাভ (' + o.cn.n + 'টি এন্ট্রি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad')
     + kv('অন্য সার্ভিসের লাভ', money(o.exp.income), 'good')
     + kv('<b style="color:var(--ink)">মোট আয়</b>', '<b>' + money(o.income) + '</b>') + '</div>'
     + '<h2>দোকান খরচ</h2><div class="card">'
@@ -387,8 +424,13 @@ function vHome() {
     + '<h2>পাসপোর্ট ফাইলের সারাংশ</h2><div class="card">'
     + kv('মোট বিল', money(o.pp.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.pp.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.pp.due), o.pp.due ? 'bad' : '')
     + kv('পাসপোর্ট ফি (খরচ)', money(o.pp.fee)) + kv('IP (খরচ)', money(o.pp.ip)) + '</div>'
+    + '<h2>ডকুমেন্ট কাজের সারাংশ</h2><div class="card">'
+    + kv('এই সময়ে নেওয়া কাজ', o.doc.cnt + 'টি') + kv('মোট বিল (ফেরতে রাখা চার্জ)', money(o.doc.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.doc.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.doc.due), o.doc.due ? 'bad' : '') + kv('মোট খরচ', money(o.doc.cost))
+    + Object.entries(o.doc.byCat).sort((a, b) => b[1].profit - a[1].profit).map(([k, v]) => kv('<span class="sm">লাভ · ' + esc(k) + ' (' + v.n + 'টি)</span>', money(v.profit), v.profit >= 0 ? 'good' : 'bad')).join('') + '</div>'
+    + '<h2>কাউন্টার সার্ভিসের সারাংশ</h2><div class="card">'
+    + kv('এন্ট্রি', o.cn.n + 'টি') + kv('মোট বিল', money(o.cn.bill)) + kv('পেয়েছি', money(o.cn.paid), 'good') + kv('বাকি', money(o.cn.due), o.cn.due ? 'bad' : '') + kv('খরচ', money(o.cn.cost)) + '</div>'
     + (MODE === 'cloud' && VISA.err === 'PERM' ? '<div class="card sm bad">ভিসা ফাইল পড়ার পারমিশন নেই</div>' : '')
-    + '<p class="mut sm" style="text-align:center;margin:0">ভিসা লাভ ফাইলের তৈরির তারিখ ধরে মাসে ধরা হয়; "সব" বাছলে সব ফাইল ধরা হয়।</p>';
+    + '<p class="mut sm" style="text-align:center;margin:0">ডকুমেন্ট কাজের লাভ ডেলিভারি/ফেরতের তারিখের মাসে ধরা হয় (চলমান কাজের লাভ ধরা হয় না)। ভিসা লাভ ফাইলের তৈরির তারিখ ধরে মাসে ধরা হয়; "সব" বাছলে সব ফাইল ধরা হয়।</p>';
 }
 function kv(a, b, c) { return '<div class="kv"><span>' + a + '</span><span class="num ' + (c || '') + '">' + b + '</span></div>'; }
 
@@ -466,13 +508,13 @@ function passCards(list, E) {
   return list.map(f => {
     const c = fileCalc(f); const pct = n(f.total) ? Math.min(100, c.paid / n(f.total) * 100) : 0;
     const st = !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
-    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')"><div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '') + (f.ref ? ' · রেফ: ' + esc(f.ref) : '') + '</div></div>' + st + '</div>'
+    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')">' + (f.note ? notePill(f.note) : '') + '<div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '') + (f.ref ? ' · রেফ: ' + esc(f.ref) : '') + '</div></div>' + st + '</div>'
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
       + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
       + checklist(f, E)
       + (c.due ? '<div class="row" style="justify-content:flex-end"><button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button></div>' : '')
-      + (f.note ? '<div class="sm" style="background:var(--warnbg);color:var(--warn);padding:7px 10px;border-radius:11px">📝 ' + esc(f.note) + '</div>' : '') + '</div>';
+      + '</div>';
   }).join('');
 }
 
@@ -483,6 +525,7 @@ function fileForm(id, keep) {
   sheet(f.id ? 'ফাইল এডিট' : 'নতুন পাসপোর্ট ফাইল',
     '<div class="field"><label for="f_name">কার নামে পাসপোর্ট</label><input id="f_name" value="' + esc(f.name) + '" placeholder="ক্লায়েন্টের নাম"></div>'
     + '<div class="field"><label for="f_phone">ফোন নম্বর</label><input id="f_phone" type="tel" inputmode="tel" value="' + esc(f.phone) + '"></div>'
+    + '<div class="field"><label for="f_note">📝 নোট (কার্ডের একদম উপরে দেখাবে)</label><textarea id="f_note" placeholder="যেকোনো নোট">' + esc(f.note) + '</textarea></div>'
     + '<div class="field"><label>কোন Gmail দিয়ে করা হয়েছে</label><div class="chips" id="ch_gmail">' + gmailChips() + '</div></div>'
     + '<div class="field"><label>রেফারেন্স (কে কাজটা এনেছে)</label><div class="chips" id="ch_ref">' + refChips() + '</div></div>'
     + '<div class="field"><label for="f_app">আবেদনের তারিখ (আজকের তারিখ নিজে বসেছে, বদলানো যায়)</label><input id="f_app" type="date" value="' + f.appDate + '"></div>'
@@ -495,7 +538,6 @@ function fileForm(id, keep) {
     + '<div class="card" style="box-shadow:none;background:var(--bg)" id="f_prev"></div>'
     + '<div class="field"><label>ক্লায়েন্ট কত দিয়েছে</label><div id="f_pays"></div>'
     + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳"><button class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
-    + '<div class="field"><label for="f_note">নোট</label><textarea id="f_note" placeholder="যেকোনো নোট">' + esc(f.note) + '</textarea></div>'
     + '<button class="btn block" onclick="saveFile()">সেভ করুন</button>'
     + (f.id ? '<button class="btn danger block" onclick="arm(this,delFile)">ফাইল মুছে ফেলুন</button>' : ''));
   fmCalc();
@@ -680,9 +722,10 @@ function vVisa() {
 function vSet() {
   const st = S.settings;
   const lst = (title, key, arrRef) => '<div class="card stack" style="gap:8px"><b>' + title + '</b><div class="chips">' + arrRef.map((v, i) => '<span class="chip rm">' + esc(v) + ' <button class="x" style="font-size:14px" onclick="rmItem(\'' + key + '\',' + i + ')" aria-label="মুছুন">✕</button></span>').join('') + '</div><div class="row"><input id="add_' + key + '" placeholder="নতুন যোগ করুন" onkeydown="if(event.key===\'Enter\')addItem(\'' + key + '\')"><button class="btn sm" onclick="addItem(\'' + key + '\')">যোগ</button></div></div>';
-  return '<button class="btn ghost" onclick="go(\'home\')">← ফিরে যান</button>'
+  return '<button class="btn ghost" onclick="go(\'more\')">← ফিরে যান</button>'
     + '<div class="card stack"><b>IP পেমেন্টের সময়</b><div class="grid2"><div class="field"><label for="s_day">সপ্তাহের কোন দিন</label><select id="s_day" onchange="setSt()">' + DAYS.map((d, i) => '<option value="' + i + '"' + (i === +st.payDay ? ' selected' : '') + '>' + d + '</option>').join('') + '</select></div><div class="field"><label for="s_time">সময়</label><input id="s_time" type="time" value="' + st.payTime + '" onchange="setSt()"></div></div>'
     + '<div class="field"><label for="s_ip">সাধারণ IP (প্রতি ফাইল ৳)</label><input id="s_ip" type="number" value="' + n(st.defaultIp) + '" onchange="setSt()"></div><span class="mut sm">নতুন ফাইলে এই টাকা বসবে। ফাইলে আলাদা করে বদলানো যায়।</span></div>'
+    + lst('স্টাফের নাম (এন্ট্রিতে "কে করেছে" তে আসবে)', 'staff', st.staff) + lst('ডকুমেন্ট কাজের ধরন (NID, জন্ম নিবন্ধন…)', 'docCats', st.docCats) + svcCard() + lockCard()
     + lst('Gmail লিস্ট', 'gmails', st.gmails) + lst('রেফারেন্স লিস্ট', 'refs', st.refs)
     + lst('দোকান খরচের ক্যাটেগরি', 'cats.shop', st.cats.shop) + lst('ব্যক্তিগত খরচের ক্যাটেগরি', 'cats.personal', st.cats.personal) + lst('অন্য আয়ের ক্যাটেগরি', 'cats.income', st.cats.income)
     + '<div class="card stack"><b>অ্যাকাউন্ট ও ডাটা</b><span class="mut sm">' + (MODE === 'cloud' ? 'লগইন: ' + esc(AUTH ? AUTH.email : '') + ' · ডাটা ক্লাউডে সেভ হচ্ছে' : 'লোকাল মোড: ডাটা শুধু এই ফোনে') + '</span>'
@@ -694,6 +737,468 @@ function listRef(key) { return key.startsWith('cats.') ? S.settings.cats[key.sli
 function addItem(key) { const v = val('add_' + key).trim(); if (!v) return; const l = listRef(key); if (!l.includes(v)) l.push(v); saveSettings(); render(); }
 function rmItem(key, i) { listRef(key).splice(i, 1); saveSettings(); render(); }
 function backup() { const b = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'rtc-hisab-backup-' + today() + '.json'; a.click(); }
+
+/* ====================================================================
+   ★ নতুন: ডকুমেন্ট কাজ (NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…) · কাউন্টার সার্ভিস (ফটোকপি, অনলাইন, টাইপিং, CV…)
+           · স্টাফ নাম · নোট · ক্যাশ খাতা · স্টাফ লক · CSV রিপোর্ট
+   ডাটা: S.docs (ডকুমেন্ট কাজ) ও S.cnt (কাউন্টার) — Firebase এ /rtc_hisab/docs, /rtc_hisab/cnt
+   ==================================================================== */
+const K2 = { me: 'rtc_hisab_me', role: 'rtc_hisab_role' };
+let ME = (function () { try { return localStorage.getItem(K2.me) || ''; } catch (e) { return ''; } })();
+let ROLE = (function () { try { return localStorage.getItem(K2.role) || ''; } catch (e) { return ''; } })();   // 'staff' = স্টাফ মোড
+const STAFF_TABS = ['doc', 'cnt'];
+function setMe(v) { ME = v; try { localStorage.setItem(K2.me, v); } catch (e) { } }
+const isStaff = () => ROLE === 'staff';
+const actor = () => isStaff() ? (ME || 'স্টাফ') : 'মালিক';
+const clone = o => JSON.parse(JSON.stringify(o));
+const sumAmt = l => arr(l).reduce((s, p) => s + n(p && p.amt), 0);
+const tmS = ts => ts ? new Date(ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+const dtS = ts => ts ? fd(ymd(new Date(ts))) + ', ' + tmS(ts) : '';
+const dayDiff = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+const DSTAT = { run: ['চলমান', 'warn'], done: ['ডেলিভারড', 'good'], ret: ['ফেরত', 'bad'] };
+let ACK = {};
+const chipB = (t, on, js, data) => '<button type="button" class="chip' + (on ? ' on' : '') + '"' + (data != null ? ' data-v="' + esc(data) + '"' : '') + ' onclick="' + js + '">' + esc(t) + '</button>';
+const notePill = (t, small) => '<div class="notetop"' + (small ? ' style="padding:5px 9px;font-size:12.5px;margin-bottom:5px"' : '') + '>📝 ' + esc(t) + '</div>';
+function reFocus(id) { render(); const i = $(id); if (i) { i.focus(); try { i.setSelectionRange(i.value.length, i.value.length); } catch (e) { } } }
+function phoneBad(p) { if (!p) return false; let d = String(p).replace(/\D/g, ''); if (d.startsWith('880')) d = d.slice(2); else if (d.startsWith('88')) d = d.slice(2); return !/^01\d{9}$/.test(d); }
+
+/* ---------- হিসাব ---------- */
+// ডকুমেন্ট কাজ: চলমান/ডেলিভারড = বিল − খরচ; ফেরত = রাখা চার্জ − (খরচ হয়ে থাকলে খরচ)। লাভ "হয়েছে" ধরা হয় ডেলিভারড বা ফেরত হলে।
+function docCalc(d) {
+  const paid = sumAmt(d.payments), refunded = sumAmt(d.refunds), total = n(d.total), cost = n(d.cost), kept = n(d.kept); const st = d.status || 'run';
+  const o = { paid, refunded, total, cost, kept, st };
+  if (st === 'ret') { o.bill = kept; o.due = Math.max(0, kept - paid); o.refundDue = Math.max(0, paid - kept - refunded); o.profit = kept - (d.costDone ? cost : 0); o.real = true; o.over = 0; }
+  else { o.bill = total; o.due = Math.max(0, total - paid); o.refundDue = 0; o.profit = total - cost; o.real = st === 'done'; o.over = Math.max(0, paid - total); }
+  return o;
+}
+const docProfitDate = d => d.status === 'done' ? (d.doneDate || d.recvDate) : (d.status === 'ret' ? (d.retDate || d.recvDate) : '');
+function cntCalc(c) { const paid = sumAmt(c.payments), total = n(c.total), cost = n(c.cost); return { paid, total, cost, due: Math.max(0, total - paid), profit: total - cost, over: Math.max(0, paid - total) }; }
+const rateOf = s => { const x = S.settings.services.find(v => v.n === s); return x ? n(x.r) : 0; };
+
+/* ---------- কমিট: সেভ + পরিবর্তনের ইতিহাস + একসাথে দুজন বদলালে জমা মিলিয়ে নেওয়া ---------- */
+const DLAB = { cat: 'ধরন', name: 'নাম', phone: 'ফোন', refNo: 'নম্বর', recvDate: 'নেওয়ার তারিখ', promiseDate: 'কথার তারিখ', total: 'বিল', cost: 'খরচ', costDone: 'খরচ হয়েছে', status: 'অবস্থা', doneDate: 'ডেলিভারির তারিখ', retDate: 'ফেরতের তারিখ', kept: 'রাখা চার্জ', by: 'স্টাফ', svc: 'সার্ভিস', qty: 'পরিমাণ', date: 'তারিখ', note: 'নোট' };
+const DKEYS = ['cat', 'name', 'phone', 'refNo', 'recvDate', 'promiseDate', 'total', 'cost', 'costDone', 'status', 'doneDate', 'retDate', 'kept', 'by', 'note'];
+const CKEYS = ['date', 'svc', 'qty', 'total', 'cost', 'name', 'phone', 'by', 'note'];
+function logMsgs(old, nw, keys) {
+  if (!old) return ['নতুন এন্ট্রি তৈরি'];
+  const m = []; const f = (k, v) => k === 'status' ? (DSTAT[v] ? DSTAT[v][0] : v) : (typeof v === 'boolean' ? (v ? 'হ্যাঁ' : 'না') : ((v === '' || v == null) ? '—' : v));
+  keys.forEach(k => { let a = old[k], b = nw[k]; if (typeof b === 'boolean') a = !!a; if (String(a == null ? '' : a) !== String(b == null ? '' : b)) m.push(DLAB[k] + ': ' + f(k, a) + ' → ' + f(k, b)); });
+  [['payments', 'জমা'], ['refunds', 'ফেরত']].forEach(([k, lab]) => {
+    const oi = arr(old[k]), ni = arr(nw[k]); const os = new Set(oi.map(p => p.id)), ns = new Set(ni.map(p => p.id));
+    ni.forEach(p => { if (!os.has(p.id)) m.push(lab + ' যোগ ৳' + Math.round(n(p.amt)) + ' (' + fd(p.date) + (p.by ? ', ' + p.by : '') + ')'); });
+    oi.forEach(p => { if (!ns.has(p.id)) m.push(lab + ' মুছেছে ৳' + Math.round(n(p.amt)) + ' (' + fd(p.date) + ')'); });
+  });
+  return m;
+}
+const baseOf = r => r ? { upd: r.updatedAt || 0, pay: arr(r.payments).map(p => p.id), ref: arr(r.refunds).map(p => p.id) } : null;
+function commit(coll, rec, base, msgs) {
+  const now = Date.now(); rec.updatedAt = now; rec.updatedBy = actor();
+  if (msgs && msgs.length) rec.log = arr(rec.log).concat(msgs.map(m => ({ t: now, by: actor(), m }))).slice(-40);
+  S[coll][rec.id] = rec; persist(); mergeSave(coll, rec.id, base);
+}
+async function mergeSave(coll, id, base) {
+  if (MODE === 'cloud' && base) {
+    try {
+      const c = await cloud('GET', FB.root + '/' + coll + '/' + id);
+      const mine = S[coll][id];
+      if (c && mine && (c.updatedAt || 0) > base.upd) {
+        [['payments', 'pay'], ['refunds', 'ref']].forEach(([k, bk]) => {
+          const have = new Set(arr(mine[k]).map(p => p.id)), was = new Set(base[bk] || []);
+          arr(c[k]).forEach(p => { if (p && p.id && !have.has(p.id) && !was.has(p.id)) { mine[k] = arr(mine[k]).concat([p]); have.add(p.id); } });
+        });
+        const seen = new Set(arr(mine.log).map(x => x.t + x.m));
+        arr(c.log).forEach(x => { if (x && !seen.has(x.t + x.m)) mine.log = arr(mine.log).concat([x]); });
+        mine.log = arr(mine.log).sort((a, b) => a.t - b.t).slice(-40);
+        toast('⚠ ' + (c.updatedBy || 'অন্য কেউ') + ' একই সময়ে এটা বদলেছিল — জমার তালিকা মিলিয়ে নেওয়া হয়েছে, বাকি ঘর আপনারটা সেভ হয়েছে');
+        if (!document.querySelector('#sheet:not([hidden])')) render();
+      }
+    } catch (e) { }
+  }
+  persist(); enqueue('PUT', FB.root + '/' + coll + '/' + id, S[coll][id]);
+}
+function histHtml(o) {
+  const l = arr(o.log).slice().reverse();
+  return '<details class="ipbox"><summary style="cursor:pointer;font-weight:600">🕘 কে কখন কী বদলেছে (' + l.length + ')</summary><div class="sm mut" style="margin:6px 0">তৈরি: ' + dtS(o.createdAt) + (o.createdBy ? ' · ' + esc(o.createdBy) : '') + '</div>'
+    + l.map(x => '<div class="sm" style="padding:5px 0;border-top:1px solid var(--line)"><span class="mut">' + dtS(x.t) + ' · ' + esc(x.by) + '</span><br>' + esc(x.m) + '</div>').join('') + '</details>';
+}
+
+/* ---------- স্টাফ বাছাই (চিপ) ---------- */
+const PK = {}, PKREM = {};
+function pkHtml(h) {
+  const l = S.settings.staff.slice(); if (PK[h] && !l.includes(PK[h])) l.unshift(PK[h]);
+  let x = l.map(v => chipB(v, v === PK[h], "pkSet('" + h + "',this.dataset.v)", v)).join('');
+  if (!isStaff()) x += '<button type="button" class="chip" onclick="pkAdd(\'' + h + '\')">＋ নতুন নাম</button>';
+  else if (!l.length) x = '<span class="sm mut">মালিক সেটিংসে স্টাফের নাম যোগ করলে এখানে আসবে</span>';
+  return x;
+}
+function pkSet(h, v) { PK[h] = PK[h] === v ? '' : v; if (PK[h] && PKREM[h]) setMe(PK[h]); const e = $('pk_' + h); if (e) e.innerHTML = pkHtml(h); }
+function pkAdd(h) { const e = $('pk_' + h); e.insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="pk_in_' + h + '" placeholder="স্টাফের নাম"><button type="button" class="btn sm" onclick="pkCommit(\'' + h + '\')">যোগ</button></div>'); $('pk_in_' + h).focus(); }
+function pkCommit(h) { const v = val('pk_in_' + h).trim(); if (!v) return; if (!S.settings.staff.includes(v)) { S.settings.staff.push(v); saveSettings(); } PK[h] = v; if (PKREM[h]) setMe(v); $('pk_' + h).innerHTML = pkHtml(h); }
+const pkField = (h, label) => '<div class="field"><label>' + label + '</label><div class="chips" id="pk_' + h + '">' + pkHtml(h) + '</div></div>';
+const pkNeed = h => S.settings.staff.length > 0 && !PK[h];
+function pkInit(h, sel, rem) { PK[h] = sel; PKREM[h] = !!rem; }
+
+/* ---------- জমা/ফেরত টাকার তালিকা (ডকুমেন্ট ও কাউন্টার দুটোতেই) ---------- */
+let DJ = null, CE = null;
+const SX = { dj: { get: () => DJ, grab: djGrab, calc: djCalc }, ce: { get: () => CE, grab: ceGrab, calc: ceCalc } };
+function mlHtml(p, k) {
+  const l = arr(SX[p].get()[k]); const lab = k === 'payments' ? 'জমা' : 'ফেরত';
+  return l.length ? l.map((x, i) => '<div class="kv" style="align-items:center"><span>' + fd(x.date) + (x.by ? ' <span class="pill">' + esc(x.by) + '</span>' : '') + '</span><span class="row"><b class="num">' + money(x.amt) + '</b><button type="button" class="x" onclick="mlRm(\'' + p + '\',\'' + k + '\',' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') : '<div class="mut sm">এখনও কোনো ' + lab + ' নেই</div>';
+}
+function mlBlock(p, k, label, who) {
+  return '<div class="field"><label>' + label + '</label><div id="' + p + '_' + k + '_l">' + mlHtml(p, k) + '</div><div class="row" style="margin-top:8px"><input id="' + p + '_' + k + '_date" type="date" value="' + today() + '"><input id="' + p + '_' + k + '_amt" type="number" inputmode="decimal" placeholder="৳"><button type="button" class="btn sm" onclick="mlAdd(\'' + p + '\',\'' + k + '\')" style="white-space:nowrap">＋ যোগ</button></div></div>' + pkField(p + '_' + k, who);
+}
+function mlAdd(p, k) {
+  const o = SX[p].get(); const a = n(val(p + '_' + k + '_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
+  if (pkNeed(p + '_' + k)) { toast('টাকা কে নিল/দিল — স্টাফ বাছুন'); return; }
+  SX[p].grab(); o[k] = arr(o[k]); o[k].push({ id: uid(), date: val(p + '_' + k + '_date') || today(), amt: a, by: PK[p + '_' + k] || '' });
+  $(p + '_' + k + '_amt').value = ''; SX[p].calc();
+}
+function mlRm(p, k, i) { const o = SX[p].get(); SX[p].grab(); o[k].splice(i, 1); SX[p].calc(); }
+
+/* ====================================================================
+   ডকুমেন্ট কাজ
+   ==================================================================== */
+const DF = {
+  all: ['সব', () => true], run: ['চলমান', x => x.d.status === 'run'], late: ['দেরি', (x, t) => x.d.status === 'run' && !!x.d.promiseDate && x.d.promiseDate < t],
+  done: ['ডেলিভারড', x => x.d.status === 'done'], ret: ['ফেরত', x => x.d.status === 'ret'], due: ['টাকা বাকি', x => x.c.due > 0],
+  cost: ['খরচ বাকি', x => x.d.status !== 'ret' && n(x.d.cost) > 0 && !x.d.costDone], refund: ['ফেরত দিতে বাকি', x => x.c.refundDue > 0]
+};
+function vDoc() {
+  const t0 = today(); const q = UI.dq.trim().toLowerCase(); const now = new Date();
+  const mo = t0.slice(0, 7), lm = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7);
+  const base = Object.values(S.docs).map(d => ({ d, c: docCalc(d) })).filter(({ d }) => {
+    if (UI.dc !== 'all' && d.cat !== UI.dc) return false;
+    const m = (d.recvDate || '').slice(0, 7); if (UI.dm === 'month' && m !== mo) return false; if (UI.dm === 'last' && m !== lm) return false;
+    if (q && !((d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || '')).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const list = base.filter(x => DF[UI.df][1](x, t0)).sort((a, b) => (b.d.recvDate || '').localeCompare(a.d.recvDate || '') || (b.d.createdAt || 0) - (a.d.createdAt || 0));
+  const T = list.reduce((t, x) => { t.bill += x.c.bill; t.paid += x.c.paid; t.due += x.c.due; t.cost += x.c.cost; if (x.c.real) t.profit += x.c.profit; return t; }, { bill: 0, paid: 0, due: 0, cost: 0, profit: 0 });
+  const cnt = s => list.filter(x => x.d.status === s).length;
+  const sum = '<div class="card stack" style="gap:10px"><div class="mini num"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div><div><small>লাভ হয়েছে</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></div></div>'
+    + '<div class="row between wrapr sm mut"><span>' + list.length + 'টি কাজ · চলমান ' + cnt('run') + ' · ডেলিভারড ' + cnt('done') + ' · ফেরত ' + cnt('ret') + '</span><span>মোট খরচ ' + money(T.cost) + '</span></div></div>';
+  const cats = ['all'].concat(S.settings.docCats);
+  return sum
+    + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
+    + '<div class="hs">' + cats.map(c => chipB(c === 'all' ? 'সব ধরন' : c, UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
+    + '<div class="hs">' + Object.keys(DF).map(k => { const cn = base.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
+    + '<div class="seg" style="max-width:300px">' + [['all', 'সব সময়'], ['month', 'এই মাস'], ['last', 'গত মাস']].map(x => '<button class="' + (UI.dm === x[0] ? 'on' : '') + '" onclick="UI.dm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
+    + '<div class="stack">' + (list.length ? list.map(x => docCard(x.d, x.c, t0)).join('') : '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই। নিচের "নতুন কাজ" চেপে প্রথম এন্ট্রি দিন।') + '</div>') + '</div>'
+    + '<button class="btn fab" onclick="djForm()">' + ic('plus') + ' নতুন কাজ</button>';
+}
+function docCard(d, c, t0) {
+  const st = DSTAT[d.status || 'run']; const late = d.status === 'run' && d.promiseDate && d.promiseDate < t0;
+  const pill = (cls, t, js) => '<button type="button" class="pill ' + cls + '" style="border:0;cursor:' + (js ? 'pointer' : 'default') + '"' + (js ? ' onclick="event.stopPropagation();' + js + '"' : '') + '>' + t + '</button>';
+  let ch = '';
+  if (d.status === 'run') ch += pill('warn', '⏳ ডেলিভারি বাকি' + (d.promiseDate ? ' · কথা ' + fd(d.promiseDate) : ''), "djDeliver('" + d.id + "')") + (late ? pill('bad', 'দেরি ' + dayDiff(d.promiseDate, t0) + ' দিন') : '');
+  else if (d.status === 'done') ch += pill('good', '✓ ডেলিভারড ' + fd(d.doneDate));
+  else ch += pill('bad', '↩ ফেরত ' + fd(d.retDate)) + pill('', 'রাখা ' + money(c.kept)) + (c.refundDue > 0 ? pill('bad', 'ফেরত দিতে বাকি ' + money(c.refundDue), "refSheet('" + d.id + "')") : (c.refunded > 0 ? pill('good', '✓ ফেরত দেওয়া ' + money(c.refunded)) : ''));
+  if (d.status !== 'ret' && (n(d.cost) > 0 || d.costDone)) ch += pill(d.costDone ? 'good' : 'warn', (d.costDone ? '✓ খরচ হয়েছে ' : '✗ খরচ বাকি ') + money(d.cost), "djToggleCost('" + d.id + "')");
+  if (d.status === 'ret' && n(d.cost) > 0) ch += pill(d.costDone ? 'warn' : '', d.costDone ? 'খরচ গেছে ' + money(d.cost) : 'খরচ হয়নি', "djToggleCost('" + d.id + "')");
+  ch += c.real ? pill(c.profit >= 0 ? 'good' : 'bad', (c.profit >= 0 ? '✓ লাভ হয়েছে ' : 'লোকসান ') + money(Math.abs(c.profit))) : pill('', 'লাভ ধরা হয়নি · সম্ভাব্য ' + money(c.profit));
+  if (c.over > 0) ch += pill('warn', 'বিলের চেয়ে ' + money(c.over) + ' বেশি জমা');
+  const pct = c.bill ? Math.min(100, c.paid / c.bill * 100) : 0;
+  return '<div class="card item" onclick="djForm(\'' + d.id + '\')">' + (d.note ? notePill(d.note) : '')
+    + '<div class="row"><span class="avatar ' + avatarCls(d.name) + '">' + initial(d.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(d.name) + '</div><div class="sm mut"><b style="color:var(--acc)">' + esc(d.cat) + '</b> · ' + fd(d.recvDate) + (d.phone ? ' · ' + waPhone(d.phone) : '') + (d.refNo ? ' · #' + esc(d.refNo) : '') + '</div></div><span class="pill ' + st[1] + '">' + st[0] + '</span></div>'
+    + '<div class="prog"><i style="width:' + pct + '%"></i></div>'
+    + '<div class="mini num"><div><small>' + (d.status === 'ret' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(c.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>' + (c.real ? 'লাভ' : 'সম্ভাব্য') + '</small><b class="' + (c.real ? (c.profit >= 0 ? 'good' : 'bad') : 'mut') + '">' + Math.round(c.profit) + '</b></div></div>'
+    + '<div class="row wrapr" style="gap:6px">' + ch + '</div>'
+    + (d.by ? '<div class="sm mut">স্টাফ: ' + esc(d.by) + (d.updatedAt ? ' · শেষ বদল ' + dtS(d.updatedAt) : '') + '</div>' : '')
+    + '<div class="row wrapr" style="justify-content:flex-end;gap:8px">'
+    + (c.due > 0 ? '<button class="btn sm ghost" onclick="event.stopPropagation();qpSheet(\'docs\',\'' + d.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '')
+    + (d.status === 'run' ? '<button class="btn sm good" onclick="event.stopPropagation();djDeliver(\'' + d.id + '\')">ডেলিভারি দিলাম</button>' : '') + '</div></div>';
+}
+
+/* ----- ফর্ম ----- */
+function djNew() { return { id: '', cat: '', name: '', phone: '', refNo: '', recvDate: today(), promiseDate: '', total: '', cost: '', costDone: false, status: 'run', doneDate: '', retDate: '', kept: '', note: '', by: '', payments: [], refunds: [], log: [] }; }
+function djForm(id) {
+  const src = id ? S.docs[id] : null; DJ = src ? clone(src) : djNew();
+  DJ.payments = arr(DJ.payments); DJ.refunds = arr(DJ.refunds); DJ.log = arr(DJ.log); DJ._orig = src ? clone(src) : null; DJ._base = baseOf(src); DJ._ack = false;
+  if (!DJ.cat) DJ.cat = '';
+  pkInit('dj', src ? (src.by || '') : ME, !src); pkInit('dj_payments', ME, true); pkInit('dj_refunds', ME, true);
+  const d = DJ;
+  sheet(id ? 'ডকুমেন্ট কাজ এডিট' : 'নতুন ডকুমেন্ট কাজ',
+    '<div class="field"><label for="dj_note">📝 নোট (কার্ডের একদম উপরে দেখাবে)</label><textarea id="dj_note" placeholder="যেমন: ছবি আনেনি, কাল আসবে / ভুল তথ্য ঠিক করতে হবে">' + esc(d.note) + '</textarea></div>'
+    + '<div class="field"><label>কাজের ধরন</label><div class="chips" id="dj_cats">' + djCatChips() + '</div></div>'
+    + '<div class="field"><label for="dj_name">ক্লায়েন্টের নাম</label><input id="dj_name" value="' + esc(d.name) + '" placeholder="কার কাজ"></div>'
+    + '<div class="field"><label for="dj_phone">ফোন নম্বর</label><input id="dj_phone" type="tel" inputmode="tel" value="' + esc(d.phone) + '" placeholder="01XXXXXXXXX"></div>'
+    + '<div class="field"><label for="dj_refno">NID / ফর্ম / ট্র্যাকিং নম্বর (ঐচ্ছিক)</label><input id="dj_refno" value="' + esc(d.refNo) + '"></div>'
+    + '<div class="grid2"><div class="field"><label for="dj_recv">কাজ নেওয়ার তারিখ</label><input id="dj_recv" type="date" value="' + d.recvDate + '"></div><div class="field"><label for="dj_promise">কবে দেওয়ার কথা</label><input id="dj_promise" type="date" value="' + (d.promiseDate || '') + '"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="dj_total">মোট বিল (৳)</label><input id="dj_total" type="number" inputmode="decimal" value="' + (d.total === '' ? '' : n(d.total)) + '" oninput="djCalc()"></div><div class="field"><label for="dj_cost">খরচ (৳)</label><input id="dj_cost" type="number" inputmode="decimal" value="' + (d.cost === '' ? '' : n(d.cost)) + '" oninput="djCalc()"></div></div>'
+    + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="dj_cdone" type="checkbox" style="width:auto" ' + (d.costDone ? 'checked' : '') + ' onchange="djCalc()"> খরচটা হয়ে গেছে (টাকা দেওয়া হয়েছে)</label>'
+    + '<div class="card" style="box-shadow:none;background:var(--bg)" id="dj_prev"></div>'
+    + mlBlock('dj', 'payments', 'ক্লায়েন্ট কত জমা দিয়েছে', 'টাকা কে নিল')
+    + '<div class="field"><label>কাজের অবস্থা</label><div class="seg" id="dj_seg">' + ['run', 'done', 'ret'].map(s => '<button type="button" id="dj_s_' + s + '" class="' + (d.status === s ? 'on' : '') + '" onclick="djStatus(\'' + s + '\')">' + DSTAT[s][0] + '</button>').join('') + '</div></div>'
+    + '<div class="ipbox stack" id="dj_blk_done" style="gap:8px"' + (d.status === 'done' ? '' : ' hidden') + '><div class="field"><label for="dj_donedate">কবে ডেলিভারি দিয়েছি</label><input id="dj_donedate" type="date" value="' + (d.doneDate || '') + '"></div></div>'
+    + '<div class="ipbox stack" id="dj_blk_ret" style="gap:8px"' + (d.status === 'ret' ? '' : ' hidden') + '><div class="sm mut">কাজ ফেরত গেলে: কত টাকা রেখে বাকিটা ক্লায়েন্টকে ফেরত দেবেন তা লিখুন। খরচ আগেই হয়ে গেলে উপরে "খরচ হয়ে গেছে" টিক দিন, তাহলে লাভ থেকে কাটা যাবে।</div>'
+    + '<div class="grid2"><div class="field"><label for="dj_retdate">ফেরতের তারিখ</label><input id="dj_retdate" type="date" value="' + (d.retDate || '') + '"></div><div class="field"><label for="dj_kept">কত টাকা রাখলাম (৳)</label><input id="dj_kept" type="number" inputmode="decimal" value="' + (d.kept === '' ? '' : n(d.kept)) + '" oninput="djCalc()"></div></div>'
+    + mlBlock('dj', 'refunds', 'ক্লায়েন্টকে কত ফেরত দিয়েছি', 'টাকা কে দিল') + '</div>'
+    + pkField('dj', 'কাজ কে করেছে (স্টাফ)')
+    + '<div class="sm bad" id="dj_warn"></div>'
+    + '<button class="btn block" id="dj_save" onclick="djSave()">সেভ করুন</button>'
+    + (id && !isStaff() ? '<button class="btn danger block" onclick="arm(this,djDel)">কাজ মুছে ফেলুন</button>' : '')
+    + (id ? histHtml(d) : ''));
+  djCalc();
+}
+function djCatChips() {
+  const l = S.settings.docCats.slice(); if (DJ.cat && !l.includes(DJ.cat)) l.unshift(DJ.cat);
+  return l.map(v => chipB(v, v === DJ.cat, "djCat(this.dataset.v)", v)).join('') + '<button type="button" class="chip" onclick="djCatNew()">＋ নতুন ধরন</button>';
+}
+function djCat(v) { DJ.cat = v; $('dj_cats').innerHTML = djCatChips(); }
+function djCatNew() { $('dj_cats').insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="dc_in" placeholder="যেমন: ড্রাইভিং লাইসেন্স"><button type="button" class="btn sm" onclick="djCatCommit()">যোগ</button></div>'); $('dc_in').focus(); }
+function djCatCommit() { const v = val('dc_in').trim(); if (!v) return; if (!S.settings.docCats.includes(v)) { S.settings.docCats.push(v); saveSettings(); } DJ.cat = v; $('dj_cats').innerHTML = djCatChips(); }
+function djGrab() {
+  const d = DJ; d.name = val('dj_name').trim(); d.phone = val('dj_phone').trim(); d.refNo = val('dj_refno').trim(); d.note = val('dj_note').trim();
+  d.recvDate = val('dj_recv') || today(); d.promiseDate = val('dj_promise'); d.total = val('dj_total'); d.cost = val('dj_cost'); d.costDone = $('dj_cdone').checked;
+  d.doneDate = val('dj_donedate'); d.retDate = val('dj_retdate'); d.kept = val('dj_kept');
+}
+function djStatus(s) {
+  djGrab(); DJ.status = s;
+  if (s === 'done' && !DJ.doneDate) $('dj_donedate').value = today();
+  if (s === 'ret' && !DJ.retDate) $('dj_retdate').value = today();
+  ['run', 'done', 'ret'].forEach(x => { $('dj_s_' + x).className = x === s ? 'on' : ''; });
+  $('dj_blk_done').hidden = s !== 'done'; $('dj_blk_ret').hidden = s !== 'ret'; djCalc();
+}
+function djCalc() {
+  djGrab(); const d = DJ; const c = docCalc(d); let h;
+  if (d.status === 'ret') {
+    h = kv('মোট বিল ছিল', money(d.total)) + kv('রাখা চার্জ', money(c.kept)) + kv('জমা পেয়েছি', money(c.paid), 'good') + kv('রাখা চার্জের বাকি (পাব)', money(c.due), c.due ? 'bad' : '')
+      + kv('ক্লায়েন্টকে ফেরত দিতে হবে', money(Math.max(0, c.paid - c.kept))) + kv('ফেরত দিয়েছি', money(c.refunded), 'good') + kv('ফেরত দিতে বাকি', money(c.refundDue), c.refundDue ? 'bad' : '')
+      + kv('খরচ (' + (d.costDone ? 'হয়ে গেছে, কাটা হচ্ছে' : 'হয়নি, ধরা হচ্ছে না') + ')', money(d.costDone ? c.cost : 0)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad');
+  } else {
+    h = kv('মোট বিল', money(c.total)) + kv('জমা পেয়েছি', money(c.paid), 'good') + kv('বাকি পাব', money(c.due), c.due ? 'bad' : 'good') + kv('খরচ (' + (d.costDone ? 'হয়ে গেছে' : 'এখনও হয়নি') + ')', money(c.cost))
+      + kv('<b>' + (d.status === 'done' ? 'লাভ হয়েছে' : 'সম্ভাব্য লাভ (ডেলিভারি হলে ধরা হবে)') + '</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad');
+  }
+  $('dj_prev').innerHTML = h; $('dj_payments_l').innerHTML = mlHtml('dj', 'payments'); $('dj_refunds_l').innerHTML = mlHtml('dj', 'refunds');
+}
+function djSave() {
+  djGrab(); const d = DJ; const by = PK.dj || '';
+  if (!d.name) { toast('ক্লায়েন্টের নাম লিখুন'); return; } if (!d.cat) { toast('কাজের ধরন বাছুন'); return; } if (pkNeed('dj')) { toast('কাজ কে করেছে — স্টাফ বাছুন'); return; }
+  const c = docCalc(d); const w = [];
+  if (phoneBad(d.phone)) w.push('ফোন নম্বরটা ১১ ডিজিটের (01…) মনে হচ্ছে না');
+  if (!d.phone) w.push('ফোন নম্বর দেওয়া হয়নি');
+  if (d.status !== 'ret' && n(d.total) <= 0) w.push('মোট বিল বসেনি');
+  if (c.over > 0) w.push('জমা বিলের চেয়ে ' + money(c.over) + ' বেশি');
+  if (d.status === 'ret' && n(d.kept) > n(d.total)) w.push('রাখা চার্জ মোট বিলের চেয়ে বেশি');
+  if (d.status === 'ret' && c.refunded > Math.max(0, c.paid - c.kept) + 0.001) w.push('ফেরত দেওয়া টাকা ফেরতযোগ্য টাকার চেয়ে বেশি');
+  if (d.status === 'done' && c.due > 0) w.push('ডেলিভারড, কিন্তু ' + money(c.due) + ' বাকি আছে');
+  if (d.status === 'done' && n(d.cost) > 0 && !d.costDone) w.push('ডেলিভারড, কিন্তু খরচ "হয়নি" দেখাচ্ছে');
+  if (d.status === 'done' && d.doneDate && d.doneDate < d.recvDate) w.push('ডেলিভারির তারিখ নেওয়ার তারিখের আগে');
+  if (w.length && !d._ack) { d._ack = true; $('dj_warn').innerHTML = '⚠ ' + w.map(esc).join('<br>⚠ ') + '<br><b>ঠিক থাকলে আবার "সেভ" চাপুন</b>'; $('dj_save').textContent = 'তবুও সেভ করুন'; $('dj_warn').scrollIntoView({ block: 'center' }); return; }
+  const id = d.id || uid(); const old = d._orig;
+  const rec = { id, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
+  commit('docs', rec, d._base, logMsgs(old, rec, DKEYS)); DJ = null; closeSheet(); toast('সেভ হয়েছে');
+}
+function djDel() { remove('docs', DJ.id); DJ = null; closeSheet(); toast('মুছে গেছে'); }
+
+/* ----- দ্রুত অ্যাকশন ----- */
+function qpSheet(coll, id) {
+  const o = S[coll][id]; const c = coll === 'docs' ? docCalc(o) : cntCalc(o); ACK = {}; pkInit('q', ME, true);
+  sheet('জমা নিলাম — ' + esc(coll === 'docs' ? o.name : o.svc + (o.name ? ' · ' + o.name : '')), '<div class="mut sm">এখন বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div>' + pkField('q', 'কে নিল') + '<button class="btn block" onclick="qpDo(\'' + coll + '\',\'' + id + '\')">জমা করুন</button>');
+}
+function qpDo(coll, id) {
+  const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('q')) { toast('কে নিল — স্টাফ বাছুন'); return; }
+  const old = S[coll][id]; const c = coll === 'docs' ? docCalc(old) : cntCalc(old);
+  if (a > c.due + 0.001 && !ACK.q) { ACK.q = 1; toast('বাকির (' + money(c.due) + ') চেয়ে বেশি দিচ্ছেন — ঠিক থাকলে আবার চাপুন'); return; }
+  const rec = clone(old); rec.payments = arr(rec.payments).concat([{ id: uid(), date: val('q_date') || today(), amt: a, by: PK.q || '' }]);
+  commit(coll, rec, baseOf(old), logMsgs(old, rec, [])); closeSheet(); toast('জমা হয়েছে');
+}
+function refSheet(id) {
+  const o = S.docs[id]; const c = docCalc(o); ACK = {}; pkInit('q', ME, true);
+  sheet('ফেরত দিলাম — ' + esc(o.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + pkField('q', 'কে দিল') + '<button class="btn block" onclick="refDo(\'' + id + '\')">ফেরত সেভ করুন</button>');
+}
+function refDo(id) {
+  const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('q')) { toast('কে দিল — স্টাফ বাছুন'); return; }
+  const old = S.docs[id]; const c = docCalc(old);
+  if (a > c.refundDue + 0.001 && !ACK.q) { ACK.q = 1; toast('ফেরতযোগ্য টাকার (' + money(c.refundDue) + ') চেয়ে বেশি — ঠিক থাকলে আবার চাপুন'); return; }
+  const rec = clone(old); rec.refunds = arr(rec.refunds).concat([{ id: uid(), date: val('q_date') || today(), amt: a, by: PK.q || '' }]);
+  commit('docs', rec, baseOf(old), logMsgs(old, rec, [])); closeSheet(); toast('ফেরত লেখা হয়েছে');
+}
+function djToggleCost(id) {
+  const old = S.docs[id]; const rec = clone(old); rec.costDone = !rec.costDone;
+  commit('docs', rec, baseOf(old), logMsgs(old, rec, ['costDone'])); render(); toast(rec.costDone ? 'খরচ হয়েছে ধরা হলো' : 'খরচ আবার বাকি');
+}
+function djDeliver(id) {
+  const d = S.docs[id]; const c = docCalc(d); ACK = {}; pkInit('q', ME, true);
+  sheet('ডেলিভারি দিলাম — ' + esc(d.name),
+    (c.due > 0 ? '<div class="sm bad">⚠ ক্লায়েন্টের কাছে এখনও বাকি ' + money(c.due) + '। এখন টাকা নিলে নিচে লিখুন।</div>' : '<div class="sm good">✓ বিলের সব টাকা জমা আছে</div>')
+    + '<div class="field"><label for="dl_date">ডেলিভারির তারিখ</label><input id="dl_date" type="date" value="' + today() + '"></div>'
+    + (c.due > 0 ? '<div class="field"><label for="dl_amt">এখন কত নিলাম (৳, না নিলে খালি রাখুন)</label><input id="dl_amt" type="number" inputmode="decimal" value="' + c.due + '"></div>' + pkField('q', 'কে নিল') : '')
+    + (n(d.cost) > 0 && !d.costDone ? '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="dl_cd" type="checkbox" style="width:auto"> খরচ ' + money(d.cost) + ' হয়ে গেছে</label>' : '')
+    + '<button class="btn block" onclick="djDoDeliver(\'' + id + '\')">ডেলিভারি সেভ করুন</button>');
+}
+function djDoDeliver(id) {
+  const old = S.docs[id]; const rec = clone(old); const dt = val('dl_date') || today(); const a = n(val('dl_amt'));
+  if (a > 0) { if (pkNeed('q')) { toast('কে নিল — স্টাফ বাছুন'); return; } rec.payments = arr(rec.payments).concat([{ id: uid(), date: dt, amt: a, by: PK.q || '' }]); }
+  rec.status = 'done'; rec.doneDate = dt; rec.retDate = ''; rec.kept = 0; if ($('dl_cd') && $('dl_cd').checked) rec.costDone = true;
+  commit('docs', rec, baseOf(old), logMsgs(old, rec, ['status', 'doneDate', 'costDone'])); closeSheet(); toast('ডেলিভারি লেখা হয়েছে');
+}
+
+/* ====================================================================
+   কাউন্টার সার্ভিস (ফটোকপি, অনলাইন, টাইপিং, CV…)
+   ==================================================================== */
+const cBlank = () => ({ svc: '', qty: 1, total: '', manual: false, cost: '', recv: '', name: '', phone: '', note: '', more: false });
+let CD = cBlank();
+const CS = { ci: () => CD, ce: () => CE };
+function svcChips(p) {
+  const s = CS[p](); const l = S.settings.services.slice(); if (s.svc && !l.find(x => x.n === s.svc)) l.unshift({ n: s.svc, r: 0 });
+  return l.map(x => chipB(x.n + (n(x.r) ? ' · ৳' + n(x.r) : ''), x.n === s.svc, "cSvc('" + p + "',this.dataset.v)", x.n)).join('') + (isStaff() ? '' : '<button type="button" class="chip" onclick="cSvcAdd(\'' + p + '\')">＋ নতুন সার্ভিস</button>');
+}
+function cHint(s) { const r = rateOf(s.svc); return r > 0 ? '৳' + r + ' × ' + Math.max(1, n(s.qty)) + ' = ' + money(r * Math.max(1, n(s.qty))) + (s.manual ? ' (আপনি নিজে টাকা বসিয়েছেন)' : '') : ''; }
+function cRecalc(p) { const s = CS[p](); const r = rateOf(s.svc); if (!s.manual && r > 0) s.total = String(r * Math.max(1, n(s.qty))); const t = $(p + '_total'); if (t) t.value = s.total; const h = $(p + '_hint'); if (h) h.textContent = cHint(s); if (p === 'ce') ceCalc(); }
+function cSvc(p, v) { const s = CS[p](); s.svc = s.svc === v ? '' : v; $(p + '_svc').innerHTML = svcChips(p); cRecalc(p); }
+function cQty(p, d) { const s = CS[p](); const q = Math.max(1, Math.round(n(s.qty)) + d); s.qty = q; $(p + '_qty').value = q; cRecalc(p); }
+function cQtyIn(p, v) { CS[p]().qty = v; cRecalc(p); }
+function cTotIn(p, v) { const s = CS[p](); s.total = v; s.manual = v !== ''; const h = $(p + '_hint'); if (h) h.textContent = cHint(s); if (p === 'ce') ceCalc(); }
+function cSvcAdd(p) { $(p + '_svc').insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="' + p + '_ns_n" placeholder="সার্ভিসের নাম"><input id="' + p + '_ns_r" type="number" inputmode="decimal" placeholder="রেট ৳" style="max-width:100px"><button type="button" class="btn sm" onclick="cSvcCommit(\'' + p + '\')">যোগ</button></div>'); $(p + '_ns_n').focus(); }
+function cSvcCommit(p) {
+  const nm = val(p + '_ns_n').trim(); if (!nm) return; const r = n(val(p + '_ns_r')); const ex = S.settings.services.find(x => x.n === nm);
+  if (ex) ex.r = r || ex.r; else S.settings.services.push({ n: nm, r }); saveSettings(); const s = CS[p](); s.svc = nm; $(p + '_svc').innerHTML = svcChips(p); cRecalc(p);
+}
+function cFields(p) {
+  const s = CS[p]();
+  return '<div class="field"><label>কোন সার্ভিস</label><div class="chips" id="' + p + '_svc">' + svcChips(p) + '</div></div>'
+    + '<div class="grid2"><div class="field"><label for="' + p + '_qty">পরিমাণ (কপি/পেজ/বার)</label><div class="row"><button type="button" class="ib" onclick="cQty(\'' + p + '\',-1)" aria-label="কমান">−</button><input id="' + p + '_qty" type="number" inputmode="numeric" min="1" value="' + esc(s.qty) + '" oninput="cQtyIn(\'' + p + '\',this.value)"><button type="button" class="ib" onclick="cQty(\'' + p + '\',1)" aria-label="বাড়ান">+</button></div></div>'
+    + '<div class="field"><label for="' + p + '_total">মোট টাকা (৳)</label><input id="' + p + '_total" type="number" inputmode="decimal" value="' + esc(s.total) + '" oninput="cTotIn(\'' + p + '\',this.value)"></div></div>'
+    + '<div class="sm mut" id="' + p + '_hint">' + esc(cHint(s)) + '</div>'
+    + '<div class="field"><label for="' + p + '_note">📝 নোট (তালিকায় উপরে দেখাবে)</label><input id="' + p + '_note" value="' + esc(s.note) + '" oninput="CS.' + p + '().note=this.value" placeholder="যেমন: A4 রঙিন, বাকিতে নিল…"></div>';
+}
+function cDetail(p) {
+  const s = CS[p]();
+  return '<div class="grid2"><div class="field"><label for="' + p + '_name">ক্লায়েন্টের নাম (ঐচ্ছিক)</label><input id="' + p + '_name" value="' + esc(s.name) + '" oninput="CS.' + p + '().name=this.value"></div><div class="field"><label for="' + p + '_phone">ফোন (ঐচ্ছিক)</label><input id="' + p + '_phone" type="tel" inputmode="tel" value="' + esc(s.phone) + '" oninput="CS.' + p + '().phone=this.value"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="' + p + '_cost">খরচ (৳, ঐচ্ছিক)</label><input id="' + p + '_cost" type="number" inputmode="decimal" value="' + esc(s.cost) + '" oninput="CS.' + p + '().cost=this.value' + (p === 'ce' ? ';ceCalc()' : '') + '"></div>'
+    + (p === 'ci' ? '<div class="field"><label for="ci_recv">কত পেলাম (৳)</label><input id="ci_recv" type="number" inputmode="decimal" value="' + esc(s.recv) + '" placeholder="খালি = পুরোটা" oninput="CD.recv=this.value"></div>' : '') + '</div>';
+}
+function cPanel() {
+  const d = UI.cd || today(); const off = d !== today();
+  return '<div class="card stack" style="gap:12px"><div class="row between"><b>নতুন এন্ট্রি</b>' + (off ? '<span class="pill warn">⚠ ' + fd(d) + ' তারিখে লিখছেন</span>' : '<span class="pill good">আজ</span>') + '</div>'
+    + cFields('ci') + pkField('c_in', 'কে করেছে')
+    + '<button type="button" class="btn ghost sm" onclick="CD.more=!CD.more;render()">' + (CD.more ? '− বিস্তারিত বন্ধ' : '＋ বিস্তারিত (নাম, ফোন, খরচ, বাকি)') + '</button>'
+    + (CD.more ? cDetail('ci') : '')
+    + '<button class="btn block" onclick="cAdd()">' + ic('plus') + ' যোগ করুন</button></div>';
+}
+function cAdd() {
+  const s = CD; const total = n(s.total);
+  if (!s.svc) { toast('সার্ভিস বাছুন'); return; } if (total <= 0) { toast('মোট টাকা দিন'); return; } if (pkNeed('c_in')) { toast('কে করেছে — স্টাফ বাছুন'); return; }
+  const recv = s.recv === '' ? total : n(s.recv); if (recv > total) { toast('পেয়েছি টাকা বিলের চেয়ে বেশি হতে পারে না'); return; }
+  if (total - recv > 0 && !s.name.trim() && !s.phone.trim()) { toast('বাকি থাকলে ক্লায়েন্টের নাম বা ফোন দিন'); CD.more = true; render(); return; }
+  const date = UI.cd || today(), by = PK.c_in || '';
+  const rec = { id: uid(), date, svc: s.svc, qty: Math.max(1, n(s.qty)), total, cost: n(s.cost), name: s.name.trim(), phone: s.phone.trim(), note: s.note.trim(), by, payments: recv > 0 ? [{ id: uid(), date, amt: recv, by }] : [], createdAt: Date.now(), createdBy: by || actor(), log: [] };
+  commit('cnt', rec, null, ['নতুন এন্ট্রি তৈরি']); CD = cBlank(); render(); toast('✓ ' + rec.svc + ' ' + money(total) + ' লেখা হয়েছে');
+}
+function cShift(d) { UI.cd = addD(UI.cd || today(), d); if (UI.cd === today()) UI.cd = ''; render(); }
+function cDate(v) { UI.cd = (!v || v === today()) ? '' : v; render(); }
+function cashDay(d) {
+  const by = {}; let refunds = 0, pp = 0; const add = (k, src, a) => { by[k] = by[k] || { cnt: 0, doc: 0 }; by[k][src] += a; };
+  Object.values(S.cnt).forEach(c => arr(c.payments).forEach(p => { if (p.date === d) add(p.by || 'স্টাফ লেখা নেই', 'cnt', n(p.amt)); }));
+  Object.values(S.docs).forEach(c => { arr(c.payments).forEach(p => { if (p.date === d) add(p.by || 'স্টাফ লেখা নেই', 'doc', n(p.amt)); }); arr(c.refunds).forEach(p => { if (p.date === d) refunds += n(p.amt); }); });
+  Object.values(S.files).forEach(f => arr(f.payments).forEach(p => { if (p.date === d) pp += n(p.amt); }));
+  return { by, refunds, pp };
+}
+function cRow(c, showDate) {
+  const k = cntCalc(c);
+  return '<div class="kv" style="align-items:flex-start;cursor:pointer" onclick="cForm(\'' + c.id + '\')"><span style="color:var(--ink);min-width:0;flex:1">' + (c.note ? notePill(c.note, 1) : '')
+    + '<b>' + esc(c.svc) + (n(c.qty) > 1 ? ' × ' + n(c.qty) : '') + '</b><div class="mut sm">' + (showDate ? fd(c.date) + ' · ' : '') + tmS(c.createdAt) + (c.by ? ' · ' + esc(c.by) : '') + (c.name ? ' · ' + esc(c.name) : '') + (c.phone ? ' · ' + waPhone(c.phone) : '') + '</div></span>'
+    + '<span style="text-align:right;flex:none"><b class="num">' + money(k.total) + '</b>' + (k.due > 0 ? '<div><span class="pill bad">বাকি ' + money(k.due) + '</span></div><button class="btn sm good" style="margin-top:4px" onclick="event.stopPropagation();qpSheet(\'cnt\',\'' + c.id + '\')">নিলাম</button>' : '') + '</span></div>';
+}
+function vCnt() {
+  const D = UI.cd || today(); const all = Object.values(S.cnt);
+  const dayL = all.filter(c => c.date === D).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const dueL = all.filter(c => cntCalc(c).due > 0).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  const T = dayL.reduce((t, c) => { const k = cntCalc(c); t.bill += k.total; t.paid += k.paid; t.due += k.due; t.cost += k.cost; t.profit += k.profit; return t; }, { bill: 0, paid: 0, due: 0, cost: 0, profit: 0 });
+  const rel = D === today() ? 'আজ' : (D === addD(today(), -1) ? 'গতকাল' : DAYS[pd(D).getDay()]);
+  const bySvc = {}; dayL.forEach(c => { const x = bySvc[c.svc] = bySvc[c.svc] || { n: 0, q: 0, t: 0 }; x.n++; x.q += n(c.qty); x.t += n(c.total); });
+  const cash = cashDay(D); const staffs = Object.keys(cash.by).sort(); const sumStaff = staffs.reduce((s, k) => s + cash.by[k].cnt + cash.by[k].doc, 0);
+  const L = UI.cDue ? dueL : dayL;
+  return '<div class="card row between"><button class="ib" onclick="cShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="c_dsel" type="date" value="' + D + '" onchange="cDate(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + '</div></div><button class="ib" onclick="cShift(1)" aria-label="পরের দিন">›</button></div>'
+    + cPanel()
+    + '<div class="card stack" style="gap:10px"><b>' + rel + 'র হিসাব</b><div class="mini num"><div><small>এন্ট্রি</small><b>' + dayL.length + '</b></div><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>পেয়েছি</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : '') + '">' + money(T.due) + '</b></div></div>'
+    + '<div class="row between sm mut"><span>খরচ ' + money(T.cost) + '</span><span>লাভ <b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></span></div></div>'
+    + '<div class="seg"><button class="' + (!UI.cDue ? 'on' : '') + '" onclick="UI.cDue=false;render()">' + rel + 'র এন্ট্রি (' + dayL.length + ')</button><button class="' + (UI.cDue ? 'on' : '') + '" onclick="UI.cDue=true;render()">সব বাকি (' + dueL.length + ')</button></div>'
+    + (L.length ? '<div class="card" style="padding:4px 14px">' + L.map(c => cRow(c, UI.cDue)).join('') + '</div>' : '<div class="empty">' + (UI.cDue ? 'কারো কাছে বাকি নেই 🎉' : 'এই দিনে কোনো এন্ট্রি নেই') + '</div>')
+    + '<div class="card"><b>ক্যাশ খাতা — ' + rel + ' কে কত টাকা নিল</b>'
+    + (staffs.length ? staffs.map(k => '<div class="kv"><span style="color:var(--ink)"><b>' + esc(k) + '</b><div class="sm mut">কাউন্টার ' + money(cash.by[k].cnt) + ' · ডকুমেন্ট ' + money(cash.by[k].doc) + '</div></span><b class="num good">' + money(cash.by[k].cnt + cash.by[k].doc) + '</b></div>').join('') : '<div class="mut sm" style="padding:8px 0">এই দিনে কোনো টাকা নেওয়া লেখা নেই</div>')
+    + (cash.pp ? kv('পাসপোর্ট ক্লায়েন্ট জমা (স্টাফ লেখা থাকে না)', money(cash.pp), 'good') : '') + (cash.refunds ? kv('− ক্লায়েন্টকে ফেরত দিয়েছি (ডকুমেন্ট)', money(cash.refunds), 'bad') : '')
+    + kv('<b style="color:var(--ink)">দিনের নিট ক্যাশ</b>', '<b>' + money(sumStaff + cash.pp - cash.refunds) + '</b>') + '</div>'
+    + (Object.keys(bySvc).length ? '<div class="card"><b>সার্ভিস অনুযায়ী</b>' + Object.entries(bySvc).sort((a, b) => b[1].t - a[1].t).map(([k, x]) => kv(esc(k) + ' <span class="sm">(' + x.n + ' বার · ' + x.q + ')</span>', money(x.t))).join('') + '</div>' : '');
+}
+/* ----- কাউন্টার এডিট ----- */
+function cForm(id) {
+  const c = S.cnt[id]; CE = { id, date: c.date, svc: c.svc, qty: c.qty, total: String(n(c.total)), manual: true, cost: c.cost ? String(n(c.cost)) : '', name: c.name || '', phone: c.phone || '', note: c.note || '', payments: arr(c.payments).slice(), log: arr(c.log), createdAt: c.createdAt, createdBy: c.createdBy, _orig: clone(c), _base: baseOf(c), _ack: false };
+  pkInit('ce', c.by || '', false); pkInit('ce_payments', ME, true);
+  sheet('কাউন্টার এন্ট্রি এডিট',
+    '<div class="field"><label for="ce_date">তারিখ</label><input id="ce_date" type="date" value="' + CE.date + '"></div>' + cFields('ce') + cDetail('ce')
+    + '<div class="card" style="box-shadow:none;background:var(--bg)" id="ce_prev"></div>' + mlBlock('ce', 'payments', 'ক্লায়েন্ট কত দিয়েছে', 'টাকা কে নিল') + pkField('ce', 'কে করেছে')
+    + '<div class="sm bad" id="ce_warn"></div><button class="btn block" id="ce_save" onclick="ceSave()">সেভ করুন</button>'
+    + (!isStaff() ? '<button class="btn danger block" onclick="arm(this,ceDel)">এন্ট্রি মুছে ফেলুন</button>' : '') + histHtml(c));
+  ceCalc();
+}
+function ceGrab() { const s = CE; s.date = val('ce_date') || today(); s.qty = val('ce_qty'); s.total = val('ce_total'); s.cost = val('ce_cost'); s.name = val('ce_name'); s.phone = val('ce_phone'); s.note = val('ce_note'); }
+function ceCalc() {
+  ceGrab(); const c = cntCalc(CE);
+  $('ce_prev').innerHTML = kv('মোট বিল', money(c.total)) + kv('পেয়েছি', money(c.paid), 'good') + kv('বাকি', money(c.due), c.due ? 'bad' : '') + kv('খরচ', money(c.cost)) + kv('<b>লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad');
+  $('ce_payments_l').innerHTML = mlHtml('ce', 'payments');
+}
+function ceSave() {
+  ceGrab(); const s = CE; const by = PK.ce || ''; const c = cntCalc(s);
+  if (!s.svc) { toast('সার্ভিস বাছুন'); return; } if (c.total <= 0) { toast('মোট টাকা দিন'); return; } if (pkNeed('ce')) { toast('কে করেছে — স্টাফ বাছুন'); return; }
+  if (c.due > 0 && !s.name.trim() && !s.phone.trim()) { toast('বাকি থাকলে ক্লায়েন্টের নাম বা ফোন দিন'); return; }
+  if (c.over > 0 && !s._ack) { s._ack = true; $('ce_warn').innerHTML = '⚠ জমা বিলের চেয়ে ' + money(c.over) + ' বেশি। ঠিক থাকলে আবার "সেভ" চাপুন'; $('ce_save').textContent = 'তবুও সেভ করুন'; return; }
+  const old = s._orig;
+  const rec = { id: s.id, date: s.date, svc: s.svc, qty: Math.max(1, n(s.qty)), total: c.total, cost: c.cost, name: s.name.trim(), phone: s.phone.trim(), note: s.note.trim(), by, payments: s.payments, createdAt: s.createdAt, createdBy: s.createdBy, log: s.log };
+  commit('cnt', rec, s._base, logMsgs(old, rec, CKEYS)); CE = null; closeSheet(); toast('সেভ হয়েছে');
+}
+function ceDel() { remove('cnt', CE.id); CE = null; closeSheet(); toast('মুছে গেছে'); }
+
+/* ====================================================================
+   আরও মেনু · স্টাফ লক · সেটিংসের নতুন কার্ড · CSV
+   ==================================================================== */
+function vMore() {
+  const b = (ico, cls, t, js) => '<button onclick="' + js + '"><span class="qi ' + cls + '">' + ic(ico) + '</span>' + t + '</button>';
+  return '<div class="quick" style="grid-template-columns:repeat(3,1fr)">' + b('swap', 'w', 'বাকি খাতা', "go('loan')") + b('plane', '', 'ভিসা ফাইল', "go('visa')") + b('gear', 'g', 'সেটিংস', "go('set')") + '</div>'
+    + '<h2>রিপোর্ট ও ব্যাকআপ (এক্সেলে খোলা যায়)</h2><div class="card stack"><button class="btn ghost" onclick="exportDocs()">⬇ ডকুমেন্ট কাজের তালিকা (CSV)</button><button class="btn ghost" onclick="exportCnt()">⬇ কাউন্টার সার্ভিসের তালিকা (CSV)</button><button class="btn ghost" onclick="backup()">⬇ পুরো ডাটার ব্যাকআপ (JSON)</button></div>'
+    + '<p class="mut sm" style="text-align:center;margin:0">স্টাফের ফোনে শুধু ডকুমেন্ট ও কাউন্টার দেখাতে: সেটিংস → "স্টাফ লক"।</p>';
+}
+function csvDown(name, rows) {
+  const cell = v => { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v) && isNaN(Number(v))) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const b = new Blob(['﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name + '-' + today() + '.csv'; a.click();
+}
+function exportDocs() {
+  const rows = [['কাজ নেওয়ার তারিখ', 'ধরন', 'নাম', 'ফোন', 'নম্বর', 'অবস্থা', 'ডেলিভারির তারিখ', 'ফেরতের তারিখ', 'মোট বিল', 'রাখা চার্জ (ফেরতে)', 'জমা', 'বাকি', 'ফেরত দেওয়া', 'ফেরত দিতে বাকি', 'খরচ', 'খরচ হয়েছে?', 'লাভ', 'লাভ ধরা হয়েছে?', 'স্টাফ', 'নোট']];
+  Object.values(S.docs).sort((a, b) => (a.recvDate || '').localeCompare(b.recvDate || '')).forEach(d => { const c = docCalc(d); rows.push([d.recvDate, d.cat, d.name, d.phone, d.refNo, DSTAT[d.status || 'run'][0], d.doneDate, d.retDate, n(d.total), c.kept, c.paid, c.due, c.refunded, c.refundDue, c.cost, d.costDone ? 'হ্যাঁ' : 'না', c.profit, c.real ? 'হ্যাঁ' : 'না', d.by, d.note]); });
+  csvDown('rtc-document-kaj', rows);
+}
+function exportCnt() {
+  const rows = [['তারিখ', 'সময়', 'সার্ভিস', 'পরিমাণ', 'মোট বিল', 'পেয়েছি', 'বাকি', 'খরচ', 'লাভ', 'স্টাফ', 'ক্লায়েন্ট', 'ফোন', 'নোট']];
+  Object.values(S.cnt).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.createdAt || 0) - (b.createdAt || 0)).forEach(c => { const k = cntCalc(c); rows.push([c.date, tmS(c.createdAt), c.svc, n(c.qty), k.total, k.paid, k.due, k.cost, k.profit, c.by, c.name, c.phone, c.note]); });
+  csvDown('rtc-counter', rows);
+}
+async function sha(s) { try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('rtc|' + s)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); } catch (e) { return 'p|' + s; } }
+async function setPin() { const v = val('s_pin').trim(); if (!/^\d{4,8}$/.test(v)) { toast('৪ থেকে ৮ সংখ্যার পিন দিন'); return; } S.settings.pin = await sha(v); saveSettings(); toast('পিন সেভ হয়েছে'); render(); }
+function lockStaff() { if (!S.settings.pin) { toast('আগে পিন সেট করুন'); return; } ROLE = 'staff'; try { localStorage.setItem(K2.role, 'staff'); } catch (e) { } tab = 'doc'; render(); window.scrollTo(0, 0); toast('স্টাফ মোড চালু'); }
+function unlockSheet() {
+  sheet('মালিকের পিন', '<div class="field"><label for="u_pin">পিন দিন</label><input id="u_pin" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key===\'Enter\')doUnlock()"></div><button class="btn block" onclick="doUnlock()">খুলুন</button>'
+    + (MODE === 'cloud' ? '<div class="sm mut">পিন ভুলে গেলে লগইন পাসওয়ার্ড দিয়ে খুলুন:</div><input id="u_pw" type="password" placeholder="লগইন পাসওয়ার্ড" autocomplete="current-password"><button class="btn ghost block" onclick="doUnlockPw()">পাসওয়ার্ড দিয়ে খুলুন</button>' : ''));
+}
+async function doUnlock() { if (S.settings.pin && (await sha(val('u_pin').trim())) !== S.settings.pin) { toast('পিন ভুল'); return; } unlockOk(); }
+async function doUnlockPw() { try { await signIn(AUTH.email, val('u_pw')); unlockOk(); } catch (e) { toast('পাসওয়ার্ড ভুল'); } }
+function unlockOk() { ROLE = ''; try { localStorage.removeItem(K2.role); } catch (e) { } tab = 'home'; closeSheet(); toast('মালিক মোড'); }
+function svcCard() {
+  const l = S.settings.services;
+  return '<div class="card stack" style="gap:8px"><b>কাউন্টার সার্ভিস ও রেট</b><span class="mut sm">রেট দিলে (যেমন ফটোকপি ৳২) পরিমাণ দিলেই মোট টাকা নিজে বসে যাবে। রেট ০ রাখলে টাকা নিজে লিখতে হবে। নাম চেপে রেট বদলানো যায়।</span><div class="chips">'
+    + l.map((x, i) => '<span class="chip rm"><span onclick="svcPick(' + i + ')" style="cursor:pointer">' + esc(x.n) + (n(x.r) ? ' · ৳' + n(x.r) : '') + '</span> <button class="x" style="font-size:14px" onclick="svcRm(' + i + ')" aria-label="মুছুন">✕</button></span>').join('')
+    + '</div><div class="row"><input id="sv_n" placeholder="সার্ভিসের নাম"><input id="sv_r" type="number" inputmode="decimal" placeholder="রেট ৳" style="max-width:110px"><button class="btn sm" onclick="svcAddS()">সেভ</button></div></div>';
+}
+function svcPick(i) { const x = S.settings.services[i]; $('sv_n').value = x.n; $('sv_r').value = n(x.r) || ''; $('sv_r').focus(); }
+function svcRm(i) { S.settings.services.splice(i, 1); saveSettings(); render(); }
+function svcAddS() { const nm = val('sv_n').trim(); if (!nm) return; const r = n(val('sv_r')); const ex = S.settings.services.find(x => x.n === nm); if (ex) ex.r = r; else S.settings.services.push({ n: nm, r }); saveSettings(); render(); }
+function lockCard() {
+  return '<div class="card stack"><b>🔒 স্টাফ লক</b><span class="mut sm">স্টাফের ফোনে "স্টাফ মোড" চালু করলে শুধু ডকুমেন্ট ও কাউন্টার ট্যাব দেখাবে। হোমের লাভ-লোকসান, পাসপোর্ট, খরচ, বাকি খাতা, সেটিংস আর ডিলিট বন্ধ থাকবে। মালিক পিন দিয়ে আবার খুলবেন।</span>'
+    + '<div class="row"><input id="s_pin" type="password" inputmode="numeric" placeholder="' + (S.settings.pin ? 'নতুন পিন (৪-৮ সংখ্যা)' : 'পিন বানান (৪-৮ সংখ্যা)') + '" autocomplete="off"><button class="btn sm" onclick="setPin()">পিন সেভ</button></div>'
+    + '<button class="btn warnb" onclick="lockStaff()">' + ic('lock') + ' এই ফোনে স্টাফ মোড চালু করুন</button><span class="mut sm">এটা স্ক্রিন লক — সবাই একই ইমেইলে লগইন করে বলে ডাটাবেসের আসল সিকিউরিটি নয়।</span></div>';
+}
 
 /* ---------- শুরু ---------- */
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
