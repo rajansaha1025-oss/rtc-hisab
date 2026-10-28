@@ -1,5 +1,5 @@
 // RTC হিসাব — অফলাইনে অ্যাপ খুলতে দেয়। Firebase/ডাটার রিকোয়েস্ট ক্যাশ হয় না (সবসময় লাইভ)।
-const V = 'rtc-hisab-v2';
+const V = 'rtc-hisab-v3';
 const FILES = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
