@@ -32,7 +32,7 @@
   --goodbg:#0f2f29; --badbg:#3a1a24; --warnbg:#392c12; --shadow:none; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;padding-block:0 96px}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;padding-block:0 28px}
 button,input,select,textarea{font:inherit;color:inherit}
 svg.ic{width:1.25em;height:1.25em;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .num{font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
@@ -90,12 +90,12 @@ input[type=checkbox]{width:20px;height:20px;accent-color:var(--acc)}
 input:focus,select:focus,textarea:focus,button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
 textarea{resize:vertical;min-height:66px}
 .field{display:flex;flex-direction:column;min-width:0}
-.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:15;box-shadow:0 10px 24px rgba(11,60,120,.38);border-radius:99px;padding:14px 22px}
-nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--card);border-top:1px solid var(--line);display:flex;
-  padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
-nav.tabs button{flex:1;border:0;background:none;padding:7px 2px 5px;cursor:pointer;color:var(--mut);font-size:11.5px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:3px;border-radius:12px;max-width:150px;margin:0 auto}
-nav.tabs button svg{width:23px;height:23px}
-nav.tabs button.on{color:var(--acc);background:var(--soft)}
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));z-index:15;box-shadow:0 10px 24px rgba(11,60,120,.38);border-radius:99px;padding:14px 22px}
+
+
+
+
+
 .item{display:flex;flex-direction:column;gap:10px;cursor:pointer}
 .nm{font-weight:700;font-size:16.5px;word-break:break-word}
 .avatar{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-weight:700;font-size:17px;flex:none;background:var(--soft);color:var(--acc)}
@@ -131,17 +131,70 @@ nav.tabs button.on{color:var(--acc);background:var(--soft)}
 .seg button.on{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
 @media (prefers-reduced-motion:no-preference){.sh{animation:up .18s ease-out}@keyframes up{from{transform:translateY(40px);opacity:.4}}}
 [hidden]{display:none!important}
-main{padding-bottom:64px}
+main{padding-bottom:92px}
 .notetop{background:var(--warnbg);color:var(--warn);padding:8px 11px;border-radius:11px;font-size:13.5px;font-weight:600;word-break:break-word;white-space:pre-wrap}
 .hs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .hs::-webkit-scrollbar{display:none}
 .hs .chip{white-space:nowrap;flex:none}
-nav.tabs button{font-size:11px;padding-left:0;padding-right:0}
+
 details.wk>summary{list-style:none;cursor:pointer}details.wk>summary::-webkit-details-marker{display:none}
 details.ipbox summary{font-size:13.5px}
+/* ===== বাম সাইডবার (মোবাইলে হ্যামবার্গার দিয়ে খোলে, বড় স্ক্রিনে সবসময় দেখা যায়) ===== */
+.side{position:fixed;top:0;bottom:0;left:0;width:272px;max-width:84vw;z-index:40;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:calc(14px + env(safe-area-inset-top,0px)) 12px calc(14px + env(safe-area-inset-bottom,0px));transform:translateX(-104%);transition:transform .22s ease;overflow-y:auto;overscroll-behavior:contain}
+.side-bg{position:fixed;inset:0;z-index:35;background:rgba(5,10,25,.55);display:none}
+body.nav-open .side{transform:none;box-shadow:0 0 44px rgba(0,0,0,.4)}
+body.nav-open .side-bg{display:block}
+body.nav-open{overflow:hidden}
+.side .brand{display:flex;align-items:center;gap:11px;padding:2px 6px 14px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.side .brand b{font-size:17px;display:block;line-height:1.2}
+.side h3{font-size:11px;color:var(--mut);margin:14px 12px 4px;letter-spacing:.07em;font-weight:700}
+.nv{display:flex;align-items:center;gap:13px;width:100%;border:0;background:none;padding:11px 12px;border-radius:13px;color:var(--ink);font-weight:600;font-size:14.5px;cursor:pointer;text-align:left}
+.nv svg{width:21px;height:21px;color:var(--mut)}
+.nv:hover{background:var(--bg)}
+.nv.on{background:var(--soft);color:var(--acc)}
+.nv.on svg{color:var(--acc)}
+.nv .bd{margin-left:auto;font-size:11.5px;font-weight:700;min-width:22px;text-align:center;padding:2px 7px;border-radius:99px;background:var(--badbg);color:var(--bad)}
+.side .foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--line);font-size:12px;color:var(--mut);word-break:break-all}
+.hamb{display:grid}
+@media (min-width:900px){
+  .side{transform:none;box-shadow:none}
+  .side-bg{display:none!important}
+  body{padding-left:272px}
+  body.nonav{padding-left:0}
+  .hamb{display:none}
+  .fab{right:max(28px,env(safe-area-inset-right,0px))}
+}
+body.nonav .side,body.nonav .side-bg{display:none!important}
+/* ===== রেফারেন্স হাইলাইট ===== */
+.refb{--h:212;display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px;line-height:1.3;padding:3px 11px 3px 9px;border-radius:99px;background:hsl(var(--h) 85% 92%);color:hsl(var(--h) 70% 24%);border:1px solid hsl(var(--h) 60% 80%);white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.refb::before{content:"";width:8px;height:8px;border-radius:50%;background:hsl(var(--h) 72% 46%);flex:none}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .refb{background:hsl(var(--h) 42% 21%);color:hsl(var(--h) 85% 82%);border-color:hsl(var(--h) 40% 34%)}}
+:root[data-theme="dark"] .refb{background:hsl(var(--h) 42% 21%);color:hsl(var(--h) 85% 82%);border-color:hsl(var(--h) 40% 34%)}
+/* ===== বর্তমান হিসাব / ক্যাশ ===== */
+.cur{border:1.5px solid var(--acc)}
+.cl{display:grid;gap:7px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.cl:first-of-type{padding-top:4px} .cl:last-child{border-bottom:0;padding-bottom:2px}
+.cl .t{display:flex;align-items:center;gap:10px;min-width:0}
+.cl .ico{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--soft);color:var(--acc)}
+.cl .ico.g{background:var(--goodbg);color:var(--good)} .cl .ico.r{background:var(--badbg);color:var(--bad)} .cl .ico.w{background:var(--warnbg);color:var(--warn)}
+.cl .nmx{flex:1;min-width:0;line-height:1.25} .cl .nmx b{display:block;font-weight:600;font-size:14.5px}
+.mbar{height:6px;border-radius:99px;background:var(--soft);overflow:hidden} .mbar i{display:block;height:100%;border-radius:inherit;background:var(--good)} .mbar.r i{background:var(--bad)}
+.sect{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px}
+.sect .tot{font-size:19px;font-weight:700}
+.tdy{display:flex;align-items:center;gap:12px;cursor:pointer}
+.tdy .ico{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:var(--goodbg);color:var(--good);flex:none}
+.top5{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.top5:last-child{border-bottom:0}
+.top5 .rk{width:24px;height:24px;border-radius:99px;background:var(--soft);color:var(--mut);font-size:12px;font-weight:700;display:grid;place-items:center;flex:none}
+.sumrow{cursor:pointer}
+details.fold>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:10px}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:"▾";color:var(--mut);margin-left:auto;padding-left:8px}
+details.fold[open]>summary::after{content:"▴"}
 </style>
 </head>
 <body>
+<aside id="side" class="side"></aside><div id="sideBg" class="side-bg" onclick="navClose()"></div>
 <div id="app" class="wrap"></div>
 <div id="sheet" hidden></div>
 <div id="toast" hidden></div>
@@ -157,12 +210,13 @@ const K = { data: 'rtc_hisab_v1', q: 'rtc_hisab_q', auth: 'rtc_hisab_auth', mode
 const DAYS = ['রবিবার','সোমবার','মঙ্গলবার','বুধবার','বৃহস্পতিবার','শুক্রবার','শনিবার'];
 const KIND = { shop: 'দোকান খরচ', personal: 'ব্যক্তিগত খরচ', income: 'অন্য আয়' };
 
+const DEFCASH = () => [{ id: 'c1', name: 'Cash 1', owner: 'Rajan' }, { id: 'c2', name: 'Cash 2', owner: 'Rabbi' }, { id: 'c3', name: 'Cash 3', owner: 'Anik' }];
 const DEF = () => ({
   settings: { payDay: 2, payRule: 2, payTime: '18:00', defaultIp: 1200, gmails: [], refs: ['মামা', 'Rajan', 'Omey'],
-    docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: [], pin: '',
+    docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: ['Rajan', 'Rabbi', 'Anik'], cash: DEFCASH(), pin: '',
     services: [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }],
     cats: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন', 'অন্যান্য'], personal: ['বাসা খরচ', 'টুকটাক', 'অন্যান্য'], income: ['অন্য সার্ভিসের লাভ', 'অন্যান্য'] } },
-  expenses: {}, loans: {}, files: {}, ipPays: {}, docs: {}, cnt: {}
+  expenses: {}, loans: {}, files: {}, ipPays: {}, docs: {}, cnt: {}, cday: {}, cmv: {}
 });
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
@@ -173,7 +227,7 @@ let AUTH = lsGet(K.auth, null);        // {email, refresh}
 let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
 let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
 let tab = 'home', fm = null;
-const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false };
+const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day' };
 
 function norm(d) {
   const base = DEF(); if (!d || typeof d !== 'object') return base;
@@ -183,7 +237,9 @@ function norm(d) {
   if (s.payRule !== 2) { s.payDay = 2; s.payRule = 2; }   // নতুন নিয়ম: সপ্তাহ সোম–রবি, পেমেন্ট ডিফল্ট মঙ্গলবার
   s.services = arr(s.services).filter(x => x && x.n).map(x => ({ n: String(x.n), r: parseFloat(x.r) || 0 })); s.pin = s.pin || '';
   ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
-  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {} };
+  const freshCash = !(d.settings && d.settings.cash); s.cash = arr(s.cash).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || 'Cash'), owner: String(a.owner || '') }));
+  if (freshCash) s.cash.forEach(a => { if (a.owner && !s.staff.includes(a.owner)) s.staff.push(a.owner); });
+  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {}, cday: d.cday || {}, cmv: d.cmv || {} };
   Object.values(out.files).forEach(f => { f.payments = arr(f.payments); });
   Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
   Object.values(out.docs).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); f.log = arr(f.log); });
@@ -252,7 +308,7 @@ async function pull(quiet) {
 }
 function pushAll() {
   enqueue('PUT', FB.root + '/settings', S.settings);
-  ['expenses', 'loans', 'files', 'ipPays', 'docs', 'cnt'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
+  ['expenses', 'loans', 'files', 'ipPays', 'docs', 'cnt', 'cday', 'cmv'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
 }
 function save(coll, id) { persist(); enqueue('PUT', FB.root + '/' + coll + '/' + id, S[coll][id]); }
 function remove(coll, id) { delete S[coll][id]; persist(); enqueue('DELETE', FB.root + '/' + coll + '/' + id); }
@@ -274,7 +330,8 @@ function visaRow(f) {
   if (ret) { kept = n(f.keptCharge); bill = kept; due = 0; profit = kept; }
   else { bill = n(f.billTotal); due = Math.max(0, bill - paid); const w = n(f.baseVisaFee) + n(f.softwareCharge); profit = (del || appt) ? bill - w : 0; }
   const ts = /^SET_(\d+)$/.test(f.id) ? +f.id.slice(4) : 0;
-  return { id: f.id, serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, date: ts ? ymd(new Date(ts)) : '' };
+  const ds = []; const tk = a => arr(a).forEach(p => { if (p && /^\d{4}-\d{2}-\d{2}$/.test(p.d || '')) ds.push(p.d); }); tk(f.pays); arr(f.applicants).forEach(a => tk(a && a.pays)); arr(f.subAccts).forEach(sb => tk(sb && sb.pays)); ds.sort();
+  return { id: f.id, last: ds.length ? ds[ds.length - 1] : '', refund: n(f.refundAmount), serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, date: ts ? ymd(new Date(ts)) : '' };
 }
 
 /* ---------- 📲 ফোন → WhatsApp (wa.me/88 + নম্বর) ---------- */
@@ -337,7 +394,7 @@ function range() {
 const inR = (d, r) => d && (!r[0] || d >= r[0]) && (!r[1] || d <= r[1]);
 
 function overall() {
-  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 } };
+  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 }, cash: { coll: 0, extra: 0, by: {} } };
   Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; p.n++; p.bill += n(f.total); p.paid += c.paid; p.due += c.due; p.fee += n(f.passFee); p.ip += c.ip; p.profit += c.profit; });
   Object.values(S.expenses).forEach(e => { if (!inR(e.date, r)) return; o.exp[e.kind] += n(e.amt); if (e.kind === 'shop') o.byCat[e.cat] = (o.byCat[e.cat] || 0) + n(e.amt); });
   Object.values(S.docs).forEach(d => {
@@ -346,8 +403,9 @@ function overall() {
     if (c.real && inR(docProfitDate(d), r)) { x.n++; x.profit += c.profit; const b = x.byCat[d.cat] = x.byCat[d.cat] || { n: 0, profit: 0 }; b.n++; b.profit += c.profit; }
   });
   Object.values(S.cnt).forEach(cc => { if (!inR(cc.date, r)) return; const k = cntCalc(cc); const x = o.cn; x.n++; x.bill += k.total; x.paid += k.paid; x.due += k.due; x.cost += k.cost; x.profit += k.profit; });
+  { const CM = cashModel(); Object.keys(CM.day).forEach(d => { if (!inR(d, r)) return; Object.keys(CM.day[d]).forEach(id => { const x = CM.day[d][id]; o.cash.coll += x.coll; o.cash.extra += x.extra; o.cash.by[id] = (o.cash.by[id] || 0) + x.coll; }); }); }
   VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; } });
-  o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
+  o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit + o.cash.extra; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
   let get = 0, give = 0; Object.values(S.loans).forEach(l => { const b = loanBal(l); if (b > 0) get += b; else give -= b; });
   o.get = get; o.give = give; return o;
 }
@@ -368,29 +426,44 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>', coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5c0-1 1-1.7 2.5-1.7s2.5.7 2.5 1.7-1 1.5-2.5 1.9-2.5.9-2.5 1.9 1 1.7 2.5 1.7 2.5-.7 2.5-1.7"/>',
   down: '<path d="M12 4v13M6 12l6 6 6-6"/>', up: '<path d="M12 20V7M6 12l6-6 6 6"/>', bell: '<path d="M6 16V11a6 6 0 0112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
   doc: '<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5M10 13h6M10 17h6"/>', print: '<path d="M7 9V3h10v6"/><rect x="4" y="9" width="16" height="8" rx="2"/><path d="M7 14h10v7H7z"/>',
-  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>'
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>', lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/>',
+  users: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.4"/><path d="M17 14.2c2.4.2 4 2.2 4 5"/>',
+  wallet: '<path d="M4 7.5A2.5 2.5 0 016.5 5H18v3"/><path d="M4 7.5V17a2 2 0 002 2h13a1 1 0 001-1V9a1 1 0 00-1-1H6.5A2.5 2.5 0 014 7.5z"/><circle cx="16" cy="13.5" r="1.2"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>'
 };
 const ic = (nm) => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[nm] + '</svg>';
 const avatarCls = s => ['', 'g', 'r', 'w'][(String(s).charCodeAt(0) || 0) % 4];
 const initial = s => esc((String(s || '?').trim()[0] || '?').toUpperCase());
 
+const TITLES = { home: 'RTC হিসাব', cash: 'দিন শেষের ক্যাশ', pass: 'পাসপোর্ট ফাইল', ref: 'রেফারেন্স হিসাব', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার সার্ভিস', exp: 'খরচ ও আয়', more: 'রিপোর্ট ও ব্যাকআপ', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', vjoma: 'ভিসা জমা', set: 'সেটিংস' };
 function render() {
-  if (MODE === '') { renderLogin(); return; }
+  document.body.classList.toggle('nonav', MODE === '');
+  if (MODE === '') { $('side').innerHTML = ''; renderLogin(); return; }
   if (isStaff() && !STAFF_TABS.includes(tab)) tab = 'doc';
-  const tabs = isStaff() ? [['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার']]
-    : [['home', 'chart', 'হিসাব'], ['pass', 'id', 'পাসপোর্ট'], ['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার'], ['exp', 'receipt', 'খরচ'], ['more', 'more', 'আরও']];
-  const titles = { home: 'RTC হিসাব', pass: 'পাসপোর্ট ফাইল', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার সার্ভিস', exp: 'খরচ ও আয়', more: 'আরও', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', set: 'সেটিংস' };
-  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), pass: 'ক্লায়েন্ট, IP ও জমা', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'ফটোকপি, অনলাইন, টাইপিং, CV…', exp: 'দোকান ও ব্যক্তিগত', more: 'বাকি খাতা, ভিসা, সেটিংস, রিপোর্ট', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', set: 'লিস্ট ও IP এর সময়' };
+  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), cash: 'কাউন্টার থেকে আয়, মাস অনুযায়ী', pass: 'ক্লায়েন্ট, IP ও জমা', ref: 'কার কয়টি ফাইল, কত হিসাব', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'ফটোকপি, অনলাইন, টাইপিং, CV…', exp: 'দোকান ও ব্যক্তিগত', more: 'CSV ও ব্যাকআপ', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', vjoma: 'কাস্টমারের কত টাকা আমার কাছে', set: 'লিস্ট, ক্যাশ ও IP এর সময়' };
   if (isStaff()) subs[tab] = 'স্টাফ মোড' + (ME ? ' · ' + ME : '');
-  const body = ({ home: vHome, pass: vPass, doc: vDoc, cnt: vCnt, exp: vExp, loan: vLoan, visa: vVisa, more: vMore, set: vSet })[tab]();
-  const on = k => tab === k || (k === 'more' && ['loan', 'visa', 'set'].includes(tab));
-  $('app').innerHTML = '<header class="top"><div class="wrap pad hd"><img class="logo" src="'+LOGO+'" alt="RTC"><h1>' + titles[tab] + '<small>' + subs[tab] + '</small></h1><span id="syncPill" class="sync"></span>'
-    + (isStaff() ? '<button class="ib" onclick="unlockSheet()" aria-label="মালিক মোড">' + ic('lock') + '</button>' : '<button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">' + ic('gear') + '</button>') + '</div></header><main class="wrap pad stack">' + body + '</main>'
-    + '<nav class="tabs">' + tabs.map(t => '<button class="' + (on(t[0]) ? 'on' : '') + '" onclick="go(\'' + t[0] + '\')">' + ic(t[1]) + t[2] + '</button>').join('') + '</nav>';
+  const body = ({ home: vHome, cash: vCash, pass: vPass, ref: vRef, doc: vDoc, cnt: vCnt, exp: vExp, loan: vLoan, visa: vVisa, vjoma: vJoma, more: vMore, set: vSet })[tab]();
+  renderSide();
+  $('app').innerHTML = '<header class="top"><div class="wrap pad hd"><button class="ib hamb" onclick="navToggle()" aria-label="মেনু খুলুন">' + ic('menu') + '</button><img class="logo" src="' + LOGO + '" alt="RTC"><h1>' + TITLES[tab] + '<small>' + esc(subs[tab]) + '</small></h1><span id="syncPill" class="sync"></span>'
+    + (isStaff() ? '<button class="ib" onclick="unlockSheet()" aria-label="মালিক মোড">' + ic('lock') + '</button>' : '<button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">' + ic('gear') + '</button>') + '</div></header><main class="wrap pad stack">' + body + '</main>';
   setSync(MODE === 'local' ? 'local' : syncSt);
 }
 
-function go(t) { if (isStaff() && !STAFF_TABS.includes(t)) t = 'doc'; tab = t; render(); window.scrollTo(0, 0); if (t === 'visa' || t === 'home') loadVisa().then(() => { if (tab === t) render(); }); }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function go(t) { if (isStaff() && !STAFF_TABS.includes(t)) t = 'doc'; tab = t; navClose(); render(); window.scrollTo(0, 0); if (t === 'visa' || t === 'vjoma' || t === 'home') loadVisa().then(() => { if (tab === t) render(); }); }
 
 function renderLogin() {
   $('app').innerHTML = '<div class="login wrap pad"><div class="card"><img class="logo" src="'+LOGO+'" alt="RTC" style="margin:0 auto;width:76px;height:76px;border-radius:20px"><h1 style="margin:0;font-size:22px">RTC হিসাব</h1><p class="mut sm" style="margin:0">ভিসা অ্যাপের একই ইমেইল ও পাসওয়ার্ড দিন</p>'
@@ -416,7 +489,7 @@ function vHome() {
   const cats = Object.entries(o.byCat).sort((a, b) => b[1] - a[1]); const mx = cats.length ? cats[0][1] : 1;
   const hero = '<div class="card hero"><div class="sm" style="opacity:.75">দোকানের নিট লাভ</div><div class="big num">' + money(o.net) + '</div><div class="sm" style="opacity:.75">ব্যক্তিগত খরচের পর হাতে থাকল <b class="num" style="opacity:1">' + money(o.left) + '</b></div>'
     + '<div class="tri"><div><small>মোট আয়</small><b class="num">' + money(o.income) + '</b></div><div><small>দোকান খরচ</small><b class="num">' + money(o.exp.shop) + '</b></div><div><small>ব্যক্তিগত</small><b class="num">' + money(o.exp.personal) + '</b></div></div></div>';
-  const quick = '<div class="quick"><button onclick="fileForm()"><span class="qi">' + ic('id') + '</span>নতুন ফাইল</button><button onclick="UI.ek=\'shop\';expForm()"><span class="qi r">' + ic('receipt') + '</span>খরচ লিখুন</button><button onclick="go(\'loan\')"><span class="qi w">' + ic('swap') + '</span>বাকি খাতা</button><button onclick="go(\'pass\')"><span class="qi g">' + ic('coin') + '</span>IP দিন</button></div>';
+  const quick = '<div class="quick"><button onclick="fileForm()"><span class="qi">' + ic('id') + '</span>নতুন ফাইল</button><button onclick="UI.ek=\'shop\';expForm()"><span class="qi r">' + ic('receipt') + '</span>খরচ লিখুন</button><button onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')"><span class="qi w">' + ic('wallet') + '</span>আজকের ক্যাশ</button><button onclick="go(\'pass\')"><span class="qi g">' + ic('coin') + '</span>IP দিন</button></div>';
   let alerts = '';
   if (groups.length) { const t0 = today(), dueG = groups.filter(g => g.date <= t0), nextG = groups.find(g => g.date > t0); alerts += '<div class="alert" onclick="go(\'pass\')"><span class="avatar w">' + ic('bell') + '</span><div style="flex:1;min-width:0"><b>' + (dueG.length ? 'IP দিতে হবে' : 'IP জমছে') + '</b><div class="sm mut">' + (dueG.length ? dueG.length + ' সপ্তাহের বাকি' + (nextG ? ' · পরের পেমেন্ট ' + fd(nextG.date) : '') : 'পেমেন্ট ' + fd(groups[0].date)) + '</div></div><b class="num warnc">' + money(dueG.length ? dueG.reduce((s, g) => s + g.total, 0) : ipTot) + '</b></div>'; }
   if (dues.length) alerts += '<div class="alert" onclick="UI.pf=\'due\';go(\'pass\')"><span class="avatar r">' + ic('down') + '</span><div style="flex:1;min-width:0"><b>ক্লায়েন্টের কাছে বাকি</b><div class="sm mut">' + dues.length + ' জন · সবচেয়ে বেশি ' + esc(dues[0].f.name) + '</div></div><b class="num bad">' + money(dueTot) + '</b></div>';
@@ -431,13 +504,15 @@ function vHome() {
   if (dCost.length) alerts += al('w', 'receipt', 'ডকুমেন্টের খরচ এখনও হয়নি', dCost.length + 'টি কাজে', dCost.reduce((s, x) => s + n(x.d.cost), 0), 'warnc', "UI.df='cost';UI.dc='all';UI.dm='all';go('doc')");
   if (dRef.length) alerts += al('r', 'swap', 'ক্লায়েন্টকে ফেরত দিতে বাকি', dRef.length + 'টি ফেরত কাজে', dRef.reduce((s, x) => s + x.c.refundDue, 0), 'bad', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')");
   if (cDue.length) alerts += al('r', 'print', 'কাউন্টারে বাকি টাকা', cDue.length + 'টি এন্ট্রি', cDue.reduce((s, c) => s + cntCalc(c).due, 0), 'bad', "UI.cDue=true;go('cnt')");
+  alerts += cashTodayAlert();
   const att = alerts ? '<h2>এখন নজর দিন</h2><div class="card stack" style="gap:8px;padding:10px">' + alerts + '</div>' : '';
-  return per + hero + quick + att
+  return curHisab() + per + hero + quick + att
     + '<h2>আয়ের উৎস</h2><div class="card">'
     + kv('পাসপোর্ট লাভ (' + o.pp.n + 'টি ফাইল)', money(o.pp.profit), o.pp.profit >= 0 ? 'good' : 'bad')
     + kv('ভিসা লাভ (অটো' + (o.visaN ? ', ' + o.visaN + 'টি' : '') + ')', MODE === 'cloud' ? money(o.visa) : '—', 'good')
     + kv('ডকুমেন্ট কাজের লাভ (' + o.doc.n + 'টি ডেলিভারড/ফেরত)', money(o.doc.profit), o.doc.profit >= 0 ? 'good' : 'bad')
     + kv('কাউন্টার সার্ভিসের লাভ (' + o.cn.n + 'টি এন্ট্রি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad')
+    + kv('কাউন্টার ক্যাশ (দিন শেষের এন্ট্রি, লিস্টের বাইরে)', money(o.cash.extra), 'good')
     + kv('অন্য সার্ভিসের লাভ', money(o.exp.income), 'good')
     + kv('<b style="color:var(--ink)">মোট আয়</b>', '<b>' + money(o.income) + '</b>') + '</div>'
     + '<h2>দোকান খরচ</h2><div class="card">'
@@ -451,6 +526,7 @@ function vHome() {
     + Object.entries(o.doc.byCat).sort((a, b) => b[1].profit - a[1].profit).map(([k, v]) => kv('<span class="sm">লাভ · ' + esc(k) + ' (' + v.n + 'টি)</span>', money(v.profit), v.profit >= 0 ? 'good' : 'bad')).join('') + '</div>'
     + '<h2>কাউন্টার সার্ভিসের সারাংশ</h2><div class="card">'
     + kv('এন্ট্রি', o.cn.n + 'টি') + kv('মোট বিল', money(o.cn.bill)) + kv('পেয়েছি', money(o.cn.paid), 'good') + kv('বাকি', money(o.cn.due), o.cn.due ? 'bad' : '') + kv('খরচ', money(o.cn.cost)) + '</div>'
+    + cashSumCard(o)
     + (MODE === 'cloud' && VISA.err === 'PERM' ? '<div class="card sm bad">ভিসা ফাইল পড়ার পারমিশন নেই</div>' : '')
     + '<p class="mut sm" style="text-align:center;margin:0">ডকুমেন্ট কাজের লাভ ডেলিভারি/ফেরতের তারিখের মাসে ধরা হয় (চলমান কাজের লাভ ধরা হয় না)। ভিসা লাভ ফাইলের তৈরির তারিখ ধরে মাসে ধরা হয়; "সব" বাছলে সব ফাইল ধরা হয়।</p>';
 }
@@ -468,6 +544,7 @@ function vPass() {
     if (UI.pf === 'chalan' && f.challan) return false;
     if (UI.pf === 'ip' && !(f.ipOn && f.jomaDate && ipSt(f, E) !== 'paid')) return false;
     if (UI.pf === 'clear' && (c.due || !n(f.total))) return false;
+    if (UI.prf !== 'all' && (UI.prf === '__none' ? f.ref : f.ref !== UI.prf)) return false;
     if (q && !(f.name + ' ' + (f.phone || '') + ' ' + (f.gmail || '') + ' ' + (f.ref || '')).toLowerCase().includes(q)) return false;
     return true;
   });
@@ -478,6 +555,7 @@ function vPass() {
   const filters = [['all', 'সব'], ['due', 'টাকা বাকি'], ['chalan', 'চালান বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা']];
   return seg + sum
     + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="নাম, ফোন, Gmail বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="row between"><div class="chips">' + filters.map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
+    + refFilterRow()
     + '<div class="seg" style="max-width:240px"><button class="' + (UI.pv === 'card' ? 'on' : '') + '" onclick="UI.pv=\'card\';render()">কার্ড</button><button class="' + (UI.pv === 'list' ? 'on' : '') + '" onclick="UI.pv=\'list\';render()">তালিকা (বাকি আগে)</button></div></div>'
     + '<div id="plist" class="stack">' + (UI.pv === 'list' ? passTable(list) : passCards(list, E)) + '</div>' + fab;
 }
@@ -485,7 +563,7 @@ function passTable(list) {
   if (!list.length) return '<div class="empty">কোনো ফাইল নেই</div>';
   const t = list.reduce((a, f) => { const c = fileCalc(f); a.b += n(f.total); a.p += c.paid; a.d += c.due; return a; }, { b: 0, p: 0, d: 0 });
   return '<div class="card" style="padding:6px 12px"><div class="kv sm" style="font-weight:700;color:var(--mut)"><span style="flex:1">ক্লায়েন্ট</span><span style="width:62px;text-align:right">বিল</span><span style="width:62px;text-align:right">জমা</span><span style="width:62px;text-align:right">বাকি</span></div>'
-    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (f.challan ? '' : ' · চালান বাকি') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(n(f.total)) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
+    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (f.challan ? '' : ' · চালান বাকি') + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(n(f.total)) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
     + '<div class="kv" style="font-weight:700"><span style="flex:1">মোট</span><span class="num sm" style="width:62px;text-align:right">' + Math.round(t.b) + '</span><span class="num sm good" style="width:62px;text-align:right">' + Math.round(t.p) + '</span><span class="num sm bad" style="width:62px;text-align:right">' + Math.round(t.d) + '</span></div></div>';
 }
 const UIW = { old: false };
@@ -499,7 +577,7 @@ function weekLabel(k) { const d = Math.round((pd(k) - pd(wkStart(today()))) / 60
 function weekBlock(w, E, open) {
   const z = wkEnd(w.wk), pay = payDayFor(w.wk);
   const st = !w.ip.length ? '<span class="pill">IP নেই</span>' : (w.left > 0.001 ? '<span class="pill bad">বাকি ' + money(w.left) + '</span>' : '<span class="pill good">✓ মিটেছে</span>');
-  const fRow = (f, ip) => { const s0 = ipSt(f, E), al = E.alloc[f.id] || 0; return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="color:var(--ink);min-width:0"><b>' + esc(f.name) + '</b><div class="mut sm">' + (f.jomaDate ? 'joma ' + fd(f.jomaDate) : 'নেওয়া ' + fd(f.appDate)) + (f.ref ? ' · ' + esc(f.ref) : '') + '</div></span><span class="row" style="gap:8px">' + (ip ? '<b class="num">' + Math.round(n(f.ipAmt)) + '</b>' + (s0 === 'paid' ? '<span class="pill good">✓ দেওয়া</span>' : (s0 === 'part' ? '<span class="pill warn">' + Math.round(al) + ' দেওয়া</span>' : '<span class="pill bad">বাকি</span>')) : '<span class="pill">IP নেই</span>') + '</span></div>'; };
+  const fRow = (f, ip) => { const s0 = ipSt(f, E), al = E.alloc[f.id] || 0; return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="color:var(--ink);min-width:0"><b>' + esc(f.name) + '</b><div class="mut sm">' + (f.jomaDate ? 'joma ' + fd(f.jomaDate) : 'নেওয়া ' + fd(f.appDate)) + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><span class="row" style="gap:8px">' + (ip ? '<b class="num">' + Math.round(n(f.ipAmt)) + '</b>' + (s0 === 'paid' ? '<span class="pill good">✓ দেওয়া</span>' : (s0 === 'part' ? '<span class="pill warn">' + Math.round(al) + ' দেওয়া</span>' : '<span class="pill bad">বাকি</span>')) : '<span class="pill">IP নেই</span>') + '</span></div>'; };
   let h = '<details class="card stack wk" style="gap:12px"' + (open ? ' open' : '') + '><summary class="row between" style="gap:10px"><div style="min-width:0"><b>' + weekLabel(w.wk) + '</b><div class="sm mut">' + fd(w.wk) + ' – ' + fd(z) + ' (সোম–রবি)</div><div class="sm mut">পেমেন্ট ' + DAYS[pd(pay).getDay()] + ', ' + fd(pay) + '</div></div>' + st + '</summary>'
     + '<div class="mini num" style="grid-template-columns:repeat(4,1fr)"><div><small>ফাইল</small><b>' + (w.ip.length + w.other.length) + 'টি</b></div><div><small>মোট IP</small><b>' + Math.round(w.due) + '</b></div><div><small>দিয়েছি</small><b class="good">' + Math.round(w.paid) + '</b></div><div><small>বাকি</small><b class="' + (w.left > 0.001 ? 'bad' : 'good') + '">' + Math.round(w.left) + '</b></div></div>';
   if (w.ip.length) h += '<div><b class="sm mut">IP আছে (' + w.ip.length + 'টি)</b>' + w.ip.map(f => fRow(f, true)).join('') + '</div>';
@@ -544,7 +622,8 @@ function passCards(list, E) {
   return list.map(f => {
     const c = fileCalc(f); const pct = n(f.total) ? Math.min(100, c.paid / n(f.total) * 100) : 0;
     const st = !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
-    return '<div class="card item" onclick="fileForm(\'' + f.id + '\')">' + (f.note ? notePill(f.note) : '') + '<div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '') + (f.ref ? ' · রেফ: ' + esc(f.ref) : '') + '</div></div>' + st + '</div>'
+    return '<div class="card item"' + refStripe(f) + ' onclick="fileForm(\'' + f.id + '\')">' + (f.note ? notePill(f.note) : '') + '<div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '')  + '</div></div>' + st + '</div>'
+      + refLine(f)
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
       + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
@@ -704,7 +783,7 @@ function vLoan() {
   return '<div class="grid2"><div class="card"><div class="mut sm">আমি পাব</div><div class="num b good" style="font-size:22px">' + money(get) + '</div></div><div class="card"><div class="mut sm">আমি দেব</div><div class="num b bad" style="font-size:22px">' + money(give) + '</div></div></div>'
     + (ls.length ? ls.map(l => {
       const b = loanBal(l), le = lastEntry(l);
-      return '<div class="card stack" style="gap:12px"><div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(l.person) + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) : 'এখনও কিছু নেই') + '</div></div>'
+      return '<div class="card stack" style="gap:12px">' + (l.note ? notePill(l.note, 1) : '') + '<div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(l.person) + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) + (le.note ? ' · 📝 ' + esc(le.note) : '') : 'এখনও কিছু নেই') + '</div></div>'
         + '<div style="text-align:right"><b class="num ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '" style="font-size:17px">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></div></div>'
         + '<div class="grid2"><button class="btn sm warnb" onclick="quickLoan(\'' + l.id + '\',\'lend\')">' + ic('up') + ' সে নিল</button><button class="btn sm good" onclick="quickLoan(\'' + l.id + '\',\'lendback\')">' + ic('down') + ' সে ফেরত দিল</button></div><div class="grid2"><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'borrow\')">আমি নিলাম</button><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'payback\')">আমি ফেরত দিলাম</button></div></div>';
     }).join('') : '<div class="empty">কারো সাথে বাকি নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।</div>')
@@ -714,13 +793,13 @@ const dirSeg = (cur) => '<div class="grid2">' + Object.keys(LK).map(k => '<butto
 function setDir(k) { window._dir = k; Object.keys(LK).forEach(x => { const e = $('d_' + x); if (e) e.className = 'chip' + (x === k ? ' on' : ''); }); }
 function personForm() {
   window._dir = 'lend';
-  sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name" placeholder="কার সাথে লেনদেন"></div><div class="field"><label for="n_phone">ফোন (ঐচ্ছিক)</label><input id="n_phone" type="tel"></div>'
+  sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name" placeholder="কার সাথে লেনদেন"></div><div class="field"><label for="n_phone">ফোন (ঐচ্ছিক)</label><input id="n_phone" type="tel"></div><div class="field"><label for="n_pnote">📝 নোট (ঐচ্ছিক)</label><input id="n_pnote" placeholder="যেমন: কিসের বাকি, কবে দেবে"></div>'
     + '<div class="card stack" style="box-shadow:none;background:var(--bg);gap:10px"><b class="sm">প্রথম লেনদেন (ঐচ্ছিক)</b>' + dirSeg('lend') + '<div class="grid2"><div class="field"><label for="n_date">তারিখ</label><input id="n_date" type="date" value="' + today() + '"></div><div class="field"><label for="n_amt">টাকা (৳)</label><input id="n_amt" type="number" inputmode="decimal"></div></div></div>'
     + '<button class="btn block" onclick="savePerson()">যোগ করুন</button>');
 }
 function savePerson() {
   const nm = val('n_name').trim(); if (!nm) { toast('নাম লিখুন'); return; } const id = uid();
-  S.loans[id] = { id, person: nm, phone: val('n_phone').trim(), entries: [], createdAt: Date.now() };
+  S.loans[id] = { id, person: nm, phone: val('n_phone').trim(), note: val('n_pnote').trim(), entries: [], createdAt: Date.now() };
   const a = n(val('n_amt')); if (a > 0) { const k = LK[window._dir] ? window._dir : 'lend'; S.loans[id].entries.push({ id: uid(), date: val('n_date') || today(), amt: a, dir: LK[k].dir, kind: k, note: '' }); }
   save('loans', id); closeSheet(); toast('যোগ হয়েছে');
 }
@@ -741,6 +820,7 @@ function loanSheet(id) {
   sheet(esc(l.person) + (l.phone ? ' <span class="sm">' + waPhone(l.phone) + '</span>' : ''),
     '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে নিয়েছে</div><b class="num">' + money(took) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে ফেরত দিয়েছে</div><b class="num good">' + money(back) + '</b></div></div>' + ((bor || pay) ? '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি নিয়েছি</div><b class="num">' + money(bor) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি ফেরত দিয়েছি</div><b class="num good">' + money(pay) + '</b></div></div>' : '') + ''
     + '<div class="card" style="box-shadow:none;background:' + (b > 0 ? 'var(--goodbg)' : (b < 0 ? 'var(--badbg)' : 'var(--soft)')) + ';text-align:center"><div class="sm ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + (b > 0 ? 'এখনও বাকি, আমি পাব' : (b < 0 ? 'আমি দেব' : 'হিসাব মিটে গেছে')) + '</div><div class="num b ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : '')) + '" style="font-size:30px">' + money(Math.abs(b)) + '</div></div>'
+    + '<div class="field"><label for="ln_note">📝 নোট (এই ব্যক্তির কার্ডে দেখাবে)</label><div class="row"><input id="ln_note" value="' + esc(l.note || '') + '" placeholder="যেমন: কিসের বাকি, কবে দেবে"><button type="button" class="btn sm ghost" onclick="saveLoanNote(\'' + id + '\')">সেভ</button></div></div>'
     + dirSeg(window._dir)
     + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal"></div></div>'
     + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\')">এন্ট্রি যোগ করুন</button>'
@@ -767,14 +847,47 @@ function vVisa() {
     + '<p class="mut sm" style="text-align:center">লাভ ধরা হয় ডেলিভারড বা অ্যাপয়েন্টেড ফাইলে (বিল − ভিসা ফি − সফটওয়্যার চার্জ), ফেরত ফাইলে রাখা চার্জ।</p>';
 }
 
+/* ===== ভিসা জমা: কাস্টমারের কত টাকা এখন আমার কাছে আছে ===== */
+// ডেলিভারির আগে (চলমান/অ্যাপয়েন্টেড) জমা = কাস্টমারের গচ্ছিত টাকা। ডেলিভারড ফাইলে বিলের চেয়ে বেশি জমা, আর ফেরত ফাইলে (জমা − রাখা চার্জ − ফেরত দেওয়া) বাকি থাকলে সেটাও আমার কাছে কাস্টমারের টাকা।
+function visaHeld(x) {
+  const paid = n(x.paid);
+  if (x.mode === 'RETURNED') return Math.max(0, paid - n(x.bill) - n(x.refund));
+  if (x.mode === 'DELIVERED') return Math.max(0, paid - n(x.bill));
+  return paid;
+}
+function vJoma() {
+  if (MODE !== 'cloud') return '<div class="card stack"><b>ভিসা জমার হিসাব দেখতে লগইন লাগবে</b><span class="mut sm">ভিসা অ্যাপে যে জমা এন্ট্রি দেন, তা এখানে নিজে নিজে আসে। ভিসা অ্যাপের ইমেইল দিয়ে লগইন করুন।</span><button class="btn" onclick="logout(true)">লগইন পেজে যান</button></div>';
+  const rows = VISA.rows.map(x => Object.assign({}, x, { held: visaHeld(x) }));
+  const T = { held: 0, run: 0, appt: 0, over: 0, paid: 0, due: 0, nHeld: 0, nDue: 0 };
+  rows.forEach(x => { T.paid += n(x.paid); T.due += n(x.due); if (x.due > 0.001) T.nDue++; if (x.held > 0.001) { T.held += x.held; T.nHeld++; if (x.mode === 'RUNNING') T.run += x.held; else if (x.mode === 'APPOINTED') T.appt += x.held; else T.over += x.held; } });
+  const f = UI.vf || 'held', q = (UI.vq || '').trim().toLowerCase();
+  let list = rows.filter(x => f === 'held' ? x.held > 0.001 : (f === 'due' ? x.due > 0.001 : true));
+  if (q) list = list.filter(x => (String(x.name) + ' ' + String(x.serial)).toLowerCase().includes(q));
+  list.sort((a, b) => (f === 'due' ? b.due - a.due : b.held - a.held) || (Number(b.serial) || 0) - (Number(a.serial) || 0));
+  const mc = { DELIVERED: ['ডেলিভারড', 'good'], APPOINTED: ['অ্যাপয়েন্টেড', 'warn'], RUNNING: ['চলমান', ''], RETURNED: ['ফেরত', 'bad'] };
+  const note = x => x.mode === 'RUNNING' ? 'ডেলিভারি হয়নি — এই টাকা কাস্টমারের, আমার কাছে গচ্ছিত' : (x.mode === 'APPOINTED' ? 'অ্যাপয়েন্টেড, ডেলিভারি বাকি — জমা টাকা এখনও গচ্ছিত' : (x.mode === 'DELIVERED' ? 'বিলের চেয়ে বেশি জমা — কাস্টমারকে ফেরত দিতে হবে' : 'ফেরত ফাইল — রাখা চার্জ ও ফেরতের পরেও এই টাকা বাকি'));
+  const chip = (k, t) => '<button type="button" class="chip' + (f === k ? ' on' : '') + '" onclick="UI.vf=\'' + k + '\';render()">' + t + '</button>';
+  return (VISA.err ? '<div class="card sm ' + (VISA.err === 'PERM' ? 'bad' : 'warnc') + '">' + (VISA.err === 'PERM' ? 'ভিসা ফাইল পড়ার পারমিশন নেই' : 'নেট সমস্যা, আগের তথ্য দেখাচ্ছে') + '</div>' : '')
+    + '<div class="card hero"><div class="sm" style="opacity:.75">ভিসা কাস্টমারের জমা — এখন আমার কাছে আছে</div><div class="big num">' + money(T.held) + '</div><div class="sm" style="opacity:.75">' + T.nHeld + ' জন কাস্টমারের টাকা · মোট জমা পেয়েছি ' + money(T.paid) + '</div>'
+    + '<div class="tri"><div><small>চলমান ফাইলে</small><b class="num">' + money(T.run) + '</b></div><div><small>অ্যাপয়েন্টেড</small><b class="num">' + money(T.appt) + '</b></div><div><small>ফেরত দিতে হবে</small><b class="num">' + money(T.over) + '</b></div></div></div>'
+    + '<div class="chips">' + chip('held', 'আমার কাছে জমা আছে (' + T.nHeld + ')') + chip('due', 'কাস্টমারের বাকি (' + T.nDue + ')') + chip('all', 'সব (' + rows.length + ')') + '</div>'
+    + '<div class="field"><input id="v_q" type="search" placeholder="🔍 নাম বা সিরিয়াল দিয়ে খুঁজুন" value="' + esc(UI.vq || '') + '" oninput="UI.vq=this.value;reFocus(\'v_q\')" aria-label="কাস্টমার খুঁজুন"></div>'
+    + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
+    + (list.length ? list.map(x => '<div class="card stack" style="gap:10px"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div>'
+      + '<div class="row between"><div><div class="sm mut">আমার কাছে কাস্টমারের টাকা</div><b class="num ' + (x.held > 0.001 ? 'good' : 'mut') + '" style="font-size:22px">' + money(x.held) + '</b></div>' + (x.last ? '<div class="sm mut" style="text-align:right">শেষ জমা<br><b>' + fd(x.last) + '</b></div>' : '') + '</div>'
+      + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>' + (x.mode === 'RETURNED' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(x.bill) + '</b></div><div><small>মোট জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div></div>'
+      + (x.held > 0.001 ? '<div class="sm mut">' + note(x) + '</div>' : '') + '</div>').join('') : '<div class="empty">' + (q ? 'এই নামে কিছু পাওয়া যায়নি' : (f === 'held' ? 'এখন কোনো কাস্টমারের জমা টাকা আমার কাছে নেই' : (f === 'due' ? 'কোনো কাস্টমারের বাকি নেই' : 'ভিসা ফাইল পাওয়া যায়নি'))) + '</div>')
+    + '<p class="mut sm" style="text-align:center;margin:0">হিসাব: ডেলিভারির আগে যত জমা নিয়েছেন সবটাই কাস্টমারের গচ্ছিত টাকা ধরা হয়। ডেলিভারড হলে বিল পর্যন্ত টাকা আপনার আয়ে যায়, বেশি জমা থাকলে সেটা ফেরত দেওয়ার টাকা হিসেবে দেখায়। জমা এন্ট্রি ভিসা অ্যাপ থেকেই আসে, এখানে আলাদা লিখতে হয় না।</p>';
+}
+
 /* ===== সেটিংস ===== */
 function vSet() {
   const st = S.settings;
   const lst = (title, key, arrRef) => '<div class="card stack" style="gap:8px"><b>' + title + '</b><div class="chips">' + arrRef.map((v, i) => '<span class="chip rm">' + esc(v) + ' <button class="x" style="font-size:14px" onclick="rmItem(\'' + key + '\',' + i + ')" aria-label="মুছুন">✕</button></span>').join('') + '</div><div class="row"><input id="add_' + key + '" placeholder="নতুন যোগ করুন" onkeydown="if(event.key===\'Enter\')addItem(\'' + key + '\')"><button class="btn sm" onclick="addItem(\'' + key + '\')">যোগ</button></div></div>';
-  return '<button class="btn ghost" onclick="go(\'more\')">← ফিরে যান</button>'
+  return ''
     + '<div class="card stack"><b>IP পেমেন্টের সময়</b><span class="mut sm">হিসাবের সপ্তাহ সোমবার–রবিবার। সেই সপ্তাহের IP পরের সপ্তাহে এই দিনে দিতে হয় (ডিফল্ট মঙ্গলবার, দরকারে অন্যদিন বেছে নিন)।</span><div class="grid2"><div class="field"><label for="s_day">পেমেন্টের দিন</label><select id="s_day" onchange="setSt()">' + [1, 2, 3, 4, 5, 6, 0].map(i => '<option value="' + i + '"' + (i === +st.payDay ? ' selected' : '') + '>' + DAYS[i] + '</option>').join('') + '</select></div><div class="field"><label for="s_time">সময়</label><input id="s_time" type="time" value="' + st.payTime + '" onchange="setSt()"></div></div>'
     + '<div class="field"><label for="s_ip">সাধারণ IP (প্রতি ফাইল ৳)</label><input id="s_ip" type="number" value="' + n(st.defaultIp) + '" onchange="setSt()"></div><span class="mut sm">নতুন ফাইলে এই টাকা বসবে। ফাইলে আলাদা করে বদলানো যায়।</span></div>'
-    + lst('স্টাফের নাম (এন্ট্রিতে "কে করেছে" তে আসবে)', 'staff', st.staff) + lst('ডকুমেন্ট কাজের ধরন (NID, জন্ম নিবন্ধন…)', 'docCats', st.docCats) + svcCard() + lockCard()
+    + lst('স্টাফের নাম (এন্ট্রিতে "কে করেছে" তে আসবে)', 'staff', st.staff) + lst('ডকুমেন্ট কাজের ধরন (NID, জন্ম নিবন্ধন…)', 'docCats', st.docCats) + svcCard() + cashSetCard() + lockCard()
     + lst('Gmail লিস্ট', 'gmails', st.gmails) + lst('রেফারেন্স লিস্ট', 'refs', st.refs)
     + lst('দোকান খরচের ক্যাটেগরি', 'cats.shop', st.cats.shop) + lst('ব্যক্তিগত খরচের ক্যাটেগরি', 'cats.personal', st.cats.personal) + lst('অন্য আয়ের ক্যাটেগরি', 'cats.income', st.cats.income)
     + '<div class="card stack"><b>অ্যাকাউন্ট ও ডাটা</b><span class="mut sm">' + (MODE === 'cloud' ? 'লগইন: ' + esc(AUTH ? AUTH.email : '') + ' · ডাটা ক্লাউডে সেভ হচ্ছে' : 'লোকাল মোড: ডাটা শুধু এই ফোনে') + '</span>'
@@ -927,10 +1040,10 @@ function vDoc() {
   const cnt = s => list.filter(x => x.d.status === s).length;
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div><div><small>লাভ হয়েছে</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></div></div>'
     + '<div class="row between wrapr sm mut"><span>' + list.length + 'টি কাজ · চলমান ' + cnt('run') + ' · ডেলিভারড ' + cnt('done') + ' · ফেরত ' + cnt('ret') + '</span><span>মোট খরচ ' + money(T.cost) + '</span></div></div>';
-  const cats = ['all'].concat(S.settings.docCats);
-  return sum
+  const cats = ['all'].concat(S.settings.docCats); const CC = docCatStats(q, mo, lm);
+  return sum + docCatCard(CC)
     + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
-    + '<div class="hs">' + cats.map(c => chipB(c === 'all' ? 'সব ধরন' : c, UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
+    + '<div class="hs">' + cats.map(c => chipB((c === 'all' ? 'সব ধরন' : c) + ' (' + ((CC[c] && CC[c].n) || 0) + ')', UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
     + '<div class="hs">' + Object.keys(DF).map(k => { const cn = base.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
     + '<div class="seg" style="max-width:300px">' + [['all', 'সব সময়'], ['month', 'এই মাস'], ['last', 'গত মাস']].map(x => '<button class="' + (UI.dm === x[0] ? 'on' : '') + '" onclick="UI.dm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
     + '<div class="stack">' + (list.length ? list.map(x => docCard(x.d, x.c, t0)).join('') : '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই। নিচের "নতুন কাজ" চেপে প্রথম এন্ট্রি দিন।') + '</div>') + '</div>'
@@ -1152,7 +1265,11 @@ function cRow(c, showDate) {
     + '<span style="text-align:right;flex:none"><b class="num">' + money(k.total) + '</b>' + (k.due > 0 ? '<div><span class="pill bad">বাকি ' + money(k.due) + '</span></div><button class="btn sm good" style="margin-top:4px" onclick="event.stopPropagation();qpSheet(\'cnt\',\'' + c.id + '\')">নিলাম</button>' : '') + '</span></div>';
 }
 function vCnt() {
-  const D = UI.cd || today(); const all = Object.values(S.cnt);
+  const D = UI.cd || today();
+  return cntDateNav(D) + (UI.cm === 'each' ? cntEach(D) : cashDayView(D));
+}
+function cntEach(D) {
+  const all = Object.values(S.cnt);
   const dayL = all.filter(c => c.date === D).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const dueL = all.filter(c => cntCalc(c).due > 0).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
   const T = dayL.reduce((t, c) => { const k = cntCalc(c); t.bill += k.total; t.paid += k.paid; t.due += k.due; t.cost += k.cost; t.profit += k.profit; return t; }, { bill: 0, paid: 0, due: 0, cost: 0, profit: 0 });
@@ -1160,7 +1277,7 @@ function vCnt() {
   const bySvc = {}; dayL.forEach(c => { const x = bySvc[c.svc] = bySvc[c.svc] || { n: 0, q: 0, t: 0 }; x.n++; x.q += n(c.qty); x.t += n(c.total); });
   const cash = cashDay(D); const staffs = Object.keys(cash.by).sort(); const sumStaff = staffs.reduce((s, k) => s + cash.by[k].cnt + cash.by[k].doc, 0);
   const L = UI.cDue ? dueL : dayL;
-  return '<div class="card row between"><button class="ib" onclick="cShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="c_dsel" type="date" value="' + D + '" onchange="cDate(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + '</div></div><button class="ib" onclick="cShift(1)" aria-label="পরের দিন">›</button></div>'
+  return ''
     + cPanel()
     + '<div class="card stack" style="gap:10px"><b>' + rel + 'র হিসাব</b><div class="mini num"><div><small>এন্ট্রি</small><b>' + dayL.length + '</b></div><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>পেয়েছি</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : '') + '">' + money(T.due) + '</b></div></div>'
     + '<div class="row between sm mut"><span>খরচ ' + money(T.cost) + '</span><span>লাভ <b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></span></div></div>'
@@ -1204,11 +1321,14 @@ function ceDel() { remove('cnt', CE.id); CE = null; closeSheet(); toast('মু�
    আরও মেনু · স্টাফ লক · সেটিংসের নতুন কার্ড · CSV
    ==================================================================== */
 function vMore() {
-  const b = (ico, cls, t, js) => '<button onclick="' + js + '"><span class="qi ' + cls + '">' + ic(ico) + '</span>' + t + '</button>';
-  return '<div class="quick" style="grid-template-columns:repeat(3,1fr)">' + b('swap', 'w', 'বাকি খাতা', "go('loan')") + b('plane', '', 'ভিসা ফাইল', "go('visa')") + b('gear', 'g', 'সেটিংস', "go('set')") + '</div>'
-    + '<h2>রিপোর্ট ও ব্যাকআপ (এক্সেলে খোলা যায়)</h2><div class="card stack"><button class="btn ghost" onclick="exportDocs()">⬇ ডকুমেন্ট কাজের তালিকা (CSV)</button><button class="btn ghost" onclick="exportCnt()">⬇ কাউন্টার সার্ভিসের তালিকা (CSV)</button><button class="btn ghost" onclick="backup()">⬇ পুরো ডাটার ব্যাকআপ (JSON)</button></div>'
+  return '<h2>রিপোর্ট ও ব্যাকআপ (এক্সেলে খোলা যায়)</h2><div class="card stack"><button class="btn ghost" onclick="exportDocs()">⬇ ডকুমেন্ট কাজের তালিকা (CSV)</button><button class="btn ghost" onclick="exportCnt()">⬇ কাউন্টার সার্ভিসের তালিকা (CSV)</button><button class="btn ghost" onclick="exportCash()">⬇ ক্যাশ খাতা — দিনের ক্যাশ ও তোলা/জমা (CSV)</button><button class="btn ghost" onclick="exportRefs()">⬇ রেফারেন্স হিসাব (CSV)</button><button class="btn ghost" onclick="backup()">⬇ পুরো ডাটার ব্যাকআপ (JSON)</button></div>'
     + '<p class="mut sm" style="text-align:center;margin:0">স্টাফের ফোনে শুধু ডকুমেন্ট ও কাউন্টার দেখাতে: সেটিংস → "স্টাফ লক"।</p>';
 }
+
+
+
+
+
 function csvDown(name, rows) {
   const cell = v => { v = String(v == null ? '' : v); if (/^[=+\-@]/.test(v) && isNaN(Number(v))) v = "'" + v; return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const b = new Blob(['﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -1247,6 +1367,288 @@ function lockCard() {
   return '<div class="card stack"><b>🔒 স্টাফ লক</b><span class="mut sm">স্টাফের ফোনে "স্টাফ মোড" চালু করলে শুধু ডকুমেন্ট ও কাউন্টার ট্যাব দেখাবে। হোমের লাভ-লোকসান, পাসপোর্ট, খরচ, বাকি খাতা, সেটিংস আর ডিলিট বন্ধ থাকবে। মালিক পিন দিয়ে আবার খুলবেন।</span>'
     + '<div class="row"><input id="s_pin" type="password" inputmode="numeric" placeholder="' + (S.settings.pin ? 'নতুন পিন (৪-৮ সংখ্যা)' : 'পিন বানান (৪-৮ সংখ্যা)') + '" autocomplete="off"><button class="btn sm" onclick="setPin()">পিন সেভ</button></div>'
     + '<button class="btn warnb" onclick="lockStaff()">' + ic('lock') + ' এই ফোনে স্টাফ মোড চালু করুন</button><span class="mut sm">এটা স্ক্রিন লক — সবাই একই ইমেইলে লগইন করে বলে ডাটাবেসের আসল সিকিউরিটি নয়।</span></div>';
+}
+
+/* ====================================================================
+   ★ ক্যাশ খাতা (Cash 1/2/3) · রেফারেন্স হিসাব · বর্তমান হিসাব · বাম সাইডবার
+   ডাটা: S.cday (দিন শেষের ক্যাশ: key = তারিখ_ক্যাশআইডি), S.cmv (ক্যাশ থেকে তোলা/ক্যাশে জমা)
+   ==================================================================== */
+const jarg = v => esc(JSON.stringify(v));
+const relDay = D => D === today() ? 'আজ' : (D === addD(today(), -1) ? 'গতকাল' : DAYS[pd(D).getDay()]);
+const cashAccts = () => arr(S.settings.cash).filter(a => a && a.id);
+const perLabel = () => ({ month: 'এই মাস', last: 'গত মাস', year: 'এই বছর', all: 'সব সময়', custom: (UI.from ? fd(UI.from) : '…') + ' – ' + (UI.to ? fd(UI.to) : '…') })[UI.period] || '';
+const perSeg = () => '<div class="seg">' + [['month', 'এই মাস'], ['last', 'গত মাস'], ['year', 'বছর'], ['all', 'সব'], ['custom', 'বাছাই']].map(x => '<button class="' + (UI.period === x[0] ? 'on' : '') + '" onclick="UI.period=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
+  + (UI.period === 'custom' ? '<div class="grid2"><div class="field"><label for="c_from">থেকে</label><input id="c_from" type="date" value="' + UI.from + '" onchange="UI.from=this.value;render()"></div><div class="field"><label for="c_to">পর্যন্ত</label><input id="c_to" type="date" value="' + UI.to + '" onchange="UI.to=this.value;render()"></div></div>' : '');
+const kvj = (a, b, c, js) => '<div class="kv sumrow" style="align-items:center" onclick="' + js + '"><span>' + a + '</span><span class="num ' + (c || '') + '">' + b + '</span></div>';
+
+/* ---------- ক্যাশ মডেল ----------
+   এক ক্যাশ + এক দিন: দিন শেষে লেখা টাকা (end) আর প্রতিটি এন্ট্রিতে ওই স্টাফের নামে নেওয়া টাকা (item) — দুটোর বড়টাই "এসেছে" (coll)।
+   এন্ট্রির বাইরের অংশ (extra = coll − item) আলাদা আয় হিসেবে ধরা হয়, যাতে দুবার গোনা না হয়। */
+function cashModel() {
+  const A = cashAccts(), byO = {}, ids = {}; A.forEach(a => { ids[a.id] = 1; if (a.owner) byO[a.owner] = a.id; });
+  const day = {}; const cell = (d, id) => { const o = day[d] || (day[d] = {}); return o[id] || (o[id] = { item: 0, end: 0, has: false, note: '', by: '', coll: 0, extra: 0 }); };
+  Object.values(S.cnt).forEach(c => arr(c.payments).forEach(p => { const id = byO[p && p.by]; if (id && p.date) cell(p.date, id).item += n(p.amt); }));
+  Object.values(S.cday).forEach(e => { if (!e || !e.date || !ids[e.acct]) return; const x = cell(e.date, e.acct); x.end = n(e.amt); x.has = true; x.note = e.note || ''; x.by = e.by || ''; });
+  const acc = {}; A.forEach(a => { acc[a.id] = { a, coll: 0, extra: 0, out: 0, inn: 0, bal: 0 }; });
+  Object.keys(day).forEach(d => Object.keys(day[d]).forEach(id => { const x = day[d][id]; x.coll = Math.max(x.end, x.item); x.extra = Math.max(0, x.coll - x.item); acc[id].coll += x.coll; acc[id].extra += x.extra; }));
+  Object.values(S.cmv).forEach(m => { const x = m && acc[m.acct]; if (!x) return; if (m.dir === 'in') x.inn += n(m.amt); else x.out += n(m.amt); });
+  const tot = { coll: 0, out: 0, inn: 0, bal: 0 };
+  Object.values(acc).forEach(x => { x.bal = x.coll + x.inn - x.out; tot.coll += x.coll; tot.out += x.out; tot.inn += x.inn; tot.bal += x.bal; });
+  return { A, day, acc, tot };
+}
+
+/* ---------- কাউন্টার ট্যাব: তারিখ + মোড ---------- */
+function cntDateNav(D) {
+  return '<div class="card row between"><button class="ib" onclick="cShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="c_dsel" type="date" value="' + D + '" onchange="cDate(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + relDay(D) + '</div></div><button class="ib" onclick="cShift(1)" aria-label="পরের দিন">›</button></div>'
+    + '<div class="seg"><button class="' + (UI.cm !== 'each' ? 'on' : '') + '" onclick="UI.cm=\'day\';render()">দিন শেষের ক্যাশ</button><button class="' + (UI.cm === 'each' ? 'on' : '') + '" onclick="UI.cm=\'each\';render()">প্রতিটি এন্ট্রি</button></div>';
+}
+function cashDayView(D) {
+  const M = cashModel(), dd = M.day[D] || {}, rel = relDay(D), off = D !== today();
+  if (!M.A.length) return '<div class="card stack"><b>ক্যাশ অ্যাকাউন্ট নেই</b><span class="mut sm">সেটিংস → "কাউন্টার ক্যাশ অ্যাকাউন্ট" থেকে Cash 1, Cash 2… বানান।</span></div>';
+  let sum = 0, got = 0;
+  const rows = M.A.map(a => {
+    const x = dd[a.id] || { item: 0, end: 0, has: false, note: '', coll: 0 }; sum += x.coll; if (x.has) got++;
+    let hint = '';
+    if (x.item > 0 && !x.has) hint = 'প্রতিটি এন্ট্রিতে এই নামে লেখা আছে ' + money(x.item) + ' (দিন শেষের টাকা লিখলে সেটাই ধরা হবে)';
+    else if (x.has && x.item > 0 && x.end >= x.item) hint = 'এন্ট্রিতে ' + money(x.item) + ' লেখা আছে · বাকি ' + money(x.end - x.item) + ' এন্ট্রির বাইরে (আয়ে ধরা হয়েছে)';
+    else if (x.has && x.item > x.end) hint = '⚠ এন্ট্রির যোগফল (' + money(x.item) + ') দিন শেষের টাকার চেয়ে বেশি, তাই বেশিটাই ধরা হলো';
+    return '<div class="ipbox stack" style="gap:9px"><div class="row between"><span><b>' + esc(a.name) + '</b>' + (a.owner ? ' <span class="pill">' + esc(a.owner) + '</span>' : '') + '</span>' + (x.has ? '<span class="pill good">✓ লেখা আছে</span>' : '<span class="pill warn">লেখা হয়নি</span>') + '</div>'
+      + '<div class="grid2" style="grid-template-columns:1fr 1.3fr"><input id="cx_a_' + a.id + '" type="number" inputmode="decimal" placeholder="' + (x.item > 0 && !x.has ? x.item : '৳ মোট') + '" value="' + (x.has ? x.end : '') + '" oninput="cxTot()" aria-label="' + esc(a.name) + ' এর টাকা"><input id="cx_n_' + a.id + '" placeholder="📝 নোট (ঐচ্ছিক)" value="' + esc(x.note || '') + '" aria-label="' + esc(a.name) + ' এর নোট"></div>'
+      + (hint ? '<div class="sm mut">' + hint + '</div>' : '')
+      + (x.has ? '<button type="button" class="btn sm danger" style="align-self:flex-start" onclick="arm(this,function(){cashDayDel(' + jarg(D) + ',' + jarg(a.id) + ')})">এই এন্ট্রি মুছুন</button>' : '') + '</div>';
+  }).join('');
+  const days = []; for (let i = 6; i >= 0; i--) days.push(addD(D, -i)); days.reverse();
+  const cols = 'grid-template-columns:62px repeat(' + M.A.length + ',minmax(0,1fr)) minmax(0,1.1fr)';
+  const hist = '<div class="card stack" style="gap:2px;overflow-x:auto"><b style="margin-bottom:6px">গত ৭ দিনের ক্যাশ (৳)</b><div class="sm mut" style="display:grid;gap:4px;font-weight:700;' + cols + '"><span>তারিখ</span>' + M.A.map(a => '<span style="text-align:right">' + esc(a.name) + '</span>').join('') + '<span style="text-align:right">মোট</span></div>'
+    + days.map(d => { const r = M.day[d] || {}; let t = 0; const cells = M.A.map(a => { const x = r[a.id]; if (x) t += x.coll; return '<span class="num sm" style="text-align:right">' + (x ? Math.round(x.coll) : '—') + '</span>'; }).join(''); return '<div style="display:grid;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;' + cols + (d === D ? ';font-weight:700;color:var(--acc)' : '') + '" onclick="cDate(' + jarg(d) + ')"><span class="sm">' + fd(d) + '</span>' + cells + '<b class="num sm" style="text-align:right">' + (t ? Math.round(t) : '—') + '</b></div>'; }).join('') + '</div>';
+  return '<div class="card stack" style="gap:12px"><div class="row between"><b>' + rel + 'র দিন শেষের ক্যাশ</b>' + (off ? '<span class="pill warn">⚠ ' + fd(D) + ' তারিখে লিখছেন</span>' : '<span class="pill good">আজ</span>') + '</div>'
+    + '<div class="sm mut">কাউন্টারের সার্ভিস থেকে কোন ক্যাশে সারাদিনে মোট কত টাকা এল সেটা একবারে লিখুন। প্রতিটি কাজ আলাদা লিখতে হবে না — চাইলে উপরের "প্রতিটি এন্ট্রি" ট্যাবে আলাদাও লেখা যায়।</div>'
+    + rows
+    + '<div class="row between" style="padding:2px 4px"><b>' + rel + 'র মোট</b><b class="num good" style="font-size:20px" id="cx_tot">' + money(sum) + '</b></div>'
+    + '<button class="btn block" onclick="cashDaySave(' + jarg(D) + ')">সেভ করুন</button>'
+    + (got < M.A.length && got > 0 ? '<div class="sm warnc">⚠ ' + (M.A.length - got) + 'টি ক্যাশের এন্ট্রি এখনও বাকি</div>' : '') + '</div>'
+    + hist;
+}
+function cxTot() { let s = 0; cashAccts().forEach(a => { s += n(val('cx_a_' + a.id)); }); const e = $('cx_tot'); if (e) e.textContent = money(s); }
+function cashDaySave(D) {
+  let c = 0, bad = false;
+  cashAccts().forEach(a => {
+    const key = D + '_' + a.id, raw = val('cx_a_' + a.id).trim(), nt = val('cx_n_' + a.id).trim(), ex = S.cday[key];
+    if (raw === '') { if (nt && ex) { S.cday[key] = Object.assign({}, ex, { note: nt, updatedAt: Date.now() }); save('cday', key); c++; } return; }
+    const amt = n(raw); if (amt < 0) { bad = true; return; }
+    if (ex && n(ex.amt) === amt && (ex.note || '') === nt) return;
+    S.cday[key] = { id: key, date: D, acct: a.id, amt, note: nt, by: actor(), createdAt: ex ? ex.createdAt : Date.now(), updatedAt: Date.now() }; save('cday', key); c++;
+  });
+  if (bad) { toast('টাকার অংক ঋণাত্মক হতে পারে না'); return; }
+  render(); toast(c ? '✓ ক্যাশ সেভ হয়েছে' : 'নতুন কিছু বদলায়নি');
+}
+function cashDayDel(D, id) { remove('cday', D + '_' + id); render(); toast('মুছে গেছে'); }
+
+/* ---------- ক্যাশ খাতা পেজ (মালিক) ---------- */
+function cashJump(d) { UI.cd = d === today() ? '' : d; UI.cm = 'day'; go('cnt'); }
+function vCash() {
+  if (!UI.ym) UI.ym = today().slice(0, 7);
+  const M = cashModel(), ym = UI.ym, [y, m] = ym.split('-').map(Number), t0 = today(), inM = d => (d || '').slice(0, 7) === ym;
+  if (!M.A.length) return '<div class="card stack"><b>ক্যাশ অ্যাকাউন্ট নেই</b><span class="mut sm">সেটিংস থেকে Cash 1, Cash 2… যোগ করুন।</span><button class="btn" onclick="go(\'set\')">সেটিংসে যান</button></div>';
+  let mColl = 0, mDays = 0; const mAcc = {}; M.A.forEach(a => { mAcc[a.id] = 0; });
+  const dates = Object.keys(M.day).filter(inM).sort().reverse();
+  dates.forEach(d => { let any = false; Object.keys(M.day[d]).forEach(id => { mColl += M.day[d][id].coll; if (M.day[d][id].coll > 0) any = true; if (id in mAcc) mAcc[id] += M.day[d][id].coll; }); if (any) mDays++; });
+  const hero = '<div class="card hero"><div class="sm" style="opacity:.75">' + MON[m - 1] + ' ' + y + ' — কাউন্টার থেকে আয়</div><div class="big num">' + money(mColl) + '</div><div class="sm" style="opacity:.75">দিন শেষে লেখা ক্যাশের যোগফল · ' + mDays + ' দিনের এন্ট্রি</div></div>';
+  const cards = '<div class="grid2">' + M.A.map(a => { const td = (M.day[t0] || {})[a.id]; return '<div class="card stack" style="gap:6px"><div class="row"><span class="avatar ' + avatarCls(a.name) + '">' + initial(a.owner || a.name) + '</span><div style="min-width:0"><div class="nm">' + esc(a.name) + '</div><div class="sm mut">' + (a.owner ? esc(a.owner) : 'নাম নেই') + '</div></div></div><div class="sm mut">এই মাসে</div><b class="num good" style="font-size:19px">' + money(mAcc[a.id]) + '</b><div class="sm ' + (td && td.has ? 'good' : 'warnc') + '">' + (td && td.has ? '✓ আজ ' + money(td.coll) : 'আজ লেখা হয়নি') + '</div></div>'; }).join('') + '</div>';
+  const cols = 'grid-template-columns:62px repeat(' + M.A.length + ',minmax(0,1fr)) minmax(0,1.1fr)';
+  const tbl = '<div class="card stack" style="gap:2px;overflow-x:auto"><div class="sm mut" style="display:grid;gap:4px;font-weight:700;' + cols + '"><span>তারিখ</span>' + M.A.map(a => '<span style="text-align:right">' + esc(a.name) + '</span>').join('') + '<span style="text-align:right">মোট</span></div>'
+    + (dates.length ? dates.map(d => { let t = 0; const cells = M.A.map(a => { const x = M.day[d][a.id]; if (x) t += x.coll; return '<span class="num sm" style="text-align:right">' + (x ? Math.round(x.coll) : '—') + '</span>'; }).join(''); return '<div style="display:grid;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;' + cols + '" onclick="cashJump(' + jarg(d) + ')"><span class="sm">' + fd(d) + '</span>' + cells + '<b class="num sm" style="text-align:right">' + Math.round(t) + '</b></div>'; }).join('') : '<div class="empty">এই মাসে কোনো ক্যাশ এন্ট্রি নেই</div>')
+    + (dates.length ? '<div style="display:grid;gap:4px;align-items:center;padding:9px 0 2px;border-top:2px solid var(--line);font-weight:700;' + cols + '"><span class="sm">মোট</span>' + M.A.map(a => '<span class="num sm" style="text-align:right">' + Math.round(mAcc[a.id]) + '</span>').join('') + '<b class="num sm good" style="text-align:right">' + Math.round(mColl) + '</b></div>' : '') + '</div>';
+  return hero + cards
+    + '<div class="card row between"><button class="ib" onclick="shiftM(-1)" aria-label="আগের মাস">‹</button><div style="text-align:center"><b>' + MON[m - 1] + ' ' + y + '</b><div class="sm mut">মোট আয় <b class="num good">' + money(mColl) + '</b></div></div><button class="ib" onclick="shiftM(1)" aria-label="পরের মাস">›</button></div>'
+    + '<button class="btn block" onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')">✏️ আজকের দিন শেষের ক্যাশ লিখুন</button>'
+    + '<h2>দিন অনুযায়ী — চাপলে ওই দিনের এন্ট্রি খুলবে</h2>' + tbl
+    + '<p class="mut sm" style="text-align:center;margin:0">এখানে ক্যাশের কোনো ব্যালেন্স রাখা হয় না। দিন শেষে ক্যাশে যত টাকা লেখেন সেটাই কাউন্টারের আয় হিসেবে হিসাবে যোগ হয়।</p>';
+}
+function cmvSheet(acct, dir, id) {
+  const a = cashAccts().find(x => x.id === acct), e = id ? S.cmv[id] : null; if (!a) return;
+  const d = e ? e.dir : dir; window._cmv = { acct, dir: d, id: id || '' }; const bal = cashModel().acc[acct].bal;
+  sheet(esc(a.name) + (a.owner ? ' · ' + esc(a.owner) : ''),
+    '<div class="mut sm">এখন ক্যাশে আছে ' + money(bal) + '</div>'
+    + '<div class="grid2"><button type="button" id="mv_out" class="chip' + (d === 'out' ? ' on' : '') + '" style="text-align:center" onclick="cmvDir(\'out\')">⬆ টাকা তুললাম / দিলাম</button><button type="button" id="mv_in" class="chip' + (d === 'in' ? ' on' : '') + '" style="text-align:center" onclick="cmvDir(\'in\')">⬇ ক্যাশে জমা / শুরুর টাকা</button></div>'
+    + '<div class="grid2"><div class="field"><label for="mv_date">তারিখ</label><input id="mv_date" type="date" value="' + (e ? e.date : today()) + '"></div><div class="field"><label for="mv_amt">টাকা (৳)</label><input id="mv_amt" type="number" inputmode="decimal" value="' + (e ? n(e.amt) : '') + '"></div></div>'
+    + '<div class="field"><label for="mv_note">📝 নোট</label><input id="mv_note" value="' + esc(e ? e.note : '') + '" placeholder="যেমন: মালিককে দিলাম / ব্যাংকে জমা / খুচরা রাখলাম"></div>'
+    + '<button class="btn block" onclick="cmvSave()">সেভ করুন</button>' + (e ? '<button class="btn danger block" onclick="arm(this,cmvDel)">মুছে ফেলুন</button>' : ''));
+  setTimeout(() => { const i = $('mv_amt'); if (i && !e) i.focus(); }, 60);
+}
+function cmvDir(k) { window._cmv.dir = k; $('mv_out').className = 'chip' + (k === 'out' ? ' on' : ''); $('mv_in').className = 'chip' + (k === 'in' ? ' on' : ''); }
+function cmvSave() {
+  const w = window._cmv, amt = n(val('mv_amt')); if (amt <= 0) { toast('টাকার অংক দিন'); return; }
+  const id = w.id || uid(), ex = S.cmv[id];
+  S.cmv[id] = { id, acct: w.acct, dir: w.dir === 'in' ? 'in' : 'out', date: val('mv_date') || today(), amt, note: val('mv_note').trim(), createdAt: ex ? ex.createdAt : Date.now(), updatedAt: Date.now() };
+  save('cmv', id); UI.ym = S.cmv[id].date.slice(0, 7); closeSheet(); toast('সেভ হয়েছে');
+}
+function cmvDel() { remove('cmv', window._cmv.id); closeSheet(); toast('মুছে গেছে'); }
+
+/* ---------- সেটিংসে ক্যাশ অ্যাকাউন্ট ---------- */
+function cashSetCard() {
+  const A = S.settings.cash, staff = S.settings.staff;
+  return '<div class="card stack" style="gap:10px"><b>💵 কাউন্টার ক্যাশ অ্যাকাউন্ট</b><span class="mut sm">প্রতিটা ক্যাশ একজনের নামে (যেমন Cash 1 = Rajan)। দিন শেষে কাউন্টার ট্যাবে প্রতিটা ক্যাশের টাকা লেখা হয়। "কার ক্যাশ" এ স্টাফের নাম দিলে "প্রতিটি এন্ট্রি" তে ওই নামে নেওয়া টাকাও নিজে থেকে এই ক্যাশে মিলে যায়। ক্যাশ মুছলে তার আগের এন্ট্রি আর হিসাবে ধরা হবে না।</span>'
+    + A.map((a, i) => '<div class="ipbox stack" style="gap:8px"><div class="grid2"><div class="field"><label>ক্যাশের নাম</label><input value="' + esc(a.name) + '" onchange="cashSet(' + i + ',\'name\',this.value)"></div><div class="field"><label>কার ক্যাশ</label><select onchange="cashSet(' + i + ',\'owner\',this.value)"><option value="">— কেউ না —</option>'
+      + staff.map(s => '<option value="' + esc(s) + '"' + (s === a.owner ? ' selected' : '') + '>' + esc(s) + '</option>').join('') + (a.owner && !staff.includes(a.owner) ? '<option value="' + esc(a.owner) + '" selected>' + esc(a.owner) + '</option>' : '') + '</select></div></div>'
+      + '<button class="btn sm danger" style="align-self:flex-start" onclick="arm(this,function(){cashRm(' + i + ')})">এই ক্যাশ মুছুন</button></div>').join('')
+    + '<button class="btn ghost" onclick="cashAdd()">＋ নতুন ক্যাশ</button></div>';
+}
+function cashSet(i, k, v) { const a = S.settings.cash[i]; if (!a) return; a[k] = String(v).trim(); if (k === 'name' && !a.name) a.name = 'Cash ' + (i + 1); saveSettings(); render(); toast('সেভ হয়েছে'); }
+function cashAdd() { S.settings.cash.push({ id: uid(), name: 'Cash ' + (S.settings.cash.length + 1), owner: '' }); saveSettings(); render(); }
+function cashRm(i) { if (S.settings.cash.length <= 1) { toast('অন্তত একটা ক্যাশ রাখতে হবে'); return; } S.settings.cash.splice(i, 1); saveSettings(); render(); toast('ক্যাশ সরানো হয়েছে'); }
+
+/* ---------- হিসাব পেজ: বর্তমান হিসাব ---------- */
+function curHisab() {
+  const M = cashModel(), E = ipEngine(), files = Object.values(S.files), docs = Object.values(S.docs), cnts = Object.values(S.cnt), cloud = MODE === 'cloud';
+  const pp = files.map(f => ({ f, d: fileCalc(f).due })).filter(x => x.d > 0.001), dd = docs.map(d => ({ d, c: docCalc(d) }));
+  const docD = dd.filter(x => x.c.due > 0.001), refD = dd.filter(x => x.c.refundDue > 0.001), cnD = cnts.filter(c => cntCalc(c).due > 0.001);
+  const vr = cloud ? VISA.rows : [], vDue = vr.filter(v => n(v.due) > 0.001), vHeldRows = vr.filter(v => visaHeld(v) > 0.001);
+  const sum = (arr2, fn) => arr2.reduce((t, x) => t + fn(x), 0);
+  const ppDue = sum(pp, x => x.d), docDue = sum(docD, x => x.c.due), cntDue = sum(cnD, c => cntCalc(c).due), visaDue = sum(vDue, v => n(v.due)), refDue = sum(refD, x => x.c.refundDue);
+  const vHeld = sum(vHeldRows, v => visaHeld(v));
+  const getL = [], giveL = []; Object.values(S.loans).forEach(l => { const bl = loanBal(l); if (bl > 0.001) getL.push({ l, b: bl }); else if (bl < -0.001) giveL.push({ l, b: -bl }); });
+  const get = sum(getL, x => x.b), give = sum(giveL, x => x.b), ipWk = E.weeks.filter(w => w.left > 0.001).length;
+  const pabo = ppDue + docDue + cntDue + visaDue + get, debo = E.left + refDue + give, net = pabo - debo;
+  // আজকের কাউন্টার আয় (দিন শেষের ক্যাশ) — এটা আয়, ক্যাশ ব্যালেন্স না
+  const t0 = today(), td = M.day[t0] || {}; let tdAmt = 0, tdGot = 0; M.A.forEach(a => { const x = td[a.id]; if (x) { tdAmt += x.coll; if (x.has) tdGot++; } });
+  const line = (cls, icn, title, sub, amt, tot, bar, js) => '<div class="cl" onclick="' + js + '"><div class="t"><span class="ico ' + cls + '">' + ic(icn) + '</span><div class="nmx"><b>' + title + '</b><span class="sm mut">' + sub + '</span></div><b class="num ' + (bar === 'r' ? 'bad' : 'good') + '">' + money(amt) + '</b></div><div class="mbar ' + (bar === 'r' ? 'r' : '') + '"><i style="width:' + Math.max(3, Math.min(100, tot > 0 ? amt / tot * 100 : 0)) + '%"></i></div></div>';
+  const cnt = (k, w) => k + ' ' + w;
+  const pLines = [];
+  if (ppDue > 0.001) pLines.push(line('g', 'id', 'পাসপোর্ট ক্লায়েন্টের কাছে', cnt(pp.length, 'টি ফাইলে বাকি'), ppDue, pabo, 'g', "UI.pf='due';UI.ps='client';go('pass')"));
+  if (visaDue > 0.001) pLines.push(line('g', 'plane', 'ভিসা ক্লায়েন্টের কাছে', cnt(vDue.length, 'টি ফাইলে বাকি (ভিসা অ্যাপ থেকে অটো)'), visaDue, pabo, 'g', "UI.vf='due';go('vjoma')"));
+  if (docDue > 0.001) pLines.push(line('g', 'doc', 'ডকুমেন্ট ক্লায়েন্টের কাছে', cnt(docD.length, 'টি কাজে বাকি'), docDue, pabo, 'g', "UI.df='due';UI.dc='all';UI.dm='all';go('doc')"));
+  if (cntDue > 0.001) pLines.push(line('g', 'print', 'কাউন্টারের বাকি', cnt(cnD.length, 'টি এন্ট্রিতে বাকি'), cntDue, pabo, 'g', "UI.cDue=true;UI.cm='each';go('cnt')"));
+  if (get > 0.001) pLines.push(line('g', 'up', 'বাকি খাতায় (সে দেবে)', cnt(getL.length, 'জনের কাছে'), get, pabo, 'g', "go('loan')"));
+  const dLines = [];
+  if (E.left > 0.001) dLines.push(line('r', 'coin', 'IP বাকি', cnt(ipWk, 'সপ্তাহের IP দিতে হবে'), E.left, debo, 'r', "UI.ps='ip';go('pass')"));
+  if (refDue > 0.001) dLines.push(line('r', 'swap', 'ডকুমেন্টে ক্লায়েন্টকে ফেরত', cnt(refD.length, 'টি ফেরত কাজে'), refDue, debo, 'r', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')"));
+  if (give > 0.001) dLines.push(line('r', 'down', 'বাকি খাতায় (আমি দেব)', cnt(giveL.length, 'জনকে'), give, debo, 'r', "go('loan')"));
+  // সবচেয়ে বেশি বাকি (ক্লায়েন্টের কাছে)
+  const top = [].concat(
+    pp.map(x => ({ nm: x.f.name || 'নাম নেই', src: 'পাসপোর্ট', amt: x.d, js: "UI.pf='due';UI.ps='client';go('pass')" })),
+    docD.map(x => ({ nm: x.d.name || 'নাম নেই', src: 'ডকুমেন্ট', amt: x.c.due, js: "UI.df='due';UI.dc='all';UI.dm='all';go('doc')" })),
+    vDue.map(v => ({ nm: (v.serial ? '#' + v.serial + ' ' : '') + v.name, src: 'ভিসা', amt: n(v.due), js: "UI.vf='due';go('vjoma')" })),
+    getL.map(x => ({ nm: x.l.person || 'নাম নেই', src: 'বাকি খাতা', amt: x.b, js: "go('loan')" }))
+  ).sort((x, y) => y.amt - x.amt).slice(0, 5);
+  const head = (t, amt, cls) => '<div class="sect"><b>' + t + '</b><span class="tot num ' + cls + '">' + money(amt) + '</span></div>';
+  return '<div class="card hero"><div class="row between"><b>📍 বর্তমান হিসাব</b><span class="sm" style="opacity:.72">এখন পর্যন্ত · সব সময়</span></div>'
+    + '<div class="sm" style="opacity:.75;margin-top:10px">নিট অবস্থা (পাব − দেব)</div><div class="big num">' + money(net) + '</div>'
+    + '<div class="sm" style="opacity:.72">' + (net >= 0 ? 'দেনা মিটিয়েও এত টাকা পাওনা থাকে' : 'পাওনার চেয়ে দেনা বেশি') + '</div>'
+    + '<div class="tri"><div><small>⬇ আমি পাব</small><b class="num">' + money(pabo) + '</b></div><div><small>⬆ আমি দেব</small><b class="num">' + money(debo) + '</b></div><div><small>🛂 গচ্ছিত</small><b class="num">' + (cloud ? money(vHeld) : '—') + '</b></div></div></div>'
+    + (M.A.length ? '<div class="card tdy" onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')"><span class="ico">' + ic('wallet') + '</span><div style="flex:1;min-width:0"><b>আজকের কাউন্টার আয়</b><div class="sm mut">' + (tdGot ? 'দিন শেষের ক্যাশ ' + tdGot + '/' + M.A.length + 'টি লেখা হয়েছে' : 'দিন শেষের ক্যাশ এখনও লেখা হয়নি') + '</div></div><b class="num ' + (tdAmt > 0 ? 'good' : 'mut') + '" style="font-size:19px">' + money(tdAmt) + '</b></div>' : '')
+    + (pLines.length ? '<div class="card">' + head('⬇ আমি পাব', pabo, 'good') + pLines.join('') + '</div>' : '<div class="card"><b>⬇ আমি পাব</b><div class="mut sm" style="margin-top:6px">এখন কারো কাছে কিছু পাওনা নেই 🎉</div></div>')
+    + (dLines.length ? '<div class="card">' + head('⬆ আমি দেব', debo, 'bad') + dLines.join('') + '</div>' : '<div class="card"><b>⬆ আমি দেব</b><div class="mut sm" style="margin-top:6px">এখন কাউকে কিছু দেওয়ার নেই</div></div>')
+    + (cloud ? '<div class="card cl" style="padding:14px 16px" onclick="UI.vf=\'held\';go(\'vjoma\')"><div class="t"><span class="ico w">' + ic('plane') + '</span><div class="nmx"><b>ভিসা কাস্টমারের গচ্ছিত টাকা</b><span class="sm mut">' + (vHeldRows.length ? vHeldRows.length + ' জন কাস্টমারের জমা, ডেলিভারির আগে আমার কাছে · আয় না' : 'এখন কারো জমা আমার কাছে নেই') + '</span></div><b class="num warnc">' + money(vHeld) + '</b></div></div>' : '')
+    + (top.length ? '<div class="card"><div class="sect"><b>🔝 সবচেয়ে বেশি বাকি</b><span class="sm mut">পাব তালিকা থেকে</span></div>' + top.map((x, i) => '<div class="top5" onclick="' + x.js + '"><span class="rk">' + (i + 1) + '</span><div style="flex:1;min-width:0"><b style="font-weight:600">' + esc(x.nm) + '</b><div class="sm mut">' + x.src + '</div></div><b class="num bad">' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + '<p class="mut sm" style="text-align:center;margin:0">ক্যাশ এই হিসাবে ধরা হয় না। দিন শেষে ক্যাশে যত টাকা লেখেন সেটা শুধু আয়ে যোগ হয়। গচ্ছিত টাকা কাস্টমারের, তাই পাব/দেব/নিটে ধরা হয় না। ভিসার তথ্য ভিসা অ্যাপ থেকে অটো আসে।</p>';
+}
+function cashSumCard(o) {
+  const M = cashModel(); if (!M.A.length) return '';
+  return '<h2>কাউন্টার ক্যাশ — এই সময়ে এসেছে</h2><div class="card">' + M.A.map(a => kv(esc(a.name) + (a.owner ? ' <span class="sm">· ' + esc(a.owner) + '</span>' : ''), money(o.cash.by[a.id] || 0), 'good')).join('') + kv('<b style="color:var(--ink)">মোট</b>', '<b>' + money(o.cash.coll) + '</b>') + '</div>';
+}
+function cashTodayAlert() {
+  if (new Date().getHours() < 17) return '';
+  const M = cashModel(), t = today(), miss = M.A.filter(a => !((M.day[t] || {})[a.id] || {}).has);
+  if (!miss.length) return '';
+  return '<div class="alert" onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')"><span class="avatar w">' + ic('wallet') + '</span><div style="flex:1;min-width:0"><b>আজকের দিন শেষের ক্যাশ লেখা হয়নি</b><div class="sm mut">' + miss.map(a => esc(a.name)).join(', ') + '</div></div></div>';
+}
+
+/* ---------- রেফারেন্স ---------- */
+const RH = [212, 340, 152, 28, 272, 184, 48, 0];
+function refHue(s) { const i = S.settings.refs.indexOf(s); if (i >= 0) return RH[i % RH.length]; let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 997; return RH[h % RH.length]; }
+const refBadge = s => s ? '<span class="refb" style="--h:' + refHue(s) + '">' + esc(s) + '</span>' : '';
+const refStripe = f => f.ref ? ' style="border-left:5px solid hsl(' + refHue(f.ref) + ' 72% 48%)"' : '';
+const refLine = f => f.ref ? '<div class="row wrapr" style="gap:8px"><span class="sm mut">রেফারেন্স</span>' + refBadge(f.ref) + '</div>' : '';
+function refFilterRow() {
+  const names = S.settings.refs.slice(), cnt = {}; let none = 0;
+  Object.values(S.files).forEach(f => { if (f.ref) { cnt[f.ref] = (cnt[f.ref] || 0) + 1; if (!names.includes(f.ref)) names.push(f.ref); } else none++; });
+  if (!names.length) return '';
+  return '<div class="hs">' + chipB('সব রেফারেন্স', UI.prf === 'all', "UI.prf='all';render()") + names.map(r => chipB(r + ' (' + (cnt[r] || 0) + ')', UI.prf === r, "UI.prf=this.dataset.v;render()", r)).join('') + (none ? chipB('রেফ ছাড়া (' + none + ')', UI.prf === '__none', "UI.prf='__none';render()") : '') + '</div>';
+}
+function refStats() {
+  const r = range(), M = {}; const mk = k => M[k] || (M[k] = { ref: k, files: [], bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 });
+  S.settings.refs.forEach(k => mk(k));
+  Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const m = mk(f.ref || ''), c = fileCalc(f); m.files.push(f); m.bill += n(f.total); m.paid += c.paid; m.due += c.due; m.fee += n(f.passFee); m.ip += c.ip; m.profit += c.profit; });
+  if (M[''] && !M[''].files.length) delete M[''];
+  Object.values(M).forEach(m => m.files.sort((a, b) => (b.appDate || '').localeCompare(a.appDate || '') || (b.createdAt || 0) - (a.createdAt || 0)));
+  return M;
+}
+function vRef() {
+  const R = refStats(), list = Object.values(R).sort((a, b) => (a.ref === '') - (b.ref === '') || b.files.length - a.files.length || a.ref.localeCompare(b.ref));
+  const T = list.reduce((t, m) => { t.n += m.files.length; t.bill += m.bill; t.paid += m.paid; t.due += m.due; t.profit += m.profit; return t; }, { n: 0, bill: 0, paid: 0, due: 0, profit: 0 });
+  const withRef = list.filter(m => m.ref).reduce((s, m) => s + m.files.length, 0);
+  const sum = '<div class="card stack" style="gap:10px"><div class="row between"><b>সব রেফারেন্স মিলিয়ে</b><span class="sm mut">' + perLabel() + '</span></div><div class="mini num"><div><small>ফাইল</small><b>' + T.n + 'টি</b></div><div><small>বিল</small><b>' + Math.round(T.bill) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + Math.round(T.due) + '</b></div><div><small>লাভ</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(T.profit) + '</b></div></div><div class="sm mut">রেফারেন্স আছে ' + withRef + 'টি · রেফারেন্স ছাড়া ' + (T.n - withRef) + 'টি</div></div>';
+  const cards = list.map(m => {
+    const nm = m.ref || 'রেফারেন্স ছাড়া', hue = m.ref ? refHue(m.ref) : 215, k = m.ref;
+    return '<div class="card stack" style="gap:11px;border-left:5px solid hsl(' + hue + ' 72% 48%)"><div class="row between"><div style="min-width:0">' + (m.ref ? refBadge(m.ref) : '<span class="b">রেফারেন্স ছাড়া <span class="sm mut">(নিজের কাজ)</span></span>') + '<div class="nm" style="margin-top:6px">' + m.files.length + 'টি ফাইল</div></div><div style="text-align:right"><div class="sm mut">ক্লায়েন্টের কাছে বাকি</div><b class="num ' + (m.due ? 'bad' : 'good') + '" style="font-size:19px">' + money(m.due) + '</b></div></div>'
+      + '<div class="mini num"><div><small>মোট বিল</small><b>' + Math.round(m.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(m.paid) + '</b></div><div><small>ফি + IP</small><b>' + Math.round(m.fee + m.ip) + '</b></div><div><small>লাভ</small><b class="' + (m.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(m.profit) + '</b></div></div>'
+      + (m.files.length ? '<details class="ipbox fold"><summary><b>ফাইলের তালিকা (' + m.files.length + ')</b></summary>' + m.files.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="color:var(--ink);min-width:0"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (f.challan ? '' : ' · চালান বাকি') + '</div></span><span style="text-align:right"><b class="num sm">' + Math.round(n(f.total)) + '</b><div class="sm ' + (c.due ? 'bad' : 'good') + ' num">' + (c.due ? 'বাকি ' + Math.round(c.due) : '✓ জমা') + '</div></span></div>'; }).join('') + '</details>' : '<div class="sm mut">এই সময়ে কোনো ফাইল নেই</div>')
+      + (m.files.length ? '<div class="grid2"><button class="btn sm ghost" onclick="UI.prf=' + jarg(m.ref || '__none') + ';UI.ps=\'client\';go(\'pass\')">পাসপোর্টে দেখুন</button><button class="btn sm good" onclick="refShare(' + jarg(m.ref) + ')">WhatsApp এ হিসাব</button></div>' : '') + '</div>';
+  }).join('');
+  return perSeg() + sum + (cards || '<div class="empty">কোনো রেফারেন্স নেই</div>')
+    + '<div class="card stack" style="gap:8px"><b>নতুন রেফারেন্স যোগ করুন</b><div class="row"><input id="add_refs" placeholder="যেমন: Rajan মামা" onkeydown="if(event.key===\'Enter\')addItem(\'refs\')"><button class="btn sm" onclick="addItem(\'refs\')">যোগ</button></div><span class="sm mut">ফাইল বানানোর সময় এই নাম চিপ হয়ে আসবে। নাম মুছতে: সেটিংস → রেফারেন্স লিস্ট।</span></div>';
+}
+function refText(k) {
+  const m = refStats()[k]; if (!m) return '';
+  let t = '*' + (k || 'রেফারেন্স ছাড়া') + ' — পাসপোর্ট ফাইলের হিসাব* (' + perLabel() + ')\nমোট ফাইল: ' + m.files.length + 'টি\nমোট বিল: ' + money(m.bill) + '\nজমা: ' + money(m.paid) + '\nবাকি: ' + money(m.due) + '\n';
+  m.files.forEach((f, i) => { const c = fileCalc(f); t += '\n' + (i + 1) + '. ' + f.name + ' (' + fd(f.appDate) + ') — বিল ' + Math.round(n(f.total)) + ', জমা ' + Math.round(c.paid) + (c.due ? ', বাকি ' + Math.round(c.due) : ''); });
+  return t;
+}
+function refShare(k) { const t = refText(k); if (!t) return; window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank', 'noopener'); }
+
+/* ---------- ডকুমেন্ট: ধরন অনুযায়ী ফাইল সংখ্যা ---------- */
+function docCatStats(q, mo, lm) {
+  const z = () => ({ n: 0, run: 0, done: 0, ret: 0, due: 0, bill: 0 }), C = { all: z() };
+  Object.values(S.docs).forEach(d => {
+    const m = (d.recvDate || '').slice(0, 7); if (UI.dm === 'month' && m !== mo) return; if (UI.dm === 'last' && m !== lm) return;
+    if (q && !((d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || '')).toLowerCase().includes(q)) return;
+    const c = docCalc(d), k = d.cat || '—', st = d.status || 'run';
+    [C.all, C[k] || (C[k] = z())].forEach(x => { x.n++; x[st]++; x.due += c.due; x.bill += c.bill; });
+  });
+  return C;
+}
+function docCatCard(CC) {
+  const names = S.settings.docCats.slice(); Object.keys(CC).forEach(k => { if (k !== 'all' && !names.includes(k)) names.push(k); });
+  const z = { n: 0, run: 0, done: 0, ret: 0, due: 0 };
+  return '<details class="card fold stack" style="gap:4px" open><summary><b>📂 ধরন অনুযায়ী কয়টি ফাইল</b><span class="pill">মোট ' + CC.all.n + 'টি</span></summary>'
+    + names.map(k => { const x = CC[k] || z; return '<div class="kv" style="align-items:center;cursor:pointer;opacity:' + (x.n ? 1 : .55) + '" onclick="UI.dc=' + jarg(k) + ';UI.df=\'all\';render()"><span style="color:var(--ink);min-width:0"><b>' + esc(k) + '</b><div class="sm mut">চলমান ' + x.run + ' · ডেলিভারড ' + x.done + ' · ফেরত ' + x.ret + '</div></span><span style="text-align:right"><b class="num">' + x.n + 'টি</b>' + (x.due ? '<div class="sm bad num">বাকি ' + money(x.due) + '</div>' : '') + '</span></div>'; }).join('') + '</details>';
+}
+
+/* ---------- বাকি খাতা: নোট ---------- */
+function saveLoanNote(id) { const l = S.loans[id]; if (!l) return; l.note = val('ln_note').trim(); save('loans', id); toast('নোট সেভ হয়েছে'); }
+
+/* ---------- CSV: ক্যাশ ও রেফারেন্স ---------- */
+function exportCash() {
+  const M = cashModel(), nm = {}; M.A.forEach(a => { nm[a.id] = a; });
+  const rows = [['ধরন', 'তারিখ', 'ক্যাশ', 'কার ক্যাশ', 'এন্ট্রির যোগফল', 'দিন শেষে লেখা', 'ধরা হলো', 'টাকা', 'নোট', 'কে লিখেছে']];
+  Object.keys(M.day).sort().forEach(d => Object.keys(M.day[d]).forEach(id => { const x = M.day[d][id], a = nm[id]; if (a) rows.push(['দিনের ক্যাশ', d, a.name, a.owner, x.item, x.has ? x.end : '', x.coll, '', x.note, x.by]); }));
+  Object.values(S.cmv).sort((a, b) => (a.date || '').localeCompare(b.date || '')).forEach(m => { const a = nm[m.acct]; if (a) rows.push([m.dir === 'in' ? 'ক্যাশে জমা' : 'তুলেছি', m.date, a.name, a.owner, '', '', '', n(m.amt), m.note, '']); });
+  csvDown('rtc-cash', rows);
+}
+function exportRefs() {
+  const rows = [['রেফারেন্স', 'ফাইল', 'মোট বিল', 'জমা', 'বাকি', 'পাসপোর্ট ফি', 'IP', 'লাভ', 'সময়']];
+  Object.values(refStats()).forEach(m => rows.push([m.ref || 'রেফারেন্স ছাড়া', m.files.length, m.bill, m.paid, m.due, m.fee, m.ip, m.profit, perLabel()]));
+  csvDown('rtc-reference', rows);
+}
+
+/* ---------- বাম সাইডবার ---------- */
+const NAV = [
+  ['', [['home', 'chart', 'হিসাব'], ['cash', 'wallet', 'দিন শেষের ক্যাশ']]],
+  ['কাজ', [['pass', 'id', 'পাসপোর্ট'], ['ref', 'users', 'রেফারেন্স'], ['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার'], ['visa', 'plane', 'ভিসা ফাইল'], ['vjoma', 'coin', 'ভিসা জমা']]],
+  ['খাতা', [['exp', 'receipt', 'খরচ ও আয়'], ['loan', 'swap', 'বাকি খাতা']]],
+  ['আরও', [['more', 'more', 'রিপোর্ট ও ব্যাকআপ'], ['set', 'gear', 'সেটিংস']]]
+];
+const NAV_STAFF = [['', [['doc', 'doc', 'ডকুমেন্ট'], ['cnt', 'print', 'কাউন্টার']]]];
+function navToggle() { document.body.classList.toggle('nav-open'); }
+function navClose() { document.body.classList.remove('nav-open'); }
+function renderSide() {
+  const st = isStaff(), bd = {};
+  const dueP = Object.values(S.files).filter(f => fileCalc(f).due > 0).length, runD = Object.values(S.docs).filter(d => d.status === 'run').length, dueC = Object.values(S.cnt).filter(c => cntCalc(c).due > 0).length;
+  if (!st && dueP) bd.pass = dueP; if (runD) bd.doc = runD; if (dueC) bd.cnt = dueC;
+  const nav = (st ? NAV_STAFF : NAV).map(g => (g[0] ? '<h3>' + g[0] + '</h3>' : '') + g[1].map(t => '<button class="nv' + (tab === t[0] ? ' on' : '') + '" onclick="go(\'' + t[0] + '\')">' + ic(t[1]) + '<span>' + t[2] + '</span>' + (bd[t[0]] ? '<span class="bd">' + bd[t[0]] + '</span>' : '') + '</button>').join('')).join('');
+  $('side').innerHTML = '<div class="brand"><img class="logo" src="' + LOGO + '" alt="RTC"><div><b>RTC হিসাব</b><span class="sm mut">' + (st ? 'স্টাফ মোড' + (ME ? ' · ' + esc(ME) : '') : 'মালিক') + '</span></div></div>' + nav
+    + '<div class="foot">' + (st ? '<button class="nv" onclick="navClose();unlockSheet()">' + ic('lock') + '<span>মালিক মোড (পিন)</span></button>' : (MODE === 'cloud' ? '☁ ' + esc(AUTH ? AUTH.email : '') : 'লোকাল মোড · শুধু এই ফোনে')) + '</div>';
 }
 
 /* ---------- শুরু ---------- */
