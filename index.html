@@ -240,7 +240,7 @@ function norm(d) {
   const freshCash = !(d.settings && d.settings.cash); s.cash = arr(s.cash).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || 'Cash'), owner: String(a.owner || '') }));
   if (freshCash) s.cash.forEach(a => { if (a.owner && !s.staff.includes(a.owner)) s.staff.push(a.owner); });
   const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {}, cday: d.cday || {}, cmv: d.cmv || {} };
-  Object.values(out.files).forEach(f => { f.payments = arr(f.payments); });
+  Object.values(out.files).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); });
   Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
   Object.values(out.docs).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); f.log = arr(f.log); });
   Object.values(out.cnt).forEach(f => { f.payments = arr(f.payments); f.log = arr(f.log); });
@@ -342,7 +342,11 @@ function fileCalc(f) {
   const paid = (f.payments || []).reduce((s, p) => s + n(p.amt), 0);
   const ip = f.ipOn ? n(f.ipAmt) : 0;
   const cost = n(f.passFee) + ip;
-  return { paid, ip, cost, due: Math.max(0, n(f.total) - paid), profit: n(f.total) - cost };
+  if (f.ret) {   // ফেরত ফাইল: বিল = রাখা চার্জ (আমার আয়); ফেরত দিতে হবে = জমা − রাখা চার্জ − ফেরত দেওয়া; খরচ হয়ে থাকলে লাভ থেকে কাটে
+    const kept = n(f.kept), refunded = arr(f.refunds).reduce((t, x) => t + n(x.amt), 0), spent = f.retSpent ? n(f.retCost) : 0;
+    return { ret: true, paid, ip, cost, bill: kept, kept, refunded, spent, due: Math.max(0, kept - paid), toRefund: Math.max(0, paid - kept), refundDue: Math.max(0, paid - kept - refunded), profit: kept - spent };
+  }
+  return { ret: false, paid, ip, cost, bill: n(f.total), kept: 0, refunded: 0, spent: 0, toRefund: 0, refundDue: 0, due: Math.max(0, n(f.total) - paid), profit: n(f.total) - cost };
 }
 // joma date থেকে পরের (বা সেদিনই) পেমেন্ট-ডে
 function addD(s, k) { const d = pd(s); d.setDate(d.getDate() + k); return ymd(d); }
@@ -355,7 +359,7 @@ function weekOfFile(f) { const d = f.jomaDate || (f.ipOn ? '' : f.appDate); retu
 function ipEngine() {
   const W = {}; const mk = k => W[k] || (W[k] = { wk: k, ip: [], other: [], pays: [], due: 0, paid: 0, legacy: 0, extra: 0, left: 0 });
   const byC = (a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.name || '').localeCompare(String(b.name || ''));
-  Object.values(S.files).forEach(f => { const k = weekOfFile(f); if (!k) return; const w = mk(k); if (f.ipOn) w.ip.push(f); else w.other.push(f); });
+  Object.values(S.files).forEach(f => { if (f.ret && !f.retSpent) return; const k = weekOfFile(f); if (!k) return; const w = mk(k); if (f.ipOn) w.ip.push(f); else w.other.push(f); });
   let legacyPool = 0, explicit = 0;
   Object.values(S.ipPays).forEach(p => { if (p.wk) { mk(p.wk).pays.push(p); explicit += n(p.amt); } else legacyPool += n(p.amt); });
   const weeks = Object.keys(W).sort().map(k => W[k]);
@@ -379,7 +383,7 @@ function ipEngine() {
 function ipSt(f, E) { if (!f.ipOn) return 'none'; if (!f.jomaDate) return 'nojoma'; const a = (E || ipEngine()).alloc[f.id] || 0; return a >= n(f.ipAmt) - 0.001 ? 'paid' : (a > 0 ? 'part' : 'due'); }
 function ipGroups() {
   const E = ipEngine(); const noJoma = [];
-  Object.values(S.files).forEach(f => { if (f.ipOn && !f.jomaDate && !f.ipPaidDate) noJoma.push(f); });
+  Object.values(S.files).forEach(f => { if (!f.ret && f.ipOn && !f.jomaDate && !f.ipPaidDate) noJoma.push(f); });
   const groups = E.weeks.filter(w => w.left > 0.001).map(w => ({ date: payDayFor(w.wk), wk: w.wk, files: w.ip.map(f => Object.assign({}, f, { rem: n(f.ipAmt) - (E.alloc[f.id] || 0) })).filter(f => f.rem > 0.001), total: w.left }));
   return { groups, noJoma };
 }
@@ -394,8 +398,8 @@ function range() {
 const inR = (d, r) => d && (!r[0] || d >= r[0]) && (!r[1] || d <= r[1]);
 
 function overall() {
-  const r = range(); const o = { pp: { n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 }, cash: { coll: 0, extra: 0, by: {} } };
-  Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; p.n++; p.bill += n(f.total); p.paid += c.paid; p.due += c.due; p.fee += n(f.passFee); p.ip += c.ip; p.profit += c.profit; });
+  const r = range(); const o = { pp: { kept: 0, retN: 0, refDue: 0, n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, visaKept: 0, visaRetN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 }, cash: { coll: 0, extra: 0, by: {} } };
+  Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; const sp = !c.ret || f.retSpent; p.n++; p.bill += c.bill; p.paid += c.paid; p.due += c.due; p.fee += sp ? n(f.passFee) : 0; p.ip += sp ? c.ip : 0; p.profit += c.profit; if (c.ret) { p.retN++; p.kept += c.kept; p.refDue += c.refundDue; } });
   Object.values(S.expenses).forEach(e => { if (!inR(e.date, r)) return; o.exp[e.kind] += n(e.amt); if (e.kind === 'shop') o.byCat[e.cat] = (o.byCat[e.cat] || 0) + n(e.amt); });
   Object.values(S.docs).forEach(d => {
     const c = docCalc(d); const x = o.doc;
@@ -404,7 +408,7 @@ function overall() {
   });
   Object.values(S.cnt).forEach(cc => { if (!inR(cc.date, r)) return; const k = cntCalc(cc); const x = o.cn; x.n++; x.bill += k.total; x.paid += k.paid; x.due += k.due; x.cost += k.cost; x.profit += k.profit; });
   { const CM = cashModel(); Object.keys(CM.day).forEach(d => { if (!inR(d, r)) return; Object.keys(CM.day[d]).forEach(id => { const x = CM.day[d][id]; o.cash.coll += x.coll; o.cash.extra += x.extra; o.cash.by[id] = (o.cash.by[id] || 0) + x.coll; }); }); }
-  VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; } });
+  VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; if (v.mode === 'RETURNED') { o.visaKept += v.profit; o.visaRetN++; } } });
   o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit + o.cash.extra; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
   let get = 0, give = 0; Object.values(S.loans).forEach(l => { const b = loanBal(l); if (b > 0) get += b; else give -= b; });
   o.get = get; o.give = give; return o;
@@ -510,6 +514,8 @@ function vHome() {
     + '<h2>আয়ের উৎস</h2><div class="card">'
     + kv('পাসপোর্ট লাভ (' + o.pp.n + 'টি ফাইল)', money(o.pp.profit), o.pp.profit >= 0 ? 'good' : 'bad')
     + kv('ভিসা লাভ (অটো' + (o.visaN ? ', ' + o.visaN + 'টি' : '') + ')', MODE === 'cloud' ? money(o.visa) : '—', 'good')
+    + (MODE === 'cloud' && o.visaRetN ? kv('&nbsp;&nbsp;↳ এর মধ্যে ভিসা ফেরতে রাখা চার্জ (' + o.visaRetN + 'টি)', money(o.visaKept), 'good') : '')
+    + (o.pp.retN ? kv('&nbsp;&nbsp;↳ এর মধ্যে পাসপোর্ট ফেরতে রাখা চার্জ (' + o.pp.retN + 'টি)', money(o.pp.kept), 'good') : '')
     + kv('ডকুমেন্ট কাজের লাভ (' + o.doc.n + 'টি ডেলিভারড/ফেরত)', money(o.doc.profit), o.doc.profit >= 0 ? 'good' : 'bad')
     + kv('কাউন্টার সার্ভিসের লাভ (' + o.cn.n + 'টি এন্ট্রি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad')
     + kv('কাউন্টার ক্যাশ (দিন শেষের এন্ট্রি, লিস্টের বাইরে)', money(o.cash.extra), 'good')
@@ -520,6 +526,7 @@ function vHome() {
     + kv('মোট', '<b>' + money(o.exp.shop) + '</b>', 'bad') + '</div>'
     + '<h2>পাসপোর্ট ফাইলের সারাংশ</h2><div class="card">'
     + kv('মোট বিল', money(o.pp.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.pp.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.pp.due), o.pp.due ? 'bad' : '')
+    + (o.pp.retN ? kv('ফেরত ফাইল (' + o.pp.retN + 'টি) — রাখা চার্জ আয়ে ধরা', money(o.pp.kept), 'good') + kv('ফেরত ফাইলে ক্লায়েন্টকে ফেরত দিতে বাকি', money(o.pp.refDue), o.pp.refDue ? 'bad' : 'good') : '')
     + kv('পাসপোর্ট ফি (খরচ)', money(o.pp.fee)) + kv('IP (খরচ)', money(o.pp.ip)) + '</div>'
     + '<h2>ডকুমেন্ট কাজের সারাংশ</h2><div class="card">'
     + kv('এই সময়ে নেওয়া কাজ', o.doc.cnt + 'টি') + kv('মোট বিল (ফেরতে রাখা চার্জ)', money(o.doc.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.doc.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.doc.due), o.doc.due ? 'bad' : '') + kv('মোট খরচ', money(o.doc.cost))
@@ -541,7 +548,9 @@ function vPass() {
   let list = files.filter(f => {
     const c = fileCalc(f);
     if (UI.pf === 'due' && !c.due) return false;
-    if (UI.pf === 'chalan' && f.challan) return false;
+    if (UI.pf === 'chalan' && (f.challan || f.ret)) return false;
+    if (UI.pf === 'ret' && !c.ret) return false;
+    if (UI.pf === 'refund' && !(c.refundDue > 0.001)) return false;
     if (UI.pf === 'ip' && !(f.ipOn && f.jomaDate && ipSt(f, E) !== 'paid')) return false;
     if (UI.pf === 'clear' && (c.due || !n(f.total))) return false;
     if (UI.prf !== 'all' && (UI.prf === '__none' ? f.ref : f.ref !== UI.prf)) return false;
@@ -549,10 +558,11 @@ function vPass() {
     return true;
   });
   if (UI.pv === 'list') list.sort((a, b) => fileCalc(b).due - fileCalc(a).due); else list.sort((a, b) => (b.appDate || '').localeCompare(a.appDate || '') || (b.createdAt || 0) - (a.createdAt || 0));
-  const T = files.reduce((t, f) => { const c = fileCalc(f); t.bill += n(f.total); t.paid += c.paid; t.due += c.due; if (c.due) t.dn++; if (!f.challan) t.ch++; return t; }, { bill: 0, paid: 0, due: 0, dn: 0, ch: 0 });
+  const T = files.reduce((t, f) => { const c = fileCalc(f); t.bill += c.bill; t.paid += c.paid; t.due += c.due; if (c.due) t.dn++; if (!f.challan && !f.ret) t.ch++; if (c.ret) { t.rn++; t.kept += c.kept; t.rd += c.refundDue; t.rf += c.refunded; } return t; }, { bill: 0, paid: 0, due: 0, dn: 0, ch: 0, rn: 0, kept: 0, rd: 0, rf: 0 });
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা পেয়েছি</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি পাব</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div></div>'
-    + '<div class="row between wrapr sm mut"><span>' + T.dn + ' জনের টাকা বাকি</span><span>' + T.ch + 'টি ফাইলের চালান বাকি</span></div></div>';
-  const filters = [['all', 'সব'], ['due', 'টাকা বাকি'], ['chalan', 'চালান বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা']];
+    + '<div class="row between wrapr sm mut"><span>' + T.dn + ' জনের টাকা বাকি</span><span>' + T.ch + 'টি ফাইলের চালান বাকি</span></div>'
+    + (T.rn ? '<div class="ipbox stack" style="gap:6px"><div class="row between sm"><b>↩ ফেরত ফাইল ' + T.rn + 'টি</b><span class="mut">রাখা চার্জ (আমার আয়) <b class="num good">' + money(T.kept) + '</b></span></div><div class="row between sm"><span class="mut">ফেরত দিয়েছি ' + money(T.rf) + '</span>' + (T.rd > 0.001 ? '<b class="bad">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(T.rd) + '</b>' : '<b class="good">✓ সব ফেরত দেওয়া হয়েছে</b>') + '</div></div>' : '') + '</div>';
+  const filters = [['all', 'সব'], ['due', 'টাকা বাকি'], ['chalan', 'চালান বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা'], ['ret', 'ফেরত'], ['refund', 'ফেরত দিতে বাকি']];
   return seg + sum
     + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="নাম, ফোন, Gmail বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="row between"><div class="chips">' + filters.map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
     + refFilterRow()
@@ -561,9 +571,9 @@ function vPass() {
 }
 function passTable(list) {
   if (!list.length) return '<div class="empty">কোনো ফাইল নেই</div>';
-  const t = list.reduce((a, f) => { const c = fileCalc(f); a.b += n(f.total); a.p += c.paid; a.d += c.due; return a; }, { b: 0, p: 0, d: 0 });
+  const t = list.reduce((a, f) => { const c = fileCalc(f); a.b += c.bill; a.p += c.paid; a.d += c.due; return a; }, { b: 0, p: 0, d: 0 });
   return '<div class="card" style="padding:6px 12px"><div class="kv sm" style="font-weight:700;color:var(--mut)"><span style="flex:1">ক্লায়েন্ট</span><span style="width:62px;text-align:right">বিল</span><span style="width:62px;text-align:right">জমা</span><span style="width:62px;text-align:right">বাকি</span></div>'
-    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (f.challan ? '' : ' · চালান বাকি') + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(n(f.total)) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
+    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (c.ret ? ' · ↩ ফেরত' + (c.refundDue > 0.001 ? ' (ফেরত দিতে ' + Math.round(c.refundDue) + ')' : '') : (f.challan ? '' : ' · চালান বাকি')) + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(c.bill) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
     + '<div class="kv" style="font-weight:700"><span style="flex:1">মোট</span><span class="num sm" style="width:62px;text-align:right">' + Math.round(t.b) + '</span><span class="num sm good" style="width:62px;text-align:right">' + Math.round(t.p) + '</span><span class="num sm bad" style="width:62px;text-align:right">' + Math.round(t.d) + '</span></div></div>';
 }
 const UIW = { old: false };
@@ -607,6 +617,13 @@ function renderListOnly() { const q = UI.pq.trim().toLowerCase(); const el = $('
 function fmtTime(t) { if (!t) return ''; const [h, m] = t.split(':').map(Number); const ap = h >= 12 ? 'রাত/বিকাল' : 'সকাল'; return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h >= 12 ? ' PM' : ' AM'); }
 function checklist(f, E) {
   const c = fileCalc(f); const s = ipSt(f, E);
+  if (c.ret) {
+    const pl = (cls, t, js) => '<button type="button" class="pill ' + cls + '" style="border:0;cursor:' + (js ? 'pointer' : 'default') + '"' + (js ? ' onclick="event.stopPropagation();' + js + '"' : '') + '>' + t + '</button>';
+    return '<div class="row wrapr" style="gap:6px">' + pl('bad', '↩ ফেরত ' + fd(f.retDate)) + pl('', 'রাখা চার্জ ' + money(c.kept))
+      + (c.due > 0.001 ? pl('warn', 'রাখা চার্জের বাকি ' + money(c.due)) : '')
+      + (c.refundDue > 0.001 ? pl('bad', '⚠ ফেরত দিতে বাকি ' + money(c.refundDue), "refSheetP('" + f.id + "')") : (c.toRefund > 0.001 ? pl('good', '✓ জমা ' + money(c.toRefund) + ' ফেরত দেওয়া হয়েছে') : pl('good', '✓ ফেরত দেওয়ার মতো জমা নেই')))
+      + (f.retSpent ? pl('warn', 'খরচ হয়ে গেছে ' + money(c.spent)) : pl('', 'খরচ হয়নি')) + '</div>';
+  }
   const chip = (ok, part, t, fn) => '<button class="pill ' + (ok ? 'good' : (part ? 'warn' : 'bad')) + '" style="border:0;cursor:' + (fn ? 'pointer' : 'default') + '"' + (fn ? ' onclick="event.stopPropagation();' + fn + '"' : '') + '>' + (ok ? '✓ ' : (part ? '◐ ' : '✗ ')) + t + '</button>';
   const pay = !n(f.total) ? chip(false, false, 'বিল বসেনি') : (c.due <= 0 ? chip(true, false, 'ক্লায়েন্ট পুরো দিয়েছে') : (c.paid > 0 ? chip(false, true, 'ক্লায়েন্ট আংশিক দিয়েছে') : chip(false, false, 'ক্লায়েন্ট দেয়নি')));
   let h = chip(!!f.challan, false, f.challan ? 'চালান ' + fd(f.challanDate) : 'চালান বাকি', "toggleChallan('" + f.id + "')") + pay;
@@ -620,22 +637,22 @@ function passCards(list, E) {
   if (!list.length) return '<div class="empty">কোনো ফাইল নেই। নিচের "নতুন ফাইল" চেপে প্রথম পাসপোর্ট যোগ করুন।</div>';
   E = E || ipEngine();
   return list.map(f => {
-    const c = fileCalc(f); const pct = n(f.total) ? Math.min(100, c.paid / n(f.total) * 100) : 0;
-    const st = !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
+    const c = fileCalc(f); const pct = c.bill ? Math.min(100, c.paid / c.bill * 100) : 0;
+    const st = c.ret ? '<span class="pill bad">↩ ফেরত</span>' : !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
     return '<div class="card item"' + refStripe(f) + ' onclick="fileForm(\'' + f.id + '\')">' + (f.note ? notePill(f.note) : '') + '<div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '')  + '</div></div>' + st + '</div>'
       + refLine(f)
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
-      + '<div class="mini num"><div><small>বিল</small><b>' + Math.round(n(f.total)) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
+      + '<div class="mini num"><div><small>' + (c.ret ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(c.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
       + checklist(f, E)
-      + (c.due ? '<div class="row" style="justify-content:flex-end"><button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button></div>' : '')
+      + (c.due || c.refundDue > 0.001 ? '<div class="row" style="justify-content:flex-end">' + (c.due ? '<button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '') + (c.refundDue > 0.001 ? '<button class="btn sm danger" onclick="event.stopPropagation();refSheetP(\'' + f.id + '\')">ফেরত দিলাম</button>' : '') + '</div>' : '')
       + '</div>';
   }).join('');
 }
 
 /* ফাইল ফর্ম */
 function fileForm(id, keep) {
-  if (!keep) { const f = id ? S.files[id] : null; fm = f ? JSON.parse(JSON.stringify(f)) : { id: '', name: '', phone: '', gmail: '', ref: '', appDate: today(), jomaDate: '', total: '', passFee: '', ipOn: true, ipAmt: S.settings.defaultIp, ipPaidDate: '', note: '', payments: [] }; }
+  if (!keep) { const f = id ? S.files[id] : null; fm = f ? JSON.parse(JSON.stringify(f)) : { id: '', name: '', phone: '', gmail: '', ref: '', appDate: today(), jomaDate: '', total: '', passFee: '', ipOn: true, ipAmt: S.settings.defaultIp, ipPaidDate: '', note: '', payments: [], ret: false, retDate: '', kept: '', retSpent: false, retCost: '', refunds: [] }; }
   const f = fm;
   sheet(f.id ? 'ফাইল এডিট' : 'নতুন পাসপোর্ট ফাইল',
     '<div class="field"><label for="f_name">কার নামে পাসপোর্ট</label><input id="f_name" value="' + esc(f.name) + '" placeholder="ক্লায়েন্টের নাম"></div>'
@@ -650,6 +667,12 @@ function fileForm(id, keep) {
     + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ipon" type="checkbox" style="width:auto" ' + (f.ipOn ? 'checked' : '') + ' onchange="fmCalc()"> এই ফাইলে IP আছে</label>'
     + '<div class="grid2"><div class="field"><label for="f_ipamt">IP এর টাকা (৳)</label><input id="f_ipamt" type="number" inputmode="decimal" value="' + n(f.ipAmt) + '" oninput="fmCalc()"></div></div>'
     + '<div class="sm mut" id="f_ipnote"></div></div>'
+    + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ret" type="checkbox" style="width:auto" ' + (f.ret ? 'checked' : '') + ' onchange="$(\'f_retblk\').hidden=!this.checked;fmCalc()"> ↩ ফাইল ফেরত গেছে (ক্লায়েন্ট ফেরত নিয়েছে)</label>'
+    + '<div id="f_retblk"' + (f.ret ? '' : ' hidden') + '><div class="stack" style="gap:8px"><div class="sm mut">কত টাকা চার্জ রেখে বাকিটা ক্লায়েন্টকে ফেরত দেবেন তা লিখুন। রাখা চার্জই আপনার আয়, বিল আর বাকি পাওনায় ধরা হবে না।</div>'
+    + '<div class="grid2"><div class="field"><label for="f_retdate">ফেরতের তারিখ</label><input id="f_retdate" type="date" value="' + (f.retDate || '') + '"></div><div class="field"><label for="f_kept">কত টাকা রাখলাম (৳)</label><input id="f_kept" type="number" inputmode="decimal" value="' + (f.kept === '' || f.kept == null ? '' : n(f.kept)) + '" oninput="fmCalc()"></div></div>'
+    + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_rsp" type="checkbox" style="width:auto" ' + (f.retSpent ? 'checked' : '') + ' onchange="rspToggle()"> খরচ হয়ে গেছে (পাসপোর্ট ফি / IP আগেই দেওয়া হয়েছে)</label>'
+    + '<div class="field"><label for="f_rcost">কত খরচ হয়ে গেছে (৳)</label><input id="f_rcost" type="number" inputmode="decimal" value="' + (f.retCost === '' || f.retCost == null ? '' : n(f.retCost)) + '" oninput="fmCalc()"></div>'
+    + '<div class="field"><label>ক্লায়েন্টকে কত ফেরত দিয়েছি</label><div id="f_refs"></div><div class="row" style="margin-top:8px"><input id="r_date" type="date" value="' + today() + '"><input id="r_amt" type="number" inputmode="decimal" placeholder="৳"><button type="button" class="btn sm" onclick="addRef()" style="white-space:nowrap">＋ যোগ</button></div></div></div></div></div>'
     + '<div class="card" style="box-shadow:none;background:var(--bg)" id="f_prev"></div>'
     + '<div class="field"><label>ক্লায়েন্ট কত দিয়েছে</label><div id="f_pays"></div>'
     + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳"><button class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
@@ -679,20 +702,40 @@ function commitList(listKey, field) {
 function grab() {
   fm.name = val('f_name').trim(); fm.phone = val('f_phone').trim(); fm.appDate = val('f_app') || today(); fm.jomaDate = val('f_joma'); fm.total = val('f_total'); fm.passFee = val('f_fee');
   fm.challan = $('f_chal').checked; fm.challanDate = fm.challan ? (val('f_chdate') || today()) : ''; fm.ipOn = $('f_ipon').checked; fm.ipAmt = val('f_ipamt'); fm.note = val('f_note').trim();
+  fm.ret = $('f_ret').checked; fm.retDate = fm.ret ? (val('f_retdate') || today()) : ''; fm.kept = val('f_kept'); fm.retSpent = $('f_rsp').checked; fm.retCost = val('f_rcost'); fm.refunds = arr(fm.refunds);
 }
 function fmCalc() {
-  const f = { total: val('f_total'), passFee: val('f_fee'), ipOn: $('f_ipon') && $('f_ipon').checked, ipAmt: val('f_ipamt'), payments: fm.payments };
+  const f = { total: val('f_total'), passFee: val('f_fee'), ipOn: $('f_ipon') && $('f_ipon').checked, ipAmt: val('f_ipamt'), payments: fm.payments, ret: $('f_ret').checked, kept: val('f_kept'), retSpent: $('f_rsp').checked, retCost: val('f_rcost'), refunds: arr(fm.refunds) };
   const c = fileCalc(f); const pays = fm.payments;
-  $('f_prev').innerHTML = kv('মোট বিল', money(f.total)) + kv('− পাসপোর্ট ফি', money(f.passFee)) + kv('− IP', money(c.ip)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad') + kv('ক্লায়েন্ট দিয়েছে', money(c.paid), 'good') + kv('এখনও বাকি', money(c.due), c.due ? 'bad' : '');
+  $('f_prev').innerHTML = c.ret
+    ? kv('ক্লায়েন্ট জমা দিয়েছে', money(c.paid), 'good') + kv('রাখা চার্জ (আমার আয়)', money(c.kept)) + kv('রাখা চার্জের বাকি (পাব)', money(c.due), c.due ? 'bad' : '')
+      + kv('ক্লায়েন্টকে ফেরত দিতে হবে (জমা − রাখা চার্জ)', money(c.toRefund)) + kv('ফেরত দিয়েছি', money(c.refunded), 'good') + kv('ফেরত দিতে বাকি', money(c.refundDue), c.refundDue ? 'bad' : 'good')
+      + kv('− খরচ হয়ে গেছে', money(c.spent)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad')
+      + '<div class="sm ' + (c.refundDue > 0.001 ? 'bad' : 'good') + '" style="margin-top:8px;font-weight:700">' + (c.toRefund <= 0.001 ? '✓ ফেরত দেওয়ার মতো জমা নেই' : (c.refundDue > 0.001 ? '⚠ ক্লায়েন্টকে এখনও ' + money(c.refundDue) + ' ফেরত দিতে হবে (ফেরত দেওয়া হয়নি)' : '✓ জমার টাকা ক্লায়েন্টকে ফেরত দেওয়া হয়েছে')) + '</div>'
+    : kv('মোট বিল', money(f.total)) + kv('− পাসপোর্ট ফি', money(f.passFee)) + kv('− IP', money(c.ip)) + kv('<b>আমার লাভ</b>', '<b>' + money(c.profit) + '</b>', c.profit >= 0 ? 'good' : 'bad') + kv('ক্লায়েন্ট দিয়েছে', money(c.paid), 'good') + kv('এখনও বাকি', money(c.due), c.due ? 'bad' : '');
+  const rl = arr(fm.refunds); $('f_refs').innerHTML = rl.length ? rl.map((p, i) => '<div class="kv" style="align-items:center"><span>' + fd(p.date) + '</span><span class="row"><b class="num">' + money(p.amt) + '</b><button class="x" onclick="rmRef(' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') : '<div class="mut sm">এখনও কিছু ফেরত দেওয়া হয়নি</div>';
   $('f_pays').innerHTML = pays.length ? pays.map((p, i) => '<div class="kv" style="align-items:center"><span>' + fd(p.date) + '</span><span class="row"><b class="num">' + money(p.amt) + '</b><button class="x" onclick="rmPay(' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') : '<div class="mut sm">এখনও কোনো জমা নেই</div>';
   const j = val('f_joma'); $('f_ipnote').textContent = !$('f_ipon').checked ? 'IP নেই, তাই কোনো IP খরচ ধরা হবে না।' : (j ? 'এই IP যাবে ' + fd(wkStart(j)) + ' – ' + fd(wkEnd(j)) + ' সপ্তাহে, পেমেন্ট ' + fd(payDayFor(j)) + ' (' + DAYS[S.settings.payDay] + ')' : 'joma তারিখ না দিলে IP হিসাবে ধরা হবে না।');
   const jn = $('f_jnote'); if (jn) { jn.className = 'sm ' + (j ? 'good' : 'warnc'); jn.textContent = !$('f_ipon').checked ? 'IP নেই, joma তারিখ শুধু রেকর্ডের জন্য।' : (j ? '✓ IP হিসাবে ধরা হবে: ' + fd(wkStart(j)) + ' – ' + fd(wkEnd(j)) + ' সপ্তাহে' : '⏸ joma তারিখ দিলে তবেই IP হিসাবে যাবে'); }
+}
+function rspToggle() { if ($('f_rsp').checked && !val('f_rcost')) { const c = fileCalc({ total: 0, passFee: val('f_fee'), ipOn: $('f_ipon').checked, ipAmt: val('f_ipamt'), payments: [] }); $('f_rcost').value = c.cost || ''; } fmCalc(); }
+function addRef() { const a = n(val('r_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } const d = val('r_date') || today(); grab(); fm.refunds.push({ id: uid(), date: d, amt: a }); fileForm(fm.id, true); }
+function rmRef(i) { grab(); fm.refunds.splice(i, 1); fileForm(fm.id, true); }
+function refSheetP(id) {
+  const f = S.files[id], c = fileCalc(f); ACK = {};
+  sheet('ফেরত দিলাম — ' + esc(f.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div><button class="btn block" onclick="refDoP(\'' + id + '\')">ফেরত সেভ করুন</button>');
+}
+function refDoP(id) {
+  const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
+  const f = S.files[id], c = fileCalc(f); if (a > c.refundDue + 0.001 && !ACK.q) { ACK.q = 1; toast('ফেরতযোগ্য টাকার (' + money(c.refundDue) + ') চেয়ে বেশি — ঠিক থাকলে আবার চাপুন'); return; }
+  f.refunds = arr(f.refunds).concat([{ id: uid(), date: val('q_date') || today(), amt: a }]); f.updatedAt = Date.now(); save('files', id); closeSheet(); toast('ফেরত লেখা হয়েছে');
 }
 function addPay() { const a = n(val('p_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } grab(); fm.payments.push({ id: uid(), date: val('p_date') || today(), amt: a }); fileForm(fm.id, true); }
 function rmPay(i) { grab(); fm.payments.splice(i, 1); fileForm(fm.id, true); }
 function saveFile() {
   grab(); if (!fm.name) { toast('নাম লিখুন'); return; }
-  const id = fm.id || uid(); const rec = Object.assign({}, fm, { id, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
+  { const c = fileCalc(fm); if (c.ret && c.refunded > c.toRefund + 0.001 && !ACK.pf) { ACK.pf = 1; toast('ফেরত দেওয়া টাকা ফেরতযোগ্য (' + money(c.toRefund) + ') এর চেয়ে বেশি — ঠিক থাকলে আবার সেভ চাপুন'); return; } }
+  const id = fm.id || uid(); const rec = Object.assign({}, fm, { id, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), kept: n(fm.kept), retCost: n(fm.retCost), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
   S.files[id] = rec; save('files', id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('সেভ হয়েছে');
 }
 function delFile() { remove('files', fm.id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('মুছে গেছে'); }
@@ -838,15 +881,28 @@ function delPerson(id) { remove('loans', id); closeSheet(); }
 /* ===== ৫) ভিসা (অটো) ===== */
 function vVisa() {
   if (MODE !== 'cloud') return '<div class="card stack"><b>ভিসা ফাইলের হিসাব অটো আসতে লগইন লাগবে</b><span class="mut sm">ভিসা অ্যাপে যে ফাইল আপলোড করেন, তার বিল, জমা ও লাভ এখানে নিজে নিজে আসে। ভিসা অ্যাপের ইমেইল দিয়ে লগইন করুন।</span><button class="btn" onclick="logout(true)">লগইন পেজে যান</button></div>';
-  const r = VISA.rows; const t = r.reduce((a, x) => { a.bill += x.bill; a.paid += x.paid; a.due += x.due; a.profit += x.profit; return a; }, { bill: 0, paid: 0, due: 0, profit: 0 });
+  const r = VISA.rows; const rl = (UI.vm && UI.vm !== 'all') ? r.filter(x => x.mode === UI.vm) : r; const t = r.reduce((a, x) => { a.bill += x.bill; a.paid += x.paid; a.due += x.due; a.profit += x.profit; return a; }, { bill: 0, paid: 0, due: 0, profit: 0 });
   const mc = { DELIVERED: ['ডেলিভারড', 'good'], APPOINTED: ['অ্যাপয়েন্টেড', 'warn'], RUNNING: ['চলমান', ''], RETURNED: ['ফেরত', 'bad'] };
   return (VISA.err ? '<div class="card sm ' + (VISA.err === 'PERM' ? 'bad' : 'warnc') + '">' + (VISA.err === 'PERM' ? 'ভিসা ফাইল পড়ার পারমিশন নেই' : 'নেট সমস্যা, আগের তথ্য দেখাচ্ছে') + '</div>' : '')
     + '<div class="card hero"><div class="mut sm">ভিসা থেকে মোট লাভ</div><div class="big num">' + money(t.profit) + '</div><div class="mut sm">বিল ' + money(t.bill) + ' · জমা ' + money(t.paid) + ' · বাকি ' + money(t.due) + '</div></div>'
+    + vSt(r) + '<div class="chips">' + [['all', 'সব (' + r.length + ')'], ['RUNNING', 'চলমান'], ['APPOINTED', 'অ্যাপয়েন্টেড'], ['DELIVERED', 'ডেলিভারড'], ['RETURNED', 'ফেরত']].map(x => '<button type="button" class="chip' + ((UI.vm || 'all') === x[0] ? ' on' : '') + '" onclick="UI.vm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
     + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
-    + (r.length ? r.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>বিল</small><b>' + Math.round(x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div></div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
+    + (rl.length ? rl.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>বিল</small><b>' + Math.round(x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div></div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
     + '<p class="mut sm" style="text-align:center">লাভ ধরা হয় ডেলিভারড বা অ্যাপয়েন্টেড ফাইলে (বিল − ভিসা ফি − সফটওয়্যার চার্জ), ফেরত ফাইলে রাখা চার্জ।</p>';
 }
 
+/* ভিসা অবস্থা অনুযায়ী হিসাব: চলমান / অ্যাপয়েন্টেড / ডেলিভারড / ফেরত। ফেরত ফাইলের বিল পাবতে ধরা হয় না, রাখা চার্জ আয়। */
+function vSt(r) {
+  const ag = m => r.filter(x => x.mode === m).reduce((a, x) => { a.n++; a.bill += x.bill; a.paid += x.paid; a.due += x.due; a.profit += x.profit; a.refund += n(x.refund); if (m === 'RETURNED') a.rd += visaHeld(x); return a; }, { n: 0, bill: 0, paid: 0, due: 0, profit: 0, refund: 0, rd: 0 });
+  const card = (t, a, rows) => '<div class="card stack" style="gap:2px;padding:12px"><div class="row between"><b class="sm">' + t + '</b><span class="pill">' + a.n + 'টি</span></div>' + rows + '</div>';
+  const R = ag('RUNNING'), A = ag('APPOINTED'), D = ag('DELIVERED'), X = ag('RETURNED');
+  return '<div class="grid2">'
+    + card('📂 চলমান', R, kv('বিল', money(R.bill)) + kv('জমা', money(R.paid), 'good') + kv('বাকি (পাব)', money(R.due), R.due ? 'bad' : ''))
+    + card('📅 অ্যাপয়েন্টেড', A, kv('বিল', money(A.bill)) + kv('জমা', money(A.paid), 'good') + kv('বাকি (পাব)', money(A.due), A.due ? 'bad' : '') + kv('লাভ', money(A.profit), 'good'))
+    + card('📦 ডেলিভারড', D, kv('বিল', money(D.bill)) + kv('জমা', money(D.paid), 'good') + kv('বাকি (পাব)', money(D.due), D.due ? 'bad' : '') + kv('লাভ', money(D.profit), 'good'))
+    + card('🔙 ফেরত', X, kv('জমা ছিল', money(X.paid)) + kv('রাখা চার্জ (আয়)', money(X.profit), 'good') + kv('ফেরত দিয়েছি', money(X.refund)) + kv('ফেরত দিতে বাকি', money(X.rd), X.rd > 0.001 ? 'bad' : 'good'))
+    + '</div><p class="mut sm" style="margin:0">ফেরত ফাইলের বিল পাব-তে ধরা হয় না; ফেরত দেওয়ার সময় যে চার্জ রাখা হয় সেটাই আয়।</p>';
+}
 /* ===== ভিসা জমা: কাস্টমারের কত টাকা এখন আমার কাছে আছে ===== */
 // ডেলিভারির আগে (চলমান/অ্যাপয়েন্টেড) জমা = কাস্টমারের গচ্ছিত টাকা। ডেলিভারড ফাইলে বিলের চেয়ে বেশি জমা, আর ফেরত ফাইলে (জমা − রাখা চার্জ − ফেরত দেওয়া) বাকি থাকলে সেটাও আমার কাছে কাস্টমারের টাকা।
 function visaHeld(x) {
@@ -1255,7 +1311,7 @@ function cashDay(d) {
   const by = {}; let refunds = 0, pp = 0; const add = (k, src, a) => { by[k] = by[k] || { cnt: 0, doc: 0 }; by[k][src] += a; };
   Object.values(S.cnt).forEach(c => arr(c.payments).forEach(p => { if (p.date === d) add(p.by || 'স্টাফ লেখা নেই', 'cnt', n(p.amt)); }));
   Object.values(S.docs).forEach(c => { arr(c.payments).forEach(p => { if (p.date === d) add(p.by || 'স্টাফ লেখা নেই', 'doc', n(p.amt)); }); arr(c.refunds).forEach(p => { if (p.date === d) refunds += n(p.amt); }); });
-  Object.values(S.files).forEach(f => arr(f.payments).forEach(p => { if (p.date === d) pp += n(p.amt); }));
+  Object.values(S.files).forEach(f => { arr(f.payments).forEach(p => { if (p.date === d) pp += n(p.amt); }); arr(f.refunds).forEach(p => { if (p.date === d) refunds += n(p.amt); }); });
   return { by, refunds, pp };
 }
 function cRow(c, showDate) {
@@ -1285,7 +1341,7 @@ function cntEach(D) {
     + (L.length ? '<div class="card" style="padding:4px 14px">' + L.map(c => cRow(c, UI.cDue)).join('') + '</div>' : '<div class="empty">' + (UI.cDue ? 'কারো কাছে বাকি নেই 🎉' : 'এই দিনে কোনো এন্ট্রি নেই') + '</div>')
     + '<div class="card"><b>ক্যাশ খাতা — ' + rel + ' কে কত টাকা নিল</b>'
     + (staffs.length ? staffs.map(k => '<div class="kv"><span style="color:var(--ink)"><b>' + esc(k) + '</b><div class="sm mut">কাউন্টার ' + money(cash.by[k].cnt) + ' · ডকুমেন্ট ' + money(cash.by[k].doc) + '</div></span><b class="num good">' + money(cash.by[k].cnt + cash.by[k].doc) + '</b></div>').join('') : '<div class="mut sm" style="padding:8px 0">এই দিনে কোনো টাকা নেওয়া লেখা নেই</div>')
-    + (cash.pp ? kv('পাসপোর্ট ক্লায়েন্ট জমা (স্টাফ লেখা থাকে না)', money(cash.pp), 'good') : '') + (cash.refunds ? kv('− ক্লায়েন্টকে ফেরত দিয়েছি (ডকুমেন্ট)', money(cash.refunds), 'bad') : '')
+    + (cash.pp ? kv('পাসপোর্ট ক্লায়েন্ট জমা (স্টাফ লেখা থাকে না)', money(cash.pp), 'good') : '') + (cash.refunds ? kv('− ক্লায়েন্টকে ফেরত দিয়েছি (ডকুমেন্ট/পাসপোর্ট)', money(cash.refunds), 'bad') : '')
     + kv('<b style="color:var(--ink)">দিনের নিট ক্যাশ</b>', '<b>' + money(sumStaff + cash.pp - cash.refunds) + '</b>') + '</div>'
     + (Object.keys(bySvc).length ? '<div class="card"><b>সার্ভিস অনুযায়ী</b>' + Object.entries(bySvc).sort((a, b) => b[1].t - a[1].t).map(([k, x]) => kv(esc(k) + ' <span class="sm">(' + x.n + ' বার · ' + x.q + ')</span>', money(x.t))).join('') + '</div>' : '');
 }
@@ -1502,10 +1558,10 @@ function cashRm(i) { if (S.settings.cash.length <= 1) { toast('অন্তত �
 function curHisab() {
   const M = cashModel(), E = ipEngine(), files = Object.values(S.files), docs = Object.values(S.docs), cnts = Object.values(S.cnt), cloud = MODE === 'cloud';
   const pp = files.map(f => ({ f, d: fileCalc(f).due })).filter(x => x.d > 0.001), dd = docs.map(d => ({ d, c: docCalc(d) }));
-  const docD = dd.filter(x => x.c.due > 0.001), refD = dd.filter(x => x.c.refundDue > 0.001), cnD = cnts.filter(c => cntCalc(c).due > 0.001);
+  const docD = dd.filter(x => x.c.due > 0.001), refD = dd.filter(x => x.c.refundDue > 0.001), cnD = cnts.filter(c => cntCalc(c).due > 0.001), refP = files.map(f => ({ f, c: fileCalc(f) })).filter(x => x.c.refundDue > 0.001);
   const vr = cloud ? VISA.rows : [], vDue = vr.filter(v => n(v.due) > 0.001), vHeldRows = vr.filter(v => visaHeld(v) > 0.001);
   const sum = (arr2, fn) => arr2.reduce((t, x) => t + fn(x), 0);
-  const ppDue = sum(pp, x => x.d), docDue = sum(docD, x => x.c.due), cntDue = sum(cnD, c => cntCalc(c).due), visaDue = sum(vDue, v => n(v.due)), refDue = sum(refD, x => x.c.refundDue);
+  const ppDue = sum(pp, x => x.d), docDue = sum(docD, x => x.c.due), cntDue = sum(cnD, c => cntCalc(c).due), visaDue = sum(vDue, v => n(v.due)), refDoc = sum(refD, x => x.c.refundDue), refPP = sum(refP, x => x.c.refundDue), refDue = refDoc + refPP;
   const vHeld = sum(vHeldRows, v => visaHeld(v));
   const getL = [], giveL = []; Object.values(S.loans).forEach(l => { const bl = loanBal(l); if (bl > 0.001) getL.push({ l, b: bl }); else if (bl < -0.001) giveL.push({ l, b: -bl }); });
   const get = sum(getL, x => x.b), give = sum(giveL, x => x.b), ipWk = E.weeks.filter(w => w.left > 0.001).length;
@@ -1522,7 +1578,8 @@ function curHisab() {
   if (get > 0.001) pLines.push(line('g', 'up', 'বাকি খাতায় (সে দেবে)', cnt(getL.length, 'জনের কাছে'), get, pabo, 'g', "go('loan')"));
   const dLines = [];
   if (E.left > 0.001) dLines.push(line('r', 'coin', 'IP বাকি', cnt(ipWk, 'সপ্তাহের IP দিতে হবে'), E.left, debo, 'r', "UI.ps='ip';go('pass')"));
-  if (refDue > 0.001) dLines.push(line('r', 'swap', 'ডকুমেন্টে ক্লায়েন্টকে ফেরত', cnt(refD.length, 'টি ফেরত কাজে'), refDue, debo, 'r', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')"));
+  if (refPP > 0.001) dLines.push(line('r', 'swap', 'পাসপোর্টে ক্লায়েন্টকে ফেরত', cnt(refP.length, 'টি ফেরত ফাইলে'), refPP, debo, 'r', "UI.pf='refund';UI.ps='client';go('pass')"));
+  if (refDoc > 0.001) dLines.push(line('r', 'swap', 'ডকুমেন্টে ক্লায়েন্টকে ফেরত', cnt(refD.length, 'টি ফেরত কাজে'), refDoc, debo, 'r', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')"));
   if (give > 0.001) dLines.push(line('r', 'down', 'বাকি খাতায় (আমি দেব)', cnt(giveL.length, 'জনকে'), give, debo, 'r', "go('loan')"));
   // সবচেয়ে বেশি বাকি (ক্লায়েন্টের কাছে)
   const top = [].concat(
