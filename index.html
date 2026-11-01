@@ -210,13 +210,13 @@ const K = { data: 'rtc_hisab_v1', q: 'rtc_hisab_q', auth: 'rtc_hisab_auth', mode
 const DAYS = ['রবিবার','সোমবার','মঙ্গলবার','বুধবার','বৃহস্পতিবার','শুক্রবার','শনিবার'];
 const KIND = { shop: 'দোকান খরচ', personal: 'ব্যক্তিগত খরচ', income: 'অন্য আয়' };
 
-const DEFCASH = () => [{ id: 'c1', name: 'Cash 1', owner: 'Rajan' }, { id: 'c2', name: 'Cash 2', owner: 'Rabbi' }, { id: 'c3', name: 'Cash 3', owner: 'Anik' }];
+const DEFCASH = () => [{ id: 'c1', name: 'কাউন্টার ১', owner: 'Rajan' }, { id: 'c2', name: 'কাউন্টার ২', owner: 'Rabbi' }];
 const DEF = () => ({
   settings: { payDay: 2, payRule: 2, payTime: '18:00', defaultIp: 1200, gmails: [], refs: ['মামা', 'Rajan', 'Omey'],
     docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: ['Rajan', 'Rabbi', 'Anik'], cash: DEFCASH(), pin: '',
     services: [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }],
     cats: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন', 'অন্যান্য'], personal: ['বাসা খরচ', 'টুকটাক', 'অন্যান্য'], income: ['অন্য সার্ভিসের লাভ', 'অন্যান্য'] } },
-  expenses: {}, loans: {}, files: {}, ipPays: {}, docs: {}, cnt: {}, cday: {}, cmv: {}
+  expenses: {}, loans: {}, files: {}, ipPays: {}, docs: {}, cnt: {}, cday: {}, cmv: {}, dcash: {}
 });
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
@@ -227,7 +227,7 @@ let AUTH = lsGet(K.auth, null);        // {email, refresh}
 let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
 let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
 let tab = 'home', fm = null;
-const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day' };
+const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day', dcd: '' };
 
 function norm(d) {
   const base = DEF(); if (!d || typeof d !== 'object') return base;
@@ -239,7 +239,7 @@ function norm(d) {
   ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
   const freshCash = !(d.settings && d.settings.cash); s.cash = arr(s.cash).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || 'Cash'), owner: String(a.owner || '') }));
   if (freshCash) s.cash.forEach(a => { if (a.owner && !s.staff.includes(a.owner)) s.staff.push(a.owner); });
-  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {}, cday: d.cday || {}, cmv: d.cmv || {} };
+  const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {}, cday: d.cday || {}, cmv: d.cmv || {}, dcash: d.dcash || {} };
   Object.values(out.files).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); });
   Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
   Object.values(out.docs).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); f.log = arr(f.log); });
@@ -308,7 +308,7 @@ async function pull(quiet) {
 }
 function pushAll() {
   enqueue('PUT', FB.root + '/settings', S.settings);
-  ['expenses', 'loans', 'files', 'ipPays', 'docs', 'cnt', 'cday', 'cmv'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
+  ['expenses', 'loans', 'files', 'ipPays', 'docs', 'cnt', 'cday', 'cmv', 'dcash'].forEach(c => Object.keys(S[c]).forEach(id => enqueue('PUT', FB.root + '/' + c + '/' + id, S[c][id])));
 }
 function save(coll, id) { persist(); enqueue('PUT', FB.root + '/' + coll + '/' + id, S[coll][id]); }
 function remove(coll, id) { delete S[coll][id]; persist(); enqueue('DELETE', FB.root + '/' + coll + '/' + id); }
@@ -327,11 +327,11 @@ async function loadVisa(force) {
 function visaRow(f) {
   const ret = !!f.isReturned, del = !ret && !!f.isDelivered, appt = !!(f.isAppointed || f.appointmentDate);
   const paid = n(f.billAdvance); let bill, due, profit, kept = 0;
-  if (ret) { kept = n(f.keptCharge); bill = kept; due = 0; profit = kept; }
+  if (ret) { kept = n(f.keptCharge); bill = 0; due = 0; profit = kept; }   // ফেরত ফাইলের বিল ধরা হয় না, শুধু রাখা চার্জ আয়
   else { bill = n(f.billTotal); due = Math.max(0, bill - paid); const w = n(f.baseVisaFee) + n(f.softwareCharge); profit = (del || appt) ? bill - w : 0; }
   const ts = /^SET_(\d+)$/.test(f.id) ? +f.id.slice(4) : 0;
   const ds = []; const tk = a => arr(a).forEach(p => { if (p && /^\d{4}-\d{2}-\d{2}$/.test(p.d || '')) ds.push(p.d); }); tk(f.pays); arr(f.applicants).forEach(a => tk(a && a.pays)); arr(f.subAccts).forEach(sb => tk(sb && sb.pays)); ds.sort();
-  return { id: f.id, last: ds.length ? ds[ds.length - 1] : '', refund: n(f.refundAmount), serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, date: ts ? ymd(new Date(ts)) : '' };
+  return { id: f.id, last: ds.length ? ds[ds.length - 1] : '', refund: n(f.refundAmount), serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, kept, refShould: ret ? Math.max(0, paid - kept) : 0, refDue: ret ? Math.max(0, paid - kept - n(f.refundAmount)) : 0, date: ts ? ymd(new Date(ts)) : '' };
 }
 
 /* ---------- 📲 ফোন → WhatsApp (wa.me/88 + নম্বর) ---------- */
@@ -439,12 +439,12 @@ const ic = (nm) => '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">' + I
 const avatarCls = s => ['', 'g', 'r', 'w'][(String(s).charCodeAt(0) || 0) % 4];
 const initial = s => esc((String(s || '?').trim()[0] || '?').toUpperCase());
 
-const TITLES = { home: 'RTC হিসাব', cash: 'দিন শেষের ক্যাশ', pass: 'পাসপোর্ট ফাইল', ref: 'রেফারেন্স হিসাব', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার সার্ভিস', exp: 'খরচ ও আয়', more: 'রিপোর্ট ও ব্যাকআপ', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', vjoma: 'ভিসা জমা', set: 'সেটিংস' };
+const TITLES = { home: 'RTC হিসাব', cash: 'দিন শেষের ক্যাশ', pass: 'পাসপোর্ট ফাইল', ref: 'রেফারেন্স হিসাব', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার', exp: 'খরচ ও আয়', more: 'রিপোর্ট ও ব্যাকআপ', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', vjoma: 'ভিসা জমা', set: 'সেটিংস' };
 function render() {
   document.body.classList.toggle('nonav', MODE === '');
   if (MODE === '') { $('side').innerHTML = ''; renderLogin(); return; }
   if (isStaff() && !STAFF_TABS.includes(tab)) tab = 'doc';
-  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), cash: 'কাউন্টার থেকে আয়, মাস অনুযায়ী', pass: 'ক্লায়েন্ট, IP ও জমা', ref: 'কার কয়টি ফাইল, কত হিসাব', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'ফটোকপি, অনলাইন, টাইপিং, CV…', exp: 'দোকান ও ব্যক্তিগত', more: 'CSV ও ব্যাকআপ', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', vjoma: 'কাস্টমারের কত টাকা আমার কাছে', set: 'লিস্ট, ক্যাশ ও IP এর সময়' };
+  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), cash: 'কাউন্টার থেকে আয়, মাস অনুযায়ী', pass: 'ক্লায়েন্ট, IP ও জমা', ref: 'কার কয়টি ফাইল, কত হিসাব', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'দিন শেষের হিসাব · ২টি কাউন্টার', exp: 'দোকান ও ব্যক্তিগত', more: 'CSV ও ব্যাকআপ', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', vjoma: 'কাস্টমারের কত টাকা আমার কাছে', set: 'লিস্ট, ক্যাশ ও IP এর সময়' };
   if (isStaff()) subs[tab] = 'স্টাফ মোড' + (ME ? ' · ' + ME : '');
   const body = ({ home: vHome, cash: vCash, pass: vPass, ref: vRef, doc: vDoc, cnt: vCnt, exp: vExp, loan: vLoan, visa: vVisa, vjoma: vJoma, more: vMore, set: vSet })[tab]();
   renderSide();
@@ -508,7 +508,7 @@ function vHome() {
   if (dCost.length) alerts += al('w', 'receipt', 'ডকুমেন্টের খরচ এখনও হয়নি', dCost.length + 'টি কাজে', dCost.reduce((s, x) => s + n(x.d.cost), 0), 'warnc', "UI.df='cost';UI.dc='all';UI.dm='all';go('doc')");
   if (dRef.length) alerts += al('r', 'swap', 'ক্লায়েন্টকে ফেরত দিতে বাকি', dRef.length + 'টি ফেরত কাজে', dRef.reduce((s, x) => s + x.c.refundDue, 0), 'bad', "UI.df='refund';UI.dc='all';UI.dm='all';go('doc')");
   if (cDue.length) alerts += al('r', 'print', 'কাউন্টারে বাকি টাকা', cDue.length + 'টি এন্ট্রি', cDue.reduce((s, c) => s + cntCalc(c).due, 0), 'bad', "UI.cDue=true;go('cnt')");
-  alerts += cashTodayAlert();
+  alerts += cashTodayAlert() + dcashAlert();
   const att = alerts ? '<h2>এখন নজর দিন</h2><div class="card stack" style="gap:8px;padding:10px">' + alerts + '</div>' : '';
   return curHisab() + per + hero + quick + att
     + '<h2>আয়ের উৎস</h2><div class="card">'
@@ -517,8 +517,8 @@ function vHome() {
     + (MODE === 'cloud' && o.visaRetN ? kv('&nbsp;&nbsp;↳ এর মধ্যে ভিসা ফেরতে রাখা চার্জ (' + o.visaRetN + 'টি)', money(o.visaKept), 'good') : '')
     + (o.pp.retN ? kv('&nbsp;&nbsp;↳ এর মধ্যে পাসপোর্ট ফেরতে রাখা চার্জ (' + o.pp.retN + 'টি)', money(o.pp.kept), 'good') : '')
     + kv('ডকুমেন্ট কাজের লাভ (' + o.doc.n + 'টি ডেলিভারড/ফেরত)', money(o.doc.profit), o.doc.profit >= 0 ? 'good' : 'bad')
-    + kv('কাউন্টার সার্ভিসের লাভ (' + o.cn.n + 'টি এন্ট্রি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad')
-    + kv('কাউন্টার ক্যাশ (দিন শেষের এন্ট্রি, লিস্টের বাইরে)', money(o.cash.extra), 'good')
+    + (o.cn.n ? kv('পুরনো কাউন্টার এন্ট্রির লাভ (' + o.cn.n + 'টি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad') : '')
+    + kv('কাউন্টার আয় (দিন শেষের হিসাব)', money(o.cash.extra), 'good')
     + kv('অন্য সার্ভিসের লাভ', money(o.exp.income), 'good')
     + kv('<b style="color:var(--ink)">মোট আয়</b>', '<b>' + money(o.income) + '</b>') + '</div>'
     + '<h2>দোকান খরচ</h2><div class="card">'
@@ -531,8 +531,8 @@ function vHome() {
     + '<h2>ডকুমেন্ট কাজের সারাংশ</h2><div class="card">'
     + kv('এই সময়ে নেওয়া কাজ', o.doc.cnt + 'টি') + kv('মোট বিল (ফেরতে রাখা চার্জ)', money(o.doc.bill)) + kv('ক্লায়েন্ট জমা দিয়েছে', money(o.doc.paid), 'good') + kv('ক্লায়েন্টের কাছে বাকি', money(o.doc.due), o.doc.due ? 'bad' : '') + kv('মোট খরচ', money(o.doc.cost))
     + Object.entries(o.doc.byCat).sort((a, b) => b[1].profit - a[1].profit).map(([k, v]) => kv('<span class="sm">লাভ · ' + esc(k) + ' (' + v.n + 'টি)</span>', money(v.profit), v.profit >= 0 ? 'good' : 'bad')).join('') + '</div>'
-    + '<h2>কাউন্টার সার্ভিসের সারাংশ</h2><div class="card">'
-    + kv('এন্ট্রি', o.cn.n + 'টি') + kv('মোট বিল', money(o.cn.bill)) + kv('পেয়েছি', money(o.cn.paid), 'good') + kv('বাকি', money(o.cn.due), o.cn.due ? 'bad' : '') + kv('খরচ', money(o.cn.cost)) + '</div>'
+    + (!o.cn.n ? '' : '<h2>পুরনো কাউন্টার এন্ট্রির সারাংশ</h2><div class="card">'
+    + kv('এন্ট্রি', o.cn.n + 'টি') + kv('মোট বিল', money(o.cn.bill)) + kv('পেয়েছি', money(o.cn.paid), 'good') + kv('বাকি', money(o.cn.due), o.cn.due ? 'bad' : '') + kv('খরচ', money(o.cn.cost)) + '</div>')
     + cashSumCard(o)
     + (MODE === 'cloud' && VISA.err === 'PERM' ? '<div class="card sm bad">ভিসা ফাইল পড়ার পারমিশন নেই</div>' : '')
     + '<p class="mut sm" style="text-align:center;margin:0">ডকুমেন্ট কাজের লাভ ডেলিভারি/ফেরতের তারিখের মাসে ধরা হয় (চলমান কাজের লাভ ধরা হয় না)। ভিসা লাভ ফাইলের তৈরির তারিখ ধরে মাসে ধরা হয়; "সব" বাছলে সব ফাইল ধরা হয়।</p>';
@@ -881,13 +881,13 @@ function delPerson(id) { remove('loans', id); closeSheet(); }
 /* ===== ৫) ভিসা (অটো) ===== */
 function vVisa() {
   if (MODE !== 'cloud') return '<div class="card stack"><b>ভিসা ফাইলের হিসাব অটো আসতে লগইন লাগবে</b><span class="mut sm">ভিসা অ্যাপে যে ফাইল আপলোড করেন, তার বিল, জমা ও লাভ এখানে নিজে নিজে আসে। ভিসা অ্যাপের ইমেইল দিয়ে লগইন করুন।</span><button class="btn" onclick="logout(true)">লগইন পেজে যান</button></div>';
-  const r = VISA.rows; const rl = (UI.vm && UI.vm !== 'all') ? r.filter(x => x.mode === UI.vm) : r; const t = r.reduce((a, x) => { a.bill += x.bill; a.paid += x.paid; a.due += x.due; a.profit += x.profit; return a; }, { bill: 0, paid: 0, due: 0, profit: 0 });
+  const r = VISA.rows; const rl = (UI.vm && UI.vm !== 'all') ? r.filter(x => UI.vm === 'REFDUE' ? (x.mode === 'RETURNED' && x.refDue > 0.001) : x.mode === UI.vm) : r; const t = r.reduce((a, x) => { a.bill += x.bill; a.paid += x.paid; a.due += (x.mode === 'RUNNING' ? 0 : x.due); a.profit += x.profit; return a; }, { bill: 0, paid: 0, due: 0, profit: 0 });
   const mc = { DELIVERED: ['ডেলিভারড', 'good'], APPOINTED: ['অ্যাপয়েন্টেড', 'warn'], RUNNING: ['চলমান', ''], RETURNED: ['ফেরত', 'bad'] };
   return (VISA.err ? '<div class="card sm ' + (VISA.err === 'PERM' ? 'bad' : 'warnc') + '">' + (VISA.err === 'PERM' ? 'ভিসা ফাইল পড়ার পারমিশন নেই' : 'নেট সমস্যা, আগের তথ্য দেখাচ্ছে') + '</div>' : '')
     + '<div class="card hero"><div class="mut sm">ভিসা থেকে মোট লাভ</div><div class="big num">' + money(t.profit) + '</div><div class="mut sm">বিল ' + money(t.bill) + ' · জমা ' + money(t.paid) + ' · বাকি ' + money(t.due) + '</div></div>'
-    + vSt(r) + '<div class="chips">' + [['all', 'সব (' + r.length + ')'], ['RUNNING', 'চলমান'], ['APPOINTED', 'অ্যাপয়েন্টেড'], ['DELIVERED', 'ডেলিভারড'], ['RETURNED', 'ফেরত']].map(x => '<button type="button" class="chip' + ((UI.vm || 'all') === x[0] ? ' on' : '') + '" onclick="UI.vm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
+    + vSt(r) + '<div class="chips">' + [['all', 'সব (' + r.length + ')'], ['RUNNING', 'চলমান'], ['APPOINTED', 'অ্যাপয়েন্টেড'], ['DELIVERED', 'ডেলিভারড'], ['RETURNED', 'ফেরত'], ['REFDUE', '🔴 ফেরত বাকি (' + r.filter(x => x.mode === 'RETURNED' && x.refDue > 0.001).length + ')']].map(x => '<button type="button" class="chip' + ((UI.vm || 'all') === x[0] ? ' on' : '') + '" onclick="UI.vm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
     + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
-    + (rl.length ? rl.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>বিল</small><b>' + Math.round(x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div></div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
+    + (rl.length ? rl.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>' + (x.mode === 'RETURNED' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(x.mode === 'RETURNED' ? x.kept : x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>' + (x.mode === 'RUNNING' ? 'পেতে পারি' : 'বাকি') + '</small><b class="' + (x.due && x.mode !== 'RUNNING' ? 'bad' : 'mut') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div>' + (x.mode === 'RETURNED' ? '<div style="margin-top:8px">' + visaRefBanner(x) + '</div>' : '') + '</div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
     + '<p class="mut sm" style="text-align:center">লাভ ধরা হয় ডেলিভারড বা অ্যাপয়েন্টেড ফাইলে (বিল − ভিসা ফি − সফটওয়্যার চার্জ), ফেরত ফাইলে রাখা চার্জ।</p>';
 }
 
@@ -897,7 +897,7 @@ function vSt(r) {
   const card = (t, a, rows) => '<div class="card stack" style="gap:2px;padding:12px"><div class="row between"><b class="sm">' + t + '</b><span class="pill">' + a.n + 'টি</span></div>' + rows + '</div>';
   const R = ag('RUNNING'), A = ag('APPOINTED'), D = ag('DELIVERED'), X = ag('RETURNED');
   return '<div class="grid2">'
-    + card('📂 চলমান', R, kv('বিল', money(R.bill)) + kv('জমা', money(R.paid), 'good') + kv('বাকি (পাব)', money(R.due), R.due ? 'bad' : ''))
+    + card('📂 চলমান', R, kv('বিল', money(R.bill)) + kv('জমা', money(R.paid), 'good') + kv('পেতে পারি (Appt হলে)', money(R.due), 'mut'))
     + card('📅 অ্যাপয়েন্টেড', A, kv('বিল', money(A.bill)) + kv('জমা', money(A.paid), 'good') + kv('বাকি (পাব)', money(A.due), A.due ? 'bad' : '') + kv('লাভ', money(A.profit), 'good'))
     + card('📦 ডেলিভারড', D, kv('বিল', money(D.bill)) + kv('জমা', money(D.paid), 'good') + kv('বাকি (পাব)', money(D.due), D.due ? 'bad' : '') + kv('লাভ', money(D.profit), 'good'))
     + card('🔙 ফেরত', X, kv('জমা ছিল', money(X.paid)) + kv('রাখা চার্জ (আয়)', money(X.profit), 'good') + kv('ফেরত দিয়েছি', money(X.refund)) + kv('ফেরত দিতে বাকি', money(X.rd), X.rd > 0.001 ? 'bad' : 'good'))
@@ -905,35 +905,46 @@ function vSt(r) {
 }
 /* ===== ভিসা জমা: কাস্টমারের কত টাকা এখন আমার কাছে আছে ===== */
 // ডেলিভারির আগে (চলমান/অ্যাপয়েন্টেড) জমা = কাস্টমারের গচ্ছিত টাকা। ডেলিভারড ফাইলে বিলের চেয়ে বেশি জমা, আর ফেরত ফাইলে (জমা − রাখা চার্জ − ফেরত দেওয়া) বাকি থাকলে সেটাও আমার কাছে কাস্টমারের টাকা।
+// ফেরত ফাইলের হাইলাইট: জমা − রাখা চার্জ = ক্লায়েন্টকে দিতে হবে; সত্যিই দেওয়া হয়েছে কিনা এক নজরে
+function visaRefBanner(x) {
+  const should = n(x.refShould), due = n(x.refDue), given = n(x.refund);
+  let bg, fg, txt;
+  if (should <= 0.001) { bg = 'var(--soft)'; fg = 'var(--mut)'; txt = 'ফেরত দেওয়ার মতো টাকা নেই — পুরো জমা চার্জ হিসেবে রাখা হয়েছে'; }
+  else if (due <= 0.001) { bg = 'var(--goodbg)'; fg = 'var(--good)'; txt = '✅ পুরো ফেরত দেওয়া হয়েছে — ' + money(given); }
+  else if (given > 0.001) { bg = 'var(--warnbg)'; fg = 'var(--warn)'; txt = '⚠ আংশিক ফেরত — ' + money(given) + ' দেওয়া হয়েছে, আরও ' + money(due) + ' দিতে হবে'; }
+  else { bg = 'var(--badbg)'; fg = 'var(--bad)'; txt = '🔴 ফেরত দেওয়া হয়নি — ' + money(should) + ' ফেরত দিতে হবে'; }
+  return '<div style="background:' + bg + ';color:' + fg + ';border:2px solid ' + fg + ';border-radius:12px;padding:9px 12px;font-weight:700;font-size:13.5px">' + txt
+    + (should > 0.001 ? '<div class="sm" style="font-weight:500;margin-top:3px;opacity:.9">জমা ' + money(x.paid) + ' − রাখা চার্জ ' + money(x.kept) + ' = ফেরত দিতে হবে ' + money(should) + ' · দেওয়া ' + money(given) + ' · বাকি ' + money(due) + '</div>' : '') + '</div>';
+}
 function visaHeld(x) {
   const paid = n(x.paid);
-  if (x.mode === 'RETURNED') return Math.max(0, paid - n(x.bill) - n(x.refund));
-  if (x.mode === 'DELIVERED') return Math.max(0, paid - n(x.bill));
+  if (x.mode === 'RETURNED') return Math.max(0, paid - n(x.kept) - n(x.refund));
+  if (x.mode === 'DELIVERED' || x.mode === 'APPOINTED') return Math.max(0, paid - n(x.bill));
   return paid;
 }
 function vJoma() {
   if (MODE !== 'cloud') return '<div class="card stack"><b>ভিসা জমার হিসাব দেখতে লগইন লাগবে</b><span class="mut sm">ভিসা অ্যাপে যে জমা এন্ট্রি দেন, তা এখানে নিজে নিজে আসে। ভিসা অ্যাপের ইমেইল দিয়ে লগইন করুন।</span><button class="btn" onclick="logout(true)">লগইন পেজে যান</button></div>';
   const rows = VISA.rows.map(x => Object.assign({}, x, { held: visaHeld(x) }));
   const T = { held: 0, run: 0, appt: 0, over: 0, paid: 0, due: 0, nHeld: 0, nDue: 0 };
-  rows.forEach(x => { T.paid += n(x.paid); T.due += n(x.due); if (x.due > 0.001) T.nDue++; if (x.held > 0.001) { T.held += x.held; T.nHeld++; if (x.mode === 'RUNNING') T.run += x.held; else if (x.mode === 'APPOINTED') T.appt += x.held; else T.over += x.held; } });
+  rows.forEach(x => { T.paid += n(x.paid); if (x.mode !== 'RUNNING') { T.due += n(x.due); if (x.due > 0.001) T.nDue++; } if (x.held > 0.001) { T.held += x.held; T.nHeld++; if (x.mode === 'RUNNING') T.run += x.held; else if (x.mode === 'APPOINTED') T.appt += x.held; else T.over += x.held; } });
   const f = UI.vf || 'held', q = (UI.vq || '').trim().toLowerCase();
-  let list = rows.filter(x => f === 'held' ? x.held > 0.001 : (f === 'due' ? x.due > 0.001 : true));
+  let list = rows.filter(x => f === 'held' ? x.held > 0.001 : (f === 'due' ? (x.due > 0.001 && x.mode !== 'RUNNING') : true));
   if (q) list = list.filter(x => (String(x.name) + ' ' + String(x.serial)).toLowerCase().includes(q));
   list.sort((a, b) => (f === 'due' ? b.due - a.due : b.held - a.held) || (Number(b.serial) || 0) - (Number(a.serial) || 0));
   const mc = { DELIVERED: ['ডেলিভারড', 'good'], APPOINTED: ['অ্যাপয়েন্টেড', 'warn'], RUNNING: ['চলমান', ''], RETURNED: ['ফেরত', 'bad'] };
-  const note = x => x.mode === 'RUNNING' ? 'ডেলিভারি হয়নি — এই টাকা কাস্টমারের, আমার কাছে গচ্ছিত' : (x.mode === 'APPOINTED' ? 'অ্যাপয়েন্টেড, ডেলিভারি বাকি — জমা টাকা এখনও গচ্ছিত' : (x.mode === 'DELIVERED' ? 'বিলের চেয়ে বেশি জমা — কাস্টমারকে ফেরত দিতে হবে' : 'ফেরত ফাইল — রাখা চার্জ ও ফেরতের পরেও এই টাকা বাকি'));
+  const note = x => x.mode === 'RUNNING' ? 'অ্যাপয়েন্টমেন্ট হয়নি — এই জমা এখনো আমার না, ফেরত দিতে হতে পারে' : (x.mode === 'APPOINTED' ? 'অ্যাপয়েন্টেড — বিল পর্যন্ত জমা আমার; বিলের চেয়ে বেশি জমা ফেরত দিতে হবে' : (x.mode === 'DELIVERED' ? 'বিলের চেয়ে বেশি জমা — কাস্টমারকে ফেরত দিতে হবে' : 'ফেরত ফাইল — রাখা চার্জ ও ফেরতের পরেও এই টাকা বাকি'));
   const chip = (k, t) => '<button type="button" class="chip' + (f === k ? ' on' : '') + '" onclick="UI.vf=\'' + k + '\';render()">' + t + '</button>';
   return (VISA.err ? '<div class="card sm ' + (VISA.err === 'PERM' ? 'bad' : 'warnc') + '">' + (VISA.err === 'PERM' ? 'ভিসা ফাইল পড়ার পারমিশন নেই' : 'নেট সমস্যা, আগের তথ্য দেখাচ্ছে') + '</div>' : '')
     + '<div class="card hero"><div class="sm" style="opacity:.75">ভিসা কাস্টমারের জমা — এখন আমার কাছে আছে</div><div class="big num">' + money(T.held) + '</div><div class="sm" style="opacity:.75">' + T.nHeld + ' জন কাস্টমারের টাকা · মোট জমা পেয়েছি ' + money(T.paid) + '</div>'
-    + '<div class="tri"><div><small>চলমান ফাইলে</small><b class="num">' + money(T.run) + '</b></div><div><small>অ্যাপয়েন্টেড</small><b class="num">' + money(T.appt) + '</b></div><div><small>ফেরত দিতে হবে</small><b class="num">' + money(T.over) + '</b></div></div></div>'
+    + '<div class="tri"><div><small>চলমান (ফেরত হতে পারে)</small><b class="num">' + money(T.run) + '</b></div><div><small>অ্যাপয়েন্টেডে বেশি জমা</small><b class="num">' + money(T.appt) + '</b></div><div><small>ফেরত দিতে হবে</small><b class="num">' + money(T.over) + '</b></div></div></div>'
     + '<div class="chips">' + chip('held', 'আমার কাছে জমা আছে (' + T.nHeld + ')') + chip('due', 'কাস্টমারের বাকি (' + T.nDue + ')') + chip('all', 'সব (' + rows.length + ')') + '</div>'
     + '<div class="field"><input id="v_q" type="search" placeholder="🔍 নাম বা সিরিয়াল দিয়ে খুঁজুন" value="' + esc(UI.vq || '') + '" oninput="UI.vq=this.value;reFocus(\'v_q\')" aria-label="কাস্টমার খুঁজুন"></div>'
     + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
     + (list.length ? list.map(x => '<div class="card stack" style="gap:10px"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div>'
       + '<div class="row between"><div><div class="sm mut">আমার কাছে কাস্টমারের টাকা</div><b class="num ' + (x.held > 0.001 ? 'good' : 'mut') + '" style="font-size:22px">' + money(x.held) + '</b></div>' + (x.last ? '<div class="sm mut" style="text-align:right">শেষ জমা<br><b>' + fd(x.last) + '</b></div>' : '') + '</div>'
-      + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>' + (x.mode === 'RETURNED' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(x.bill) + '</b></div><div><small>মোট জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>বাকি</small><b class="' + (x.due ? 'bad' : '') + '">' + Math.round(x.due) + '</b></div></div>'
-      + (x.held > 0.001 ? '<div class="sm mut">' + note(x) + '</div>' : '') + '</div>').join('') : '<div class="empty">' + (q ? 'এই নামে কিছু পাওয়া যায়নি' : (f === 'held' ? 'এখন কোনো কাস্টমারের জমা টাকা আমার কাছে নেই' : (f === 'due' ? 'কোনো কাস্টমারের বাকি নেই' : 'ভিসা ফাইল পাওয়া যায়নি'))) + '</div>')
-    + '<p class="mut sm" style="text-align:center;margin:0">হিসাব: ডেলিভারির আগে যত জমা নিয়েছেন সবটাই কাস্টমারের গচ্ছিত টাকা ধরা হয়। ডেলিভারড হলে বিল পর্যন্ত টাকা আপনার আয়ে যায়, বেশি জমা থাকলে সেটা ফেরত দেওয়ার টাকা হিসেবে দেখায়। জমা এন্ট্রি ভিসা অ্যাপ থেকেই আসে, এখানে আলাদা লিখতে হয় না।</p>';
+      + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>' + (x.mode === 'RETURNED' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(x.mode === 'RETURNED' ? x.kept : x.bill) + '</b></div><div><small>মোট জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>' + (x.mode === 'RUNNING' ? 'পেতে পারি' : 'বাকি') + '</small><b class="' + (x.due && x.mode !== 'RUNNING' ? 'bad' : 'mut') + '">' + Math.round(x.due) + '</b></div></div>'
+      + (x.mode === 'RETURNED' ? visaRefBanner(x) : (x.held > 0.001 ? '<div class="sm mut">' + note(x) + '</div>' : '')) + '</div>').join('') : '<div class="empty">' + (q ? 'এই নামে কিছু পাওয়া যায়নি' : (f === 'held' ? 'এখন কোনো কাস্টমারের জমা টাকা আমার কাছে নেই' : (f === 'due' ? 'কোনো কাস্টমারের বাকি নেই' : 'ভিসা ফাইল পাওয়া যায়নি'))) + '</div>')
+    + '<p class="mut sm" style="text-align:center;margin:0">হিসাব: অ্যাপয়েন্টমেন্টের আগে (চলমান ফাইলে) যত জমা নিয়েছেন সবটাই কাস্টমারের গচ্ছিত টাকা — ফেরত দিতে হতে পারে। অ্যাপয়েন্টমেন্ট হলে বিল পর্যন্ত টাকা আপনার, বেশি জমা থাকলে সেটা ফেরত দেওয়ার টাকা। ফেরত ফাইলে জমা − রাখা চার্জ − ফেরত দেওয়া যা বাকি তাও কাস্টমারের টাকা। জমা এন্ট্রি ভিসা অ্যাপ থেকেই আসে।</p>';
 }
 
 /* ===== সেটিংস ===== */
@@ -1082,6 +1093,46 @@ const DF = {
   done: ['ডেলিভারড', x => x.d.status === 'done'], ret: ['ফেরত', x => x.d.status === 'ret'], due: ['টাকা বাকি', x => x.c.due > 0],
   cost: ['খরচ বাকি', x => x.d.status !== 'ret' && n(x.d.cost) > 0 && !x.d.costDone], refund: ['ফেরত দিতে বাকি', x => x.c.refundDue > 0]
 };
+/* ===== ডকুমেন্ট ক্যাশ: শুধু ক্লায়েন্টের জমা টাকা দিনের শেষে মেলানোর জন্য (আয় না, রেভিনিউতে ধরা হয় না) ===== */
+function dcDay(D) {
+  const rows = []; let inn = 0, out = 0;
+  Object.values(S.docs).forEach(d => {
+    arr(d.payments).forEach(p => { if (p.date === D) { inn += n(p.amt); rows.push({ t: 'in', nm: d.name || 'নাম নেই', cat: d.cat || '', amt: n(p.amt), by: p.by || '' }); } });
+    arr(d.refunds).forEach(p => { if (p.date === D) { out += n(p.amt); rows.push({ t: 'out', nm: d.name || 'নাম নেই', cat: d.cat || '', amt: n(p.amt), by: p.by || '' }); } });
+  });
+  return { rows, inn, out, exp: inn - out };
+}
+function dcStat(D) { const X = dcDay(D), e = S.dcash[D], has = !!e, diff = has ? n(e.amt) - X.exp : 0; return Object.assign({ has, diff, amt: has ? n(e.amt) : 0 }, X); }
+function dcashCard() {
+  const D = UI.dcd || today(), X = dcStat(D), e = S.dcash[D] || {}, rel = relDay(D);
+  const ok = X.has && Math.abs(X.diff) < 0.5;
+  const pill = !X.has ? '<span class="pill warn">গোনা হয়নি</span>' : (ok ? '<span class="pill good">✓ মিলেছে</span>' : '<span class="pill bad">⚠ ' + (X.diff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(X.diff)) + '</span>');
+  const days = []; for (let i = 6; i >= 0; i--) days.push(addD(D, -i)); days.reverse();
+  const hist = days.map(d => { const z = dcStat(d); if (!z.has && !z.inn && !z.out) return ''; return '<div style="display:grid;grid-template-columns:62px 1fr 1fr 1fr;gap:4px;align-items:center;padding:7px 0;border-top:1px solid var(--line);cursor:pointer' + (d === D ? ';font-weight:700;color:var(--acc)' : '') + '" onclick="dcJump(' + jarg(d) + ')"><span class="sm">' + fd(d) + '</span><span class="num sm" style="text-align:right">' + Math.round(z.exp) + '</span><span class="num sm" style="text-align:right">' + (z.has ? Math.round(z.amt) : '—') + '</span><b class="num sm ' + (!z.has ? 'mut' : (Math.abs(z.diff) < 0.5 ? 'good' : 'bad')) + '" style="text-align:right">' + (z.has ? (Math.abs(z.diff) < 0.5 ? '✓' : (z.diff > 0 ? '+' : '−') + Math.round(Math.abs(z.diff))) : '—') + '</b></div>'; }).join('');
+  return '<div class="card stack" style="gap:10px"><div class="row between"><b>💵 ডকুমেন্ট ক্যাশ — জমা মেলান</b>' + pill + '</div>'
+    + '<div class="row between"><button class="ib" onclick="dcShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dc_dsel" type="date" value="' + D + '" onchange="dcJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + '</div></div><button class="ib" onclick="dcShift(1)" aria-label="পরের দিন">›</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>জমা নিয়েছি</small><b class="good">' + money(X.inn) + '</b></div><div><small>ফেরত দিয়েছি</small><b class="' + (X.out ? 'bad' : '') + '">' + money(X.out) + '</b></div><div><small>ক্যাশে থাকার কথা</small><b>' + money(X.exp) + '</b></div></div>'
+    + '<div class="grid2" style="grid-template-columns:1fr 1.3fr"><input id="dc_amt" type="number" inputmode="decimal" placeholder="৳ গুনে পেলাম" value="' + (X.has ? n(e.amt) : '') + '" aria-label="ডকুমেন্ট ক্যাশে গোনা টাকা"><input id="dc_note" placeholder="📝 নোট (ঐচ্ছিক)" value="' + esc(e.note || '') + '" aria-label="নোট"></div>'
+    + '<div class="row"><button class="btn" style="flex:1" onclick="dcSave(' + jarg(D) + ')">সেভ করুন</button>' + (X.exp > 0 ? '<button class="btn ghost" onclick="$(\'dc_amt\').value=' + Math.round(X.exp) + '">যা থাকার কথা</button>' : '') + (X.has ? '<button class="btn sm danger" onclick="arm(this,function(){dcDel(' + jarg(D) + ')})">মুছুন</button>' : '') + '</div>'
+    + (X.rows.length ? '<details><summary class="sm mut" style="cursor:pointer">' + rel + 'র ' + X.rows.length + 'টি জমা/ফেরত এন্ট্রি দেখুন</summary>' + X.rows.map(r => '<div class="kv"><span style="color:var(--ink);min-width:0">' + esc(r.nm) + '<div class="sm mut">' + esc(r.cat) + (r.by ? ' · ' + esc(r.by) : '') + '</div></span><b class="num ' + (r.t === 'out' ? 'bad' : 'good') + '">' + (r.t === 'out' ? '−' : '') + money(r.amt) + '</b></div>').join('') + '</details>' : '<div class="mut sm">এই দিনে ডকুমেন্টের কোনো জমা এন্ট্রি নেই</div>')
+    + (hist ? '<div class="stack" style="gap:0"><div class="sm mut" style="display:grid;grid-template-columns:62px 1fr 1fr 1fr;gap:4px;font-weight:700"><span>তারিখ</span><span style="text-align:right">থাকার কথা</span><span style="text-align:right">গোনা</span><span style="text-align:right">ফারাক</span></div>' + hist + '</div>' : '')
+    + '<div class="mut sm">এটা শুধু ক্লায়েন্টের জমা টাকা মেলানোর জন্য — আয়ে ধরা হয় না। আয় ধরা হয় ডেলিভারি/ফেরতের সময় ডকুমেন্ট কাজের লাভ থেকে।</div></div>';
+}
+function dcShift(k) { UI.dcd = addD(UI.dcd || today(), k); if (UI.dcd === today()) UI.dcd = ''; render(); }
+function dcJump(d) { UI.dcd = (!d || d === today()) ? '' : d; render(); }
+function dcSave(D) {
+  const raw = val('dc_amt').trim(); if (raw === '') { toast('গোনা টাকার অংক লিখুন'); return; }
+  const amt = n(raw); if (amt < 0) { toast('টাকার অংক ঋণাত্মক হতে পারে না'); return; }
+  const ex = S.dcash[D]; S.dcash[D] = { id: D, date: D, amt, note: val('dc_note').trim(), by: actor(), createdAt: ex ? ex.createdAt : Date.now(), updatedAt: Date.now() };
+  save('dcash', D); render(); const z = dcStat(D); toast(Math.abs(z.diff) < 0.5 ? '✓ মিলেছে' : 'সেভ হয়েছে — ' + (z.diff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(z.diff)));
+}
+function dcDel(D) { remove('dcash', D); render(); toast('মুছে গেছে'); }
+function dcashAlert() {
+  if (new Date().getHours() < 17) return ''; const t = today(), z = dcStat(t);
+  if (!z.inn && !z.out) return ''; if (z.has && Math.abs(z.diff) < 0.5) return '';
+  return '<div class="alert" onclick="UI.dcd=\'\';go(\'doc\')"><span class="avatar w">' + ic('wallet') + '</span><div style="flex:1;min-width:0"><b>' + (z.has ? 'ডকুমেন্ট ক্যাশ মেলেনি' : 'ডকুমেন্টের আজকের জমা মেলানো হয়নি') + '</b><div class="sm mut">থাকার কথা ' + money(z.exp) + (z.has ? ' · গোনা ' + money(z.amt) : '') + '</div></div>' + (z.has ? '<b class="num bad">' + money(Math.abs(z.diff)) + '</b>' : '') + '</div>';
+}
+
 function vDoc() {
   const t0 = today(); const q = UI.dq.trim().toLowerCase(); const now = new Date();
   const mo = t0.slice(0, 7), lm = ymd(new Date(now.getFullYear(), now.getMonth() - 1, 1)).slice(0, 7);
@@ -1097,7 +1148,7 @@ function vDoc() {
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div><div><small>লাভ হয়েছে</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></div></div>'
     + '<div class="row between wrapr sm mut"><span>' + list.length + 'টি কাজ · চলমান ' + cnt('run') + ' · ডেলিভারড ' + cnt('done') + ' · ফেরত ' + cnt('ret') + '</span><span>মোট খরচ ' + money(T.cost) + '</span></div></div>';
   const cats = ['all'].concat(S.settings.docCats); const CC = docCatStats(q, mo, lm);
-  return sum + docCatCard(CC)
+  return dcashCard() + sum + docCatCard(CC)
     + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
     + '<div class="hs">' + cats.map(c => chipB((c === 'all' ? 'সব ধরন' : c) + ' (' + ((CC[c] && CC[c].n) || 0) + ')', UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
     + '<div class="hs">' + Object.keys(DF).map(k => { const cn = base.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
@@ -1322,7 +1373,13 @@ function cRow(c, showDate) {
 }
 function vCnt() {
   const D = UI.cd || today();
-  return cntDateNav(D) + (UI.cm === 'each' ? cntEach(D) : cashDayView(D));
+  return cntDateNav(D) + cashDayView(D) + cntLegacy();
+}
+// পুরনো এন্ট্রির বাকি (আগে যেগুলো আলাদা আলাদা লেখা হয়েছিল) — নতুন এন্ট্রি আর লেখা হয় না
+function cntLegacy() {
+  const dueL = Object.values(S.cnt).filter(c => cntCalc(c).due > 0.001).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  if (!dueL.length) return '';
+  return '<div class="card stack" style="gap:6px"><b>পুরনো এন্ট্রির বাকি (' + dueL.length + 'টি)</b><div class="mut sm">আগে প্রতিটি কাজ আলাদা লেখা হতো, সেগুলোর বাকি এখানে। নতুন করে আর প্রতিটি এন্ট্রি লিখতে হবে না — শুধু দিন শেষে দুই কাউন্টারের মোট টাকা লিখুন।</div><div style="padding:0">' + dueL.map(c => cRow(c, true)).join('') + '</div></div>';
 }
 function cntEach(D) {
   const all = Object.values(S.cnt);
@@ -1455,8 +1512,7 @@ function cashModel() {
 
 /* ---------- কাউন্টার ট্যাব: তারিখ + মোড ---------- */
 function cntDateNav(D) {
-  return '<div class="card row between"><button class="ib" onclick="cShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="c_dsel" type="date" value="' + D + '" onchange="cDate(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + relDay(D) + '</div></div><button class="ib" onclick="cShift(1)" aria-label="পরের দিন">›</button></div>'
-    + '<div class="seg"><button class="' + (UI.cm !== 'each' ? 'on' : '') + '" onclick="UI.cm=\'day\';render()">দিন শেষের ক্যাশ</button><button class="' + (UI.cm === 'each' ? 'on' : '') + '" onclick="UI.cm=\'each\';render()">প্রতিটি এন্ট্রি</button></div>';
+  return '<div class="card row between"><button class="ib" onclick="cShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="c_dsel" type="date" value="' + D + '" onchange="cDate(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + relDay(D) + '</div></div><button class="ib" onclick="cShift(1)" aria-label="পরের দিন">›</button></div>';
 }
 function cashDayView(D) {
   const M = cashModel(), dd = M.day[D] || {}, rel = relDay(D), off = D !== today();
@@ -1478,7 +1534,7 @@ function cashDayView(D) {
   const hist = '<div class="card stack" style="gap:2px;overflow-x:auto"><b style="margin-bottom:6px">গত ৭ দিনের ক্যাশ (৳)</b><div class="sm mut" style="display:grid;gap:4px;font-weight:700;' + cols + '"><span>তারিখ</span>' + M.A.map(a => '<span style="text-align:right">' + esc(a.name) + '</span>').join('') + '<span style="text-align:right">মোট</span></div>'
     + days.map(d => { const r = M.day[d] || {}; let t = 0; const cells = M.A.map(a => { const x = r[a.id]; if (x) t += x.coll; return '<span class="num sm" style="text-align:right">' + (x ? Math.round(x.coll) : '—') + '</span>'; }).join(''); return '<div style="display:grid;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;' + cols + (d === D ? ';font-weight:700;color:var(--acc)' : '') + '" onclick="cDate(' + jarg(d) + ')"><span class="sm">' + fd(d) + '</span>' + cells + '<b class="num sm" style="text-align:right">' + (t ? Math.round(t) : '—') + '</b></div>'; }).join('') + '</div>';
   return '<div class="card stack" style="gap:12px"><div class="row between"><b>' + rel + 'র দিন শেষের ক্যাশ</b>' + (off ? '<span class="pill warn">⚠ ' + fd(D) + ' তারিখে লিখছেন</span>' : '<span class="pill good">আজ</span>') + '</div>'
-    + '<div class="sm mut">কাউন্টারের সার্ভিস থেকে কোন ক্যাশে সারাদিনে মোট কত টাকা এল সেটা একবারে লিখুন। প্রতিটি কাজ আলাদা লিখতে হবে না — চাইলে উপরের "প্রতিটি এন্ট্রি" ট্যাবে আলাদাও লেখা যায়।</div>'
+    + '<div class="sm mut">দিন শেষে দুই কাউন্টারে সারাদিনে মোট কত টাকা এল সেটা একবার লিখুন। প্রতিটি কাজ আলাদা লিখতে হবে না। এই টাকাই কাউন্টারের আয় (রেভিনিউ) হিসেবে যোগ হয়। ডকুমেন্টের জমা টাকা এখানে নয় — সেটা ডকুমেন্ট ট্যাবের ক্যাশে মেলানো হয়।</div>'
     + rows
     + '<div class="row between" style="padding:2px 4px"><b>' + rel + 'র মোট</b><b class="num good" style="font-size:20px" id="cx_tot">' + money(sum) + '</b></div>'
     + '<button class="btn block" onclick="cashDaySave(' + jarg(D) + ')">সেভ করুন</button>'
@@ -1544,7 +1600,7 @@ function cmvDel() { remove('cmv', window._cmv.id); closeSheet(); toast('মু�
 /* ---------- সেটিংসে ক্যাশ অ্যাকাউন্ট ---------- */
 function cashSetCard() {
   const A = S.settings.cash, staff = S.settings.staff;
-  return '<div class="card stack" style="gap:10px"><b>💵 কাউন্টার ক্যাশ অ্যাকাউন্ট</b><span class="mut sm">প্রতিটা ক্যাশ একজনের নামে (যেমন Cash 1 = Rajan)। দিন শেষে কাউন্টার ট্যাবে প্রতিটা ক্যাশের টাকা লেখা হয়। "কার ক্যাশ" এ স্টাফের নাম দিলে "প্রতিটি এন্ট্রি" তে ওই নামে নেওয়া টাকাও নিজে থেকে এই ক্যাশে মিলে যায়। ক্যাশ মুছলে তার আগের এন্ট্রি আর হিসাবে ধরা হবে না।</span>'
+  return '<div class="card stack" style="gap:10px"><b>💵 কাউন্টার ক্যাশ অ্যাকাউন্ট</b><span class="mut sm">কাউন্টার থাকবে ২টি (কাউন্টার ১, কাউন্টার ২)। দিন শেষে কাউন্টার ট্যাবে প্রতিটার মোট টাকা লিখুন — সেটাই কাউন্টারের আয়। "কার ক্যাশ" ঐচ্ছিক। ডকুমেন্টের জমা টাকা মেলানো আলাদা, ডকুমেন্ট ট্যাবে হয়।</span>'
     + A.map((a, i) => '<div class="ipbox stack" style="gap:8px"><div class="grid2"><div class="field"><label>ক্যাশের নাম</label><input value="' + esc(a.name) + '" onchange="cashSet(' + i + ',\'name\',this.value)"></div><div class="field"><label>কার ক্যাশ</label><select onchange="cashSet(' + i + ',\'owner\',this.value)"><option value="">— কেউ না —</option>'
       + staff.map(s => '<option value="' + esc(s) + '"' + (s === a.owner ? ' selected' : '') + '>' + esc(s) + '</option>').join('') + (a.owner && !staff.includes(a.owner) ? '<option value="' + esc(a.owner) + '" selected>' + esc(a.owner) + '</option>' : '') + '</select></div></div>'
       + '<button class="btn sm danger" style="align-self:flex-start" onclick="arm(this,function(){cashRm(' + i + ')})">এই ক্যাশ মুছুন</button></div>').join('')
@@ -1559,7 +1615,7 @@ function curHisab() {
   const M = cashModel(), E = ipEngine(), files = Object.values(S.files), docs = Object.values(S.docs), cnts = Object.values(S.cnt), cloud = MODE === 'cloud';
   const pp = files.map(f => ({ f, d: fileCalc(f).due })).filter(x => x.d > 0.001), dd = docs.map(d => ({ d, c: docCalc(d) }));
   const docD = dd.filter(x => x.c.due > 0.001), refD = dd.filter(x => x.c.refundDue > 0.001), cnD = cnts.filter(c => cntCalc(c).due > 0.001), refP = files.map(f => ({ f, c: fileCalc(f) })).filter(x => x.c.refundDue > 0.001);
-  const vr = cloud ? VISA.rows : [], vDue = vr.filter(v => n(v.due) > 0.001), vHeldRows = vr.filter(v => visaHeld(v) > 0.001);
+  const vr = cloud ? VISA.rows : [], vDue = vr.filter(v => n(v.due) > 0.001 && v.mode !== 'RUNNING'), vHeldRows = vr.filter(v => visaHeld(v) > 0.001);
   const sum = (arr2, fn) => arr2.reduce((t, x) => t + fn(x), 0);
   const ppDue = sum(pp, x => x.d), docDue = sum(docD, x => x.c.due), cntDue = sum(cnD, c => cntCalc(c).due), visaDue = sum(vDue, v => n(v.due)), refDoc = sum(refD, x => x.c.refundDue), refPP = sum(refP, x => x.c.refundDue), refDue = refDoc + refPP;
   const vHeld = sum(vHeldRows, v => visaHeld(v));
@@ -1596,7 +1652,7 @@ function curHisab() {
     + (M.A.length ? '<div class="card tdy" onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')"><span class="ico">' + ic('wallet') + '</span><div style="flex:1;min-width:0"><b>আজকের কাউন্টার আয়</b><div class="sm mut">' + (tdGot ? 'দিন শেষের ক্যাশ ' + tdGot + '/' + M.A.length + 'টি লেখা হয়েছে' : 'দিন শেষের ক্যাশ এখনও লেখা হয়নি') + '</div></div><b class="num ' + (tdAmt > 0 ? 'good' : 'mut') + '" style="font-size:19px">' + money(tdAmt) + '</b></div>' : '')
     + (pLines.length ? '<div class="card">' + head('⬇ আমি পাব', pabo, 'good') + pLines.join('') + '</div>' : '<div class="card"><b>⬇ আমি পাব</b><div class="mut sm" style="margin-top:6px">এখন কারো কাছে কিছু পাওনা নেই 🎉</div></div>')
     + (dLines.length ? '<div class="card">' + head('⬆ আমি দেব', debo, 'bad') + dLines.join('') + '</div>' : '<div class="card"><b>⬆ আমি দেব</b><div class="mut sm" style="margin-top:6px">এখন কাউকে কিছু দেওয়ার নেই</div></div>')
-    + (cloud ? '<div class="card cl" style="padding:14px 16px" onclick="UI.vf=\'held\';go(\'vjoma\')"><div class="t"><span class="ico w">' + ic('plane') + '</span><div class="nmx"><b>ভিসা কাস্টমারের গচ্ছিত টাকা</b><span class="sm mut">' + (vHeldRows.length ? vHeldRows.length + ' জন কাস্টমারের জমা, ডেলিভারির আগে আমার কাছে · আয় না' : 'এখন কারো জমা আমার কাছে নেই') + '</span></div><b class="num warnc">' + money(vHeld) + '</b></div></div>' : '')
+    + (cloud ? '<div class="card cl" style="padding:14px 16px" onclick="UI.vf=\'held\';go(\'vjoma\')"><div class="t"><span class="ico w">' + ic('plane') + '</span><div class="nmx"><b>ভিসা কাস্টমারের গচ্ছিত টাকা</b><span class="sm mut">' + (vHeldRows.length ? vHeldRows.length + ' জন কাস্টমারের জমা, অ্যাপয়েন্টমেন্টের আগে বা ফেরতের বাকি · আয় না' : 'এখন কারো জমা আমার কাছে নেই') + '</span></div><b class="num warnc">' + money(vHeld) + '</b></div></div>' : '')
     + (top.length ? '<div class="card"><div class="sect"><b>🔝 সবচেয়ে বেশি বাকি</b><span class="sm mut">পাব তালিকা থেকে</span></div>' + top.map((x, i) => '<div class="top5" onclick="' + x.js + '"><span class="rk">' + (i + 1) + '</span><div style="flex:1;min-width:0"><b style="font-weight:600">' + esc(x.nm) + '</b><div class="sm mut">' + x.src + '</div></div><b class="num bad">' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
     + '<p class="mut sm" style="text-align:center;margin:0">ক্যাশ এই হিসাবে ধরা হয় না। দিন শেষে ক্যাশে যত টাকা লেখেন সেটা শুধু আয়ে যোগ হয়। গচ্ছিত টাকা কাস্টমারের, তাই পাব/দেব/নিটে ধরা হয় না। ভিসার তথ্য ভিসা অ্যাপ থেকে অটো আসে।</p>';
 }
