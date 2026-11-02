@@ -249,7 +249,7 @@ let AUTH = lsGet(K.auth, null);        // {email, refresh}
 let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
 let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
 let tab = 'home', fm = null;
-const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day', dcd: '' };
+const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day', dcd: '', lm: 'month', ld: '', lmo: '' };
 
 function norm(d) {
   const base = DEF(); if (!d || typeof d !== 'object') return base;
@@ -261,7 +261,7 @@ function norm(d) {
   ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
   s.fixed = Object.assign({}, base.settings.fixed, (d.settings && d.settings.fixed) || {}); ['shop', 'personal'].forEach(k => { s.fixed[k] = arr(s.fixed[k]); });
   const freshCash = !(d.settings && d.settings.cash); s.cash = arr(s.cash).filter(a => a && a.id).map(a => ({ id: String(a.id), name: String(a.name || 'Cash'), owner: String(a.owner || '') }));
-  const freshW = !(d.settings && d.settings.wallets); s.wallets = (freshW ? DEFWALLETS() : arr(s.wallets)).filter(w => w && w.id).map(w => ({ id: String(w.id), name: String(w.name || 'Drawer/Wallet'), kind: String(w.kind || 'drawer'), sub: String(w.sub || ''), owner: String(w.owner || ''), openBal: parseFloat(w.openBal) || 0 }));
+  const freshW = !(d.settings && d.settings.wallets); s.wallets = (freshW ? DEFWALLETS() : arr(s.wallets)).filter(w => w && w.id).map(w => ({ id: String(w.id), name: String(w.name || 'Drawer/Wallet'), kind: String(w.kind || 'drawer'), sub: String(w.sub || ''), owner: String(w.owner || ''), acct: String(w.acct || ''), openBal: parseFloat(w.openBal) || 0 }));
   if (freshCash) s.cash.forEach(a => { if (a.owner && !s.staff.includes(a.owner)) s.staff.push(a.owner); });
   const out = { settings: s, expenses: d.expenses || {}, loans: d.loans || {}, files: d.files || {}, ipPays: d.ipPays || {}, docs: d.docs || {}, cnt: d.cnt || {}, cday: d.cday || {}, cmv: d.cmv || {}, dcash: d.dcash || {}, alog: d.alog || {}, dclose: d.dclose || {}, wtx: d.wtx || {}, vmeta: d.vmeta || {} };
   Object.values(out.files).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); });
@@ -460,8 +460,8 @@ function range() {
 }
 const inR = (d, r) => d && (!r[0] || d >= r[0]) && (!r[1] || d <= r[1]);
 
-function overall() {
-  const r = range(); const o = { pp: { kept: 0, retN: 0, refDue: 0, n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, visaKept: 0, visaRetN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 }, cash: { coll: 0, extra: 0, by: {} } };
+function overall(rr) {
+  const r = rr || range(); const o = { pp: { kept: 0, retN: 0, refDue: 0, n: 0, bill: 0, paid: 0, due: 0, fee: 0, ip: 0, profit: 0 }, exp: { shop: 0, personal: 0, income: 0 }, byCat: {}, visa: 0, visaN: 0, visaKept: 0, visaRetN: 0, doc: { n: 0, cnt: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0, byCat: {} }, cn: { n: 0, bill: 0, paid: 0, due: 0, cost: 0, profit: 0 }, cash: { coll: 0, extra: 0, by: {} } };
   Object.values(S.files).forEach(f => { if (!inR(f.appDate, r)) return; const c = fileCalc(f); const p = o.pp; const sp = !c.ret || f.retSpent; p.n++; p.bill += c.bill; p.paid += c.paid; p.due += c.due; p.fee += sp ? n(f.passFee) : 0; p.ip += sp ? c.ip : 0; p.profit += c.profit; if (c.ret) { p.retN++; p.kept += c.kept; p.refDue += c.refundDue; } });
   Object.values(S.expenses).forEach(e => { if (!inR(e.date, r)) return; o.exp[e.kind] += n(e.amt); if (e.kind === 'shop') o.byCat[e.cat] = (o.byCat[e.cat] || 0) + n(e.amt); });
   Object.values(S.docs).forEach(d => {
@@ -471,7 +471,7 @@ function overall() {
   });
   Object.values(S.cnt).forEach(cc => { if (!inR(cc.date, r)) return; const k = cntCalc(cc); const x = o.cn; x.n++; x.bill += k.total; x.paid += k.paid; x.due += k.due; x.cost += k.cost; x.profit += k.profit; });
   { const CM = cashModel(); Object.keys(CM.day).forEach(d => { if (!inR(d, r)) return; Object.keys(CM.day[d]).forEach(id => { const x = CM.day[d][id]; o.cash.coll += x.coll; o.cash.extra += x.extra; o.cash.by[id] = (o.cash.by[id] || 0) + x.coll; }); }); }
-  VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if (UI.period === 'all' || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; if (v.mode === 'RETURNED') { o.visaKept += v.profit; o.visaRetN++; } } });
+  VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if ((!rr && UI.period === 'all') || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; if (v.mode === 'RETURNED') { o.visaKept += v.profit; o.visaRetN++; } } });
   let wtxRev = 0; Object.values(S.wtx || {}).forEach(t => { if (!t || !inR(t.date, r)) return; if (t.type === 'visa_return') wtxRev += n(t.kept); else if (t.isRev && t.dir === 'in') wtxRev += n(t.amt); });
   o.wtxRev = wtxRev;
   o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit + o.cash.extra + wtxRev; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
@@ -510,7 +510,7 @@ function render() {
   document.body.classList.toggle('nonav', MODE === '');
   if (MODE === '') { $('side').innerHTML = ''; renderLogin(); return; }
   if (isStaff() && !STAFF_TABS.includes(tab)) tab = 'doc';
-  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), dhisab: '৩ ড্রয়ার + বিকাশ/নগদ/রকেট/উপায় + ব্যাংক · দিন শেষে মেলান', cash: 'কাউন্টার থেকে আয়, মাস অনুযায়ী', pass: 'ক্লায়েন্ট, IP ও জমা', ref: 'কার কয়টি ফাইল, কত হিসাব', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'দিন শেষের হিসাব · ২টি কাউন্টার', exp: 'দোকান ও ব্যক্তিগত', more: 'CSV ও ব্যাকআপ', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', vjoma: 'কাস্টমারের কত টাকা আমার কাছে', set: 'ড্রয়ার/ব্যাংক, ক্যাশ ও লিস্ট', today: 'আজকের সব কাজ এক নজরে', alog: 'কে কখন কী লিখেছে — ভুল হলে ঠিক করুন' };
+  const subs = { home: new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }), dhisab: 'সহজ টোটাল মেথড · শুরুতে ছিল + আজ জমা − আজ খরচ = থাকার কথা', cash: 'কাউন্টার থেকে আয়, মাস অনুযায়ী', pass: 'ক্লায়েন্ট, IP ও জমা', ref: 'কার কয়টি ফাইল, কত হিসাব', doc: 'NID, জন্ম নিবন্ধন, পুলিশ ক্লিয়ারেন্স…', cnt: 'দিন শেষের হিসাব · ২টি কাউন্টার', exp: 'দোকান ও ব্যক্তিগত', more: 'CSV ও ব্যাকআপ', loan: 'কে কবে নিল, কবে দিল', visa: 'ভিসা অ্যাপ থেকে অটো', vjoma: 'কাস্টমারের কত টাকা আমার কাছে', set: 'ড্রয়ার/ব্যাংক, ক্যাশ ও লিস্ট', today: 'আজকের সব কাজ এক নজরে', alog: 'কে কখন কী লিখেছে — ভুল হলে ঠিক করুন' };
   if (isStaff()) subs[tab] = 'স্টাফ মোড' + (ME ? ' · ' + ME : '');
   const body = ({ home: vHome, dhisab: vDhisab, cash: vCash, pass: vPass, ref: vRef, doc: vDoc, cnt: vCnt, exp: vExp, loan: vLoan, visa: vVisa, vjoma: vJoma, more: vMore, set: vSet, today: vToday, alog: vAlog })[tab]();
   renderSide();
@@ -557,7 +557,7 @@ function vHome() {
   const per = '<div class="seg">' + [['month', 'এই মাস'], ['last', 'গত মাস'], ['year', 'বছর'], ['all', 'সব'], ['custom', 'বাছাই']].map(x => '<button class="' + (p === x[0] ? 'on' : '') + '" onclick="UI.period=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
     + (p === 'custom' ? '<div class="grid2"><div class="field"><label for="c_from">থেকে</label><input id="c_from" type="date" value="' + UI.from + '" onchange="UI.from=this.value;render()"></div><div class="field"><label for="c_to">পর্যন্ত</label><input id="c_to" type="date" value="' + UI.to + '" onchange="UI.to=this.value;render()"></div></div>' : '');
   const cats = Object.entries(o.byCat).sort((a, b) => b[1] - a[1]); const mx = cats.length ? cats[0][1] : 1;
-  const hero = '<div class="card hero"><div class="sm" style="opacity:.75">দোকানের নিট লাভ</div><div class="big num">' + money(o.net) + '</div><div class="sm" style="opacity:.75">ব্যক্তিগত খরচের পর হাতে থাকল <b class="num" style="opacity:1">' + money(o.left) + '</b></div>'
+  const hero = '<div class="card hero"><div class="sm" style="opacity:.75">দোকানের নিট লাভ</div><div class="big num">' + money(o.net) + '</div><div class="sm" style="opacity:.75">ব্যক্তিগত খরচ <b class="num" style="opacity:1">' + money(o.exp.personal) + '</b> <span style="opacity:.8">(লাভ থেকে বাদ দেওয়া হয়নি)</span></div>'
     + '<div class="tri"><div><small>মোট আয়</small><b class="num">' + money(o.income) + '</b></div><div><small>দোকান খরচ</small><b class="num">' + money(o.exp.shop) + '</b></div><div><small>ব্যক্তিগত</small><b class="num">' + money(o.exp.personal) + '</b></div></div></div>';
   const quick = '<div class="quick"><button onclick="fileForm()"><span class="qi">' + ic('id') + '</span>নতুন ফাইল</button><button onclick="UI.ek=\'shop\';expForm()"><span class="qi r">' + ic('receipt') + '</span>খরচ লিখুন</button><button onclick="UI.cd=\'\';UI.cm=\'day\';go(\'cnt\')"><span class="qi w">' + ic('wallet') + '</span>আজকের ক্যাশ</button><button onclick="go(\'pass\')"><span class="qi g">' + ic('coin') + '</span>IP দিন</button></div>';
   let alerts = '';
@@ -729,7 +729,7 @@ function fileForm(id, keep) {
     + '<div class="field"><label for="f_app">আবেদনের তারিখ (আজকের তারিখ নিজে বসেছে, বদলানো যায়)</label><input id="f_app" type="date" value="' + f.appDate + '"></div>'
     + '<div class="ipbox stack" style="gap:8px"><label for="f_joma" style="margin:0;color:var(--ink);font-size:14px">ফাইল joma দেওয়ার তারিখ</label><div class="row"><input id="f_joma" type="date" value="' + (f.jomaDate || '') + '" onchange="fmCalc()"><button type="button" class="btn sm ghost" onclick="$(\'f_joma\').value=today();fmCalc()">আজ</button><button type="button" class="btn sm danger" onclick="$(\'f_joma\').value=\'\';fmCalc()">মুছুন</button></div><div class="sm" id="f_jnote"></div></div>'
     + '<div class="grid2"><div class="field"><label for="f_total">মোট বিল (৳)</label><input id="f_total" type="number" inputmode="decimal" value="' + (f.total === '' ? '' : n(f.total)) + '" oninput="fmCalc()"></div><div class="field"><label for="f_fee">পাসপোর্ট ফি (৳)</label><input id="f_fee" type="number" inputmode="decimal" value="' + (f.passFee === '' ? '' : n(f.passFee)) + '" oninput="fmCalc()"></div></div>'
-    + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_chal" type="checkbox" style="width:auto" ' + (f.challan ? 'checked' : '') + ' onchange="if(this.checked&&!val(\'f_chdate\'))$(\'f_chdate\').value=today()"> চালান করা হয়েছে (পাসপোর্ট ফি দেওয়া হয়েছে)</label><div class="field"><label for="f_chdate">চালানের তারিখ</label><input id="f_chdate" type="date" value="' + (f.challanDate || '') + '"></div></div>'
+    + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_chal" type="checkbox" style="width:auto" ' + (f.challan ? 'checked' : '') + ' onchange="if(this.checked&&!val(\'f_chdate\'))$(\'f_chdate\').value=today()"> চালান করা হয়েছে (পাসপোর্ট ফি দেওয়া হয়েছে)</label><div class="field"><label for="f_chdate">চালানের তারিখ</label><input id="f_chdate" type="date" value="' + (f.challanDate || '') + '"></div>' + chalW(f) + '</div>'
     + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ipon" type="checkbox" style="width:auto" ' + (f.ipOn ? 'checked' : '') + ' onchange="fmCalc()"> এই ফাইলে IP আছে</label>'
     + '<div class="grid2"><div class="field"><label for="f_ipamt">IP এর টাকা (৳)</label><input id="f_ipamt" type="number" inputmode="decimal" value="' + n(f.ipAmt) + '" oninput="fmCalc()"></div></div>'
     + '<div class="sm mut" id="f_ipnote"></div></div>'
@@ -738,10 +738,10 @@ function fileForm(id, keep) {
     + '<div class="grid2"><div class="field"><label for="f_retdate">ফেরতের তারিখ</label><input id="f_retdate" type="date" value="' + (f.retDate || '') + '"></div><div class="field"><label for="f_kept">কত টাকা রাখলাম (৳)</label><input id="f_kept" type="number" inputmode="decimal" value="' + (f.kept === '' || f.kept == null ? '' : n(f.kept)) + '" oninput="fmCalc()"></div></div>'
     + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_rsp" type="checkbox" style="width:auto" ' + (f.retSpent ? 'checked' : '') + ' onchange="rspToggle()"> খরচ হয়ে গেছে (পাসপোর্ট ফি / IP আগেই দেওয়া হয়েছে)</label>'
     + '<div class="field"><label for="f_rcost">কত খরচ হয়ে গেছে (৳)</label><input id="f_rcost" type="number" inputmode="decimal" value="' + (f.retCost === '' || f.retCost == null ? '' : n(f.retCost)) + '" oninput="fmCalc()"></div>'
-    + '<div class="field"><label>ক্লায়েন্টকে কত ফেরত দিয়েছি</label><div id="f_refs"></div><div class="row" style="margin-top:8px"><input id="r_date" type="date" value="' + today() + '"><input id="r_amt" type="number" inputmode="decimal" placeholder="৳"></div><div class="row" style="margin-top:6px">' + wSelectHtml('r_w', 'w_passdoc') + '<button type="button" class="btn sm" onclick="addRef()" style="white-space:nowrap">＋ যোগ</button></div></div></div></div></div>'
+    + '<div class="field"><label>ক্লায়েন্টকে কত ফেরত দিয়েছি</label><div id="f_refs"></div><div class="row" style="margin-top:8px"><input id="r_date" type="date" value="' + today() + '"><input id="r_amt" type="number" inputmode="decimal" placeholder="৳">' + wSelectHtml('r_w', lastW('r_w','w_passdoc')) + '<button type="button" class="btn sm" onclick="addRef()" style="white-space:nowrap">＋ যোগ</button></div></div></div></div></div>'
     + '<div class="card" style="box-shadow:none;background:var(--bg)" id="f_prev"></div>'
-    + '<div class="field"><label>ক্লায়েন্ট কত দিয়েছে (কোন ড্রয়ার/বিকাশ/ব্যাংকে)</label><div id="f_pays"></div>'
-    + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳"></div><div class="row" style="margin-top:6px">' + wSelectHtml('p_w', 'w_passdoc') + '<button class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
+    + '<div class="field"><label>ক্লায়েন্ট কত জমা দিয়েছে</label><div id="f_pays"></div>'
+    + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳">' + wSelectHtml('p_w', lastW('p_w','w_passdoc')) + '<button type="button" class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
     + '<button class="btn block" onclick="saveFile()">সেভ করুন</button>'
     + (f.id ? '<button class="btn danger block" onclick="arm(this,delFile)">ফাইল মুছে ফেলুন</button>' : ''));
   fmCalc();
@@ -767,7 +767,7 @@ function commitList(listKey, field) {
 }
 function grab() {
   fm.name = val('f_name').trim(); fm.phone = val('f_phone').trim(); fm.appDate = val('f_app') || today(); fm.jomaDate = val('f_joma'); fm.total = val('f_total'); fm.passFee = val('f_fee');
-  fm.challan = $('f_chal').checked; fm.challanDate = fm.challan ? (val('f_chdate') || today()) : ''; fm.ipOn = $('f_ipon').checked; fm.ipAmt = val('f_ipamt'); fm.note = val('f_note').trim();
+  fm.challan = $('f_chal').checked; fm.challanDate = fm.challan ? (val('f_chdate') || today()) : ''; fm.challanW = fm.challan ? val('f_chw') : ''; fm.ipOn = $('f_ipon').checked; fm.ipAmt = val('f_ipamt'); fm.note = val('f_note').trim();
   fm.ret = $('f_ret').checked; fm.retDate = fm.ret ? (val('f_retdate') || today()) : ''; fm.kept = val('f_kept'); fm.retSpent = $('f_rsp').checked; fm.retCost = val('f_rcost'); fm.refunds = arr(fm.refunds);
 }
 function fmCalc() {
@@ -789,7 +789,7 @@ function addRef() { const a = n(val('r_amt')); if (a <= 0) { toast('টাকা
 function rmRef(i) { grab(); fm.refunds.splice(i, 1); fileForm(fm.id, true); }
 function refSheetP(id) {
   const f = S.files[id], c = fileCalc(f); ACK = {};
-  sheet('ফেরত দিলাম — ' + esc(f.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', 'w_passdoc', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + '<button class="btn block" onclick="refDoP(\'' + id + '\')">ফেরত সেভ করুন</button>');
+  sheet('ফেরত দিলাম — ' + esc(f.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + '<button class="btn block" onclick="refDoP(\'' + id + '\')">ফেরত সেভ করুন</button>');
 }
 function refDoP(id) {
   const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
@@ -807,7 +807,7 @@ function saveFile() {
 function delFile() { remove('files', fm.id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('মুছে গেছে'); }
 function quickPay(id) {
   const f = S.files[id], c = fileCalc(f);
-  sheet('জমা নিলাম — ' + esc(f.name), '<div class="mut sm">বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div>' + wFieldHtml('q_w', 'w_passdoc', 'কোথায় জমা নিলেন (ড্রয়ার / বিকাশ / নগদ / ব্যাংক)') + '<button class="btn block" onclick="doQuickPay(\'' + id + '\')">জমা করুন</button>');
+  sheet('জমা নিলাম — ' + esc(f.name), '<div class="mut sm">বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোথায় জমা নিলেন (ড্রয়ার / বিকাশ / নগদ / ব্যাংক)') + '<button class="btn block" onclick="doQuickPay(\'' + id + '\')">জমা করুন</button>');
 }
 function doQuickPay(id) { const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } S.files[id].payments.push({ id: uid(), date: val('q_date') || today(), amt: a, w: val('q_w') || 'w_passdoc' }); S.files[id].updatedAt = Date.now(); save('files', id); closeSheet(); toast('জমা হয়েছে'); }
 function jomaOne(id) {
@@ -849,7 +849,25 @@ function ipHistory() {
   if (!ps.length) return '<div class="card sm mut" style="text-align:center">এখনও কোনো IP পেমেন্ট লেখা হয়নি। উপরে "IP এর টাকা দিলাম" চাপুন।</div>';
   return '<div class="card"><b>IP পরিশোধের ইতিহাস</b>' + ps.map(p => '<div class="kv" style="align-items:center;cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)"><b>' + fd(p.date) + '</b><div class="mut sm">' + (p.wk ? fd(p.wk) + ' – ' + fd(wkEnd(p.wk)) + ' সপ্তাহ' : 'পুরনো হিসাব') + '</div>' + (p.note ? '<div class="mut sm">' + esc(p.note) + '</div>' : '') + '</span><span class="num good b">' + money(p.amt) + '</span></div>').join('') + '</div>';
 }
-function toggleChallan(id) { const f = S.files[id]; if (!f.challan) { f.challan = true; f.challanDate = today(); } else { f.challan = false; f.challanDate = ''; } f.updatedAt = Date.now(); save('files', id); render(); toast(f.challan ? 'চালান করা ধরা হয়েছে' : 'চালান আবার বাকি'); }
+function chalW(f) {
+  if (!isMultiW()) return '<input type="hidden" id="f_chw" value="' + esc(f.challanW || 'w_passdoc') + '">';
+  const legacy = f.challan && !f.challanW;
+  let sel = wSelectHtml('f_chw', f.challanW || lastW('f_chw', 'w_passdoc'));
+  if (legacy) sel = sel.replace(' selected', '').replace(/(<select[^>]*>)/, '$1<option value="" selected>— দৈনিক হিসাবে ধরবেন না (পুরনো চালান) —</option>');
+  return '<div class="field"><label for="f_chw">পাসপোর্ট ফি কোন ড্রয়ার / বিকাশ / নগদ / ব্যাংক থেকে দিলেন</label>' + sel + '</div>';
+}
+function toggleChallan(id) {
+  const f = S.files[id];
+  if (f.challan) { f.challan = false; f.challanDate = ''; f.challanW = ''; f.updatedAt = Date.now(); save('files', id); render(); toast('চালান আবার বাকি'); return; }
+  sheet('চালান — ' + esc(f.name || 'ক্লায়েন্ট'), '<div class="mut sm">পাসপোর্ট ফি ' + money(f.passFee) + ' — তারিখ দিয়ে সেভ করলেই দৈনিক হিসাবের খরচ থেকে অটোমেটিক বাদ যাবে।</div>'
+    + '<div class="field"><label for="ch_date">চালানের তারিখ</label><input id="ch_date" type="date" value="' + today() + '"></div>'
+    + wFieldHtml('ch_w', lastW('ch_w', 'w_passdoc'), 'কোন ড্রয়ার / বিকাশ / নগদ / ব্যাংক থেকে দিলেন')
+    + '<button class="btn block" onclick="doChallan(\'' + id + '\')">চালান করা হয়েছে</button>');
+}
+function doChallan(id) {
+  const f = S.files[id]; f.challan = true; f.challanDate = val('ch_date') || today(); f.challanW = val('ch_w') || 'w_passdoc';
+  f.updatedAt = Date.now(); save('files', id); closeSheet(); toast('চালান করা ধরা হয়েছে');
+}
 
 /* ===== ৩) খরচ / আয় ===== */
 function vExp() {
@@ -874,7 +892,7 @@ function expForm(id, cat) {
   const e = id ? S.expenses[id] : null; const kind = e ? e.kind : UI.ek; fm = e ? Object.assign({}, e) : { id: '', kind, date: today(), cat: cat || S.settings.cats[kind][0] || '', amt: '', note: '' };
   sheet((e ? 'এডিট — ' : 'নতুন ') + KIND[kind], '<div class="field"><label>ক্যাটেগরি</label><div class="chips" id="ch_cat">' + catChips(kind) + '</div></div>'
     + '<div class="grid2"><div class="field"><label for="e_date">তারিখ</label><input id="e_date" type="date" value="' + fm.date + '"></div><div class="field"><label for="e_amt">টাকা (৳)</label><input id="e_amt" type="number" inputmode="decimal" value="' + (fm.amt === '' ? '' : n(fm.amt)) + '"></div></div>'
-    + wFieldHtml('e_w', fm.w || 'w_counter', kind === 'income' ? 'কোন ড্রয়ার / বিকাশ / ব্যাংকে জমা হলো' : 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেল') + '<div class="field"><label for="e_note">নোট</label><input id="e_note" value="' + esc(fm.note) + '" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="saveExp()">সেভ করুন</button>'
+    + wFieldHtml('e_w', fm.w || (fm.id ? 'w_counter' : lastW('e_w', 'w_counter', '_' + kind)), kind === 'income' ? 'কোন ড্রয়ার / বিকাশ / ব্যাংকে জমা হলো' : 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেল') + '<div class="field"><label for="e_note">নোট</label><input id="e_note" value="' + esc(fm.note) + '" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="saveExp()">সেভ করুন</button>'
     + (e ? '<button class="btn danger block" onclick="arm(this,delExp)">মুছে ফেলুন</button>' : ''));
 }
 function catChips(kind) { const l = S.settings.cats[kind].slice(); if (fm.cat && !l.includes(fm.cat)) l.unshift(fm.cat); return chipRow(l, fm.cat, 'pickC', '<button type="button" class="chip" onclick="newCat(\'' + kind + '\')">＋ নতুন</button>'); }
@@ -909,7 +927,7 @@ function setDir(k) { window._dir = k; Object.keys(LK).forEach(x => { const e = $
 function personForm() {
   window._dir = 'lend';
   sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name" placeholder="কার সাথে লেনদেন"></div><div class="field"><label for="n_phone">ফোন (ঐচ্ছিক)</label><input id="n_phone" type="tel"></div><div class="field"><label for="n_pnote">📝 নোট (ঐচ্ছিক)</label><input id="n_pnote" placeholder="যেমন: কিসের বাকি, কবে দেবে"></div>'
-    + '<div class="card stack" style="box-shadow:none;background:var(--bg);gap:10px"><b class="sm">প্রথম লেনদেন (ঐচ্ছিক)</b>' + dirSeg('lend') + '<div class="grid2"><div class="field"><label for="n_date">তারিখ</label><input id="n_date" type="date" value="' + today() + '"></div><div class="field"><label for="n_amt">টাকা (৳)</label><input id="n_amt" type="number" inputmode="decimal"></div></div>' + wFieldHtml('n_w', 'w_counter', 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '</div>'
+    + '<div class="card stack" style="box-shadow:none;background:var(--bg);gap:10px"><b class="sm">প্রথম লেনদেন (ঐচ্ছিক)</b>' + dirSeg('lend') + '<div class="grid2"><div class="field"><label for="n_date">তারিখ</label><input id="n_date" type="date" value="' + today() + '"></div><div class="field"><label for="n_amt">টাকা (৳)</label><input id="n_amt" type="number" inputmode="decimal"></div></div>' + wFieldHtml('n_w', lastW('n_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '</div>'
     + '<button class="btn block" onclick="savePerson()">যোগ করুন</button>');
 }
 function savePerson() {
@@ -922,7 +940,7 @@ function quickLoan(id, kind) {
   const l = S.loans[id]; window._dir = kind; const b = loanBal(l);
   sheet(esc(l.person), '<div class="mut sm">এখন ' + (b > 0 ? 'আমি পাব ' + money(b) : (b < 0 ? 'আমি দেব ' + money(-b) : 'কিছু বাকি নেই')) + '</div>' + dirSeg(kind)
     + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal" value="' + (kind === 'lendback' && b > 0 ? b : (kind === 'payback' && b < 0 ? -b : '')) + '"></div></div>'
-    + wFieldHtml('l_w', 'w_counter', 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\',true)">সেভ করুন</button>');
+    + wFieldHtml('l_w', lastW('l_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\',true)">সেভ করুন</button>');
   setTimeout(() => { const e = $('l_amt'); if (e) e.focus(); }, 60);
 }
 function loanSheet(id) {
@@ -938,7 +956,7 @@ function loanSheet(id) {
     + '<div class="field"><label for="ln_note">📝 নোট (এই ব্যক্তির কার্ডে দেখাবে)</label><div class="row"><input id="ln_note" value="' + esc(l.note || '') + '" placeholder="যেমন: কিসের বাকি, কবে দেবে"><button type="button" class="btn sm ghost" onclick="saveLoanNote(\'' + id + '\')">সেভ</button></div></div>'
     + dirSeg(window._dir)
     + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal"></div></div>'
-    + wFieldHtml('l_w', 'w_counter', 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\')">এন্ট্রি যোগ করুন</button>'
+    + wFieldHtml('l_w', lastW('l_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\')">এন্ট্রি যোগ করুন</button>'
     + (withBal.length ? '<div><b class="sm mut">সব লেনদেন (নতুন আগে)</b>' + withBal.map(x => { const e = x.e; return '<div class="kv" style="align-items:center"><span style="color:var(--ink)"><b>' + fd(e.date) + '</b> <span class="pill ' + LK[entryKind(e)].pill + '">' + LK[entryKind(e)].t + '</span> ' + wPill(e.w || 'w_counter') + (e.note ? '<div class="mut sm">' + esc(e.note) + '</div>' : '') + '<div class="mut sm">তখন বাকি: ' + money(Math.abs(x.run)) + (x.run < 0 ? ' (আমি দেব)' : (x.run > 0 ? ' (আমি পাব)' : ' (মিটে গেছে)')) + '</div></span><span class="row"><b class="num">' + money(e.amt) + '</b><button class="x" onclick="rmEntry(\'' + id + '\',\'' + e.id + '\')" aria-label="মুছুন">✕</button></span></div>'; }).join('') + '</div>' : '')
     + '<button class="btn danger block" onclick="arm(this,function(){delPerson(\'' + id + '\')})">এই ব্যক্তির পুরো হিসাব মুছুন</button>');
 }
@@ -1149,7 +1167,7 @@ function mlHtml(p, k) {
 }
 function mlBlock(p, k, label, who) {
   const defW = p === 'dj' ? 'w_passdoc' : 'w_counter';
-  return '<div class="field"><label>' + label + '</label><div id="' + p + '_' + k + '_l">' + mlHtml(p, k) + '</div><div class="row" style="margin-top:8px"><input id="' + p + '_' + k + '_date" type="date" value="' + today() + '"><input id="' + p + '_' + k + '_amt" type="number" inputmode="decimal" placeholder="৳"></div><div class="row" style="margin-top:6px">' + wSelectHtml(p + '_' + k + '_w', defW) + '<button type="button" class="btn sm" onclick="mlAdd(\'' + p + '\',\'' + k + '\')" style="white-space:nowrap">＋ যোগ</button></div></div>' + pkField(p + '_' + k, who);
+  return '<div class="field"><label>' + label + '</label><div id="' + p + '_' + k + '_l">' + mlHtml(p, k) + '</div><div class="row" style="margin-top:8px"><input id="' + p + '_' + k + '_date" type="date" value="' + today() + '"><input id="' + p + '_' + k + '_amt" type="number" inputmode="decimal" placeholder="৳">' + wSelectHtml(p + '_' + k + '_w', lastW(p + '_' + k + '_w', defW)) + '<button type="button" class="btn sm" onclick="mlAdd(\'' + p + '\',\'' + k + '\')" style="white-space:nowrap">＋ যোগ</button></div></div>' + pkField(p + '_' + k, who);
 }
 function mlAdd(p, k) {
   const o = SX[p].get(); const a = n(val(p + '_' + k + '_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
@@ -1335,14 +1353,14 @@ function djSave() {
   if (d.status === 'done' && d.doneDate && d.doneDate < d.recvDate) w.push('ডেলিভারির তারিখ নেওয়ার তারিখের আগে');
   if (w.length && !d._ack) { d._ack = true; $('dj_warn').innerHTML = '⚠ ' + w.map(esc).join('<br>⚠ ') + '<br><b>ঠিক থাকলে আবার "সেভ" চাপুন</b>'; $('dj_save').textContent = 'তবুও সেভ করুন'; $('dj_warn').scrollIntoView({ block: 'center' }); return; }
   const id = d.id || uid(); const old = d._orig;
-  const rec = { id, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
+  const rec = { id, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, costDate: d.costDone ? ((old && old.costDate) || today()) : '', status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
   commit('docs', rec, d._base, logMsgs(old, rec, DKEYS)); DJ = null; closeSheet(); toast('সেভ হয়েছে');
 }
 function spHtml() {
   const l = arr(DJ.spends); return l.length ? l.map((x, i) => '<div class="kv" style="align-items:center"><span>' + fd(x.date) + (x.by ? ' <span class="pill">' + esc(x.by) + '</span>' : '') + ' ' + wPill(x.w || 'w_passdoc') + (x.note ? '<div class="enote">📝 ' + esc(x.note) + '</div>' : '') + '</span><span class="row"><b class="num bad">' + money(x.amt) + '</b><button type="button" class="x" onclick="spRm(' + i + ')" aria-label="মুছুন">✕</button></span></div>').join('') + kv('মোট খরচ করা', '<b>' + money(sumAmt(l)) + '</b>', 'bad') + (n(DJ.cost) > 0 ? kv('মোট খরচ ধরা (উপরের খরচ ঘর)', money(n(DJ.cost))) + kv(n(DJ.cost) >= sumAmt(l) ? 'খরচ বাকি' : 'ধরার চেয়ে বেশি হয়েছে', money(Math.abs(n(DJ.cost) - sumAmt(l))), n(DJ.cost) >= sumAmt(l) ? 'warnc' : 'bad') : '') : '<div class="mut sm">এখনও কোনো খরচ নেই</div>';
 }
 function spBlock() {
-  return '<div class="field"><label>💸 কাজের জন্য খরচ (ড্রয়ার / বিকাশ / ব্যাংক থেকে বাদ যাবে)</label><div id="dj_spends_l">' + spHtml() + '</div><div class="row" style="margin-top:8px"><input id="sp_date" type="date" value="' + today() + '"><input id="sp_amt" type="number" inputmode="decimal" placeholder="৳"></div><div class="row" style="margin-top:6px">' + wSelectHtml('sp_w', 'w_passdoc') + '<input id="sp_note" placeholder="📝 নোট (কী বাবদ)"><button type="button" class="btn sm" onclick="spAdd()" style="white-space:nowrap">＋ যোগ</button></div></div>' + pkField('dj_spends', 'টাকা কে খরচ করল');
+  return '<div class="field"><label>💸 কাজের জন্য খরচ (দৈনিক হিসাব থেকে বাদ যাবে)</label><div id="dj_spends_l">' + spHtml() + '</div><div class="row" style="margin-top:8px"><input id="sp_date" type="date" value="' + today() + '"><input id="sp_amt" type="number" inputmode="decimal" placeholder="৳"></div><div class="row" style="margin-top:6px">' + wSelectHtml('sp_w', lastW('sp_w','w_passdoc')) + '<input id="sp_note" placeholder="📝 নোট (কী বাবদ)"><button type="button" class="btn sm" onclick="spAdd()" style="white-space:nowrap">＋ যোগ</button></div></div>' + pkField('dj_spends', 'টাকা কে খরচ করল');
 }
 function spAdd() {
   const a = n(val('sp_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('dj_spends')) { toast('কে খরচ করল — স্টাফ বাছুন'); return; }
@@ -1351,7 +1369,7 @@ function spAdd() {
 function spRm(i) { djGrab(); DJ.spends.splice(i, 1); djCalc(); }
 function spSheet(id) {
   const o = S.docs[id]; pkInit('q', ME, true);
-  sheet('খরচ করলাম — ' + esc(o.name), '<div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal"></div></div>' + wFieldHtml('q_w', 'w_passdoc', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেল') + '<div class="field"><label for="q_note">📝 নোট (কী বাবদ)</label><input id="q_note"></div>' + pkField('q', 'কে খরচ করল') + '<button class="btn block" onclick="spDo(\'' + id + '\')">খরচ সেভ করুন</button>');
+  sheet('খরচ করলাম — ' + esc(o.name), '<div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেল') + '<div class="field"><label for="q_note">📝 নোট (কী বাবদ)</label><input id="q_note"></div>' + pkField('q', 'কে খরচ করল') + '<button class="btn block" onclick="spDo(\'' + id + '\')">খরচ সেভ করুন</button>');
 }
 function spDo(id) {
   const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('q')) { toast('কে খরচ করল — স্টাফ বাছুন'); return; }
@@ -1363,7 +1381,7 @@ function djDel() { remove('docs', DJ.id); DJ = null; closeSheet(); toast('মু
 /* ----- দ্রুত অ্যাকশন ----- */
 function qpSheet(coll, id) {
   const o = S[coll][id]; const c = coll === 'docs' ? docCalc(o) : cntCalc(o); ACK = {}; pkInit('q', ME, true); const defW = coll === 'docs' ? 'w_passdoc' : 'w_counter';
-  sheet('জমা নিলাম — ' + esc(coll === 'docs' ? o.name : o.svc + (o.name ? ' · ' + o.name : '')), '<div class="mut sm">এখন বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div>' + wFieldHtml('q_w', defW, 'কোথায় জমা নিলেন (ড্রয়ার / বিকাশ / ব্যাংক)') + pkField('q', 'কে নিল') + '<button class="btn block" onclick="qpDo(\'' + coll + '\',\'' + id + '\')">জমা করুন</button>');
+  sheet('জমা নিলাম — ' + esc(coll === 'docs' ? o.name : o.svc + (o.name ? ' · ' + o.name : '')), '<div class="mut sm">এখন বাকি আছে ' + money(c.due) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.due + '"></div></div>' + wFieldHtml('q_w', lastW('q_w', defW), 'কোথায় জমা নিলেন (ড্রয়ার / বিকাশ / ব্যাংক)') + pkField('q', 'কে নিল') + '<button class="btn block" onclick="qpDo(\'' + coll + '\',\'' + id + '\')">জমা করুন</button>');
 }
 function qpDo(coll, id) {
   const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('q')) { toast('কে নিল — স্টাফ বাছুন'); return; }
@@ -1374,7 +1392,7 @@ function qpDo(coll, id) {
 }
 function refSheet(id) {
   const o = S.docs[id]; const c = docCalc(o); ACK = {}; pkInit('q', ME, true);
-  sheet('ফেরত দিলাম — ' + esc(o.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', 'w_passdoc', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + pkField('q', 'কে দিল') + '<button class="btn block" onclick="refDo(\'' + id + '\')">ফেরত সেভ করুন</button>');
+  sheet('ফেরত দিলাম — ' + esc(o.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + pkField('q', 'কে দিল') + '<button class="btn block" onclick="refDo(\'' + id + '\')">ফেরত সেভ করুন</button>');
 }
 function refDo(id) {
   const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } if (pkNeed('q')) { toast('কে দিল — স্টাফ বাছুন'); return; }
@@ -1384,7 +1402,7 @@ function refDo(id) {
   commit('docs', rec, baseOf(old), logMsgs(old, rec, [])); closeSheet(); toast('ফেরত লেখা হয়েছে');
 }
 function djToggleCost(id) {
-  const old = S.docs[id]; const rec = clone(old); rec.costDone = !rec.costDone;
+  const old = S.docs[id]; const rec = clone(old); rec.costDone = !rec.costDone; rec.costDate = rec.costDone ? today() : '';
   commit('docs', rec, baseOf(old), logMsgs(old, rec, ['costDone'])); render(); toast(rec.costDone ? 'খরচ হয়েছে ধরা হলো' : 'খরচ আবার বাকি');
 }
 function djDeliver(id) {
@@ -1392,7 +1410,7 @@ function djDeliver(id) {
   sheet('ডেলিভারি দিলাম — ' + esc(d.name),
     (c.due > 0 ? '<div class="sm bad">⚠ ক্লায়েন্টের কাছে এখনও বাকি ' + money(c.due) + '। এখন টাকা নিলে নিচে লিখুন।</div>' : '<div class="sm good">✓ বিলের সব টাকা জমা আছে</div>')
     + '<div class="field"><label for="dl_date">ডেলিভারির তারিখ</label><input id="dl_date" type="date" value="' + today() + '"></div>'
-    + (c.due > 0 ? '<div class="field"><label for="dl_amt">এখন কত নিলাম (৳, না নিলে খালি রাখুন)</label><input id="dl_amt" type="number" inputmode="decimal" value="' + c.due + '"></div>' + wFieldHtml('dl_w', 'w_passdoc', 'কোথায় জমা নিলেন') + pkField('q', 'কে নিল') : '')
+    + (c.due > 0 ? '<div class="field"><label for="dl_amt">এখন কত নিলাম (৳, না নিলে খালি রাখুন)</label><input id="dl_amt" type="number" inputmode="decimal" value="' + c.due + '"></div>' + wFieldHtml('dl_w', lastW('dl_w','w_passdoc'), 'কোথায় জমা নিলেন') + pkField('q', 'কে নিল') : '')
     + (n(d.cost) > 0 && !d.costDone ? '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="dl_cd" type="checkbox" style="width:auto"> খরচ ' + money(d.cost) + ' হয়ে গেছে</label>' : '')
     + '<button class="btn block" onclick="djDoDeliver(\'' + id + '\')">ডেলিভারি সেভ করুন</button>');
 }
@@ -1753,7 +1771,80 @@ function curHisab() {
     + (dLines.length ? '<div class="card">' + head('⬆ আমি দেব', debo, 'bad') + dLines.join('') + '</div>' : '<div class="card"><b>⬆ আমি দেব</b><div class="mut sm" style="margin-top:6px">এখন কাউকে কিছু দেওয়ার নেই</div></div>')
     + (cloud ? '<div class="card cl" style="padding:14px 16px" onclick="UI.vf=\'held\';go(\'vjoma\')"><div class="t"><span class="ico w">' + ic('plane') + '</span><div class="nmx"><b>ভিসা কাস্টমারের গচ্ছিত টাকা</b><span class="sm mut">' + (vHeldRows.length ? vHeldRows.length + ' জন কাস্টমারের জমা, অ্যাপয়েন্টমেন্টের আগে বা ফেরতের বাকি · আয় না' : 'এখন কারো জমা আমার কাছে নেই') + '</span></div><b class="num warnc">' + money(vHeld) + '</b></div></div>' : '')
     + (top.length ? '<div class="card"><div class="sect"><b>🔝 সবচেয়ে বেশি বাকি</b><span class="sm mut">পাব তালিকা থেকে</span></div>' + top.map((x, i) => '<div class="top5" onclick="' + x.js + '"><span class="rk">' + (i + 1) + '</span><div style="flex:1;min-width:0"><b style="font-weight:600">' + esc(x.nm) + '</b><div class="sm mut">' + x.src + '</div></div><b class="num bad">' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
-    + '<p class="mut sm" style="text-align:center;margin:0">ক্যাশ এই হিসাবে ধরা হয় না। দিন শেষে ক্যাশে যত টাকা লেখেন সেটা শুধু আয়ে যোগ হয়। গচ্ছিত টাকা কাস্টমারের, তাই পাব/দেব/নিটে ধরা হয় না। ভিসার তথ্য ভিসা অ্যাপ থেকে অটো আসে।</p>';
+    + pvCard() + '<p class="mut sm" style="text-align:center;margin:0">ক্যাশ এই হিসাবে ধরা হয় না। দিন শেষে ক্যাশে যত টাকা লেখেন সেটা শুধু আয়ে যোগ হয়। গচ্ছিত টাকা কাস্টমারের, তাই পাব/দেব/নিটে ধরা হয় না। ভিসার তথ্য ভিসা অ্যাপ থেকে অটো আসে।</p>';
+}
+/* ---------- বর্তমান হিসাবের শেষে: লাভ, তার নিচে আলাদা ব্যক্তিগত খরচ (লাভ থেকে বাদ যায় না) ---------- */
+function pvRange(lm, ld, lmo) {
+  if (lm === 'day') return [ld, ld];
+  const [y, m] = lmo.split('-').map(Number); return [ymd(new Date(y, m - 1, 1)), ymd(new Date(y, m, 0))];
+}
+function pvPer(r) {
+  const x = { t: 0, cat: {}, w: {}, day: {} };
+  Object.values(S.expenses).forEach(e => {
+    if (!e || e.kind !== 'personal' || !inR(e.date, r)) return;
+    const a = n(e.amt), c = e.cat || 'অন্যান্য', w = e.w || 'w_counter';
+    x.t += a; x.cat[c] = (x.cat[c] || 0) + a; x.w[w] = (x.w[w] || 0) + a; x.day[e.date] = (x.day[e.date] || 0) + a;
+  });
+  return x;
+}
+function pvVerdict(profit, per) {
+  if (per <= 0.001) return { c: 'good', t: 'ব্যক্তিগত খরচ নেই', p: 0, over: false };
+  if (profit <= 0.001) return { c: 'bad', t: 'লাভ নেই, অথচ ' + money(per) + ' ব্যক্তিগত খরচ হয়েছে', p: 100, over: true };
+  const pc = Math.round(per / profit * 100);
+  return per <= profit
+    ? { c: 'good', t: 'লাভের চেয়ে ' + money(profit - per) + ' কম খরচ (লাভের ' + pc + '%)', p: pc, over: false }
+    : { c: 'bad', t: 'লাভের চেয়ে ' + money(per - profit) + ' বেশি খরচ (লাভের ' + pc + '%)', p: pc, over: true };
+}
+function pvMode(m) { UI.lm = m; if (m === 'day' && !UI.ld) UI.ld = today(); render(); }
+function pvShift(k) {
+  if (UI.lm === 'day') UI.ld = addD(UI.ld || today(), k);
+  else { const [y, m] = (UI.lmo || today().slice(0, 7)).split('-').map(Number); UI.lmo = ymd(new Date(y, m - 1 + k, 1)).slice(0, 7); }
+  render();
+}
+function pvJump(d) { UI.lm = 'day'; UI.ld = d; render(); }
+function pvCard() {
+  const lm = UI.lm === 'day' ? 'day' : 'month', ld = UI.ld || today(), lmo = UI.lmo || today().slice(0, 7);
+  const r = pvRange(lm, ld, lmo), o = overall(r), P = pvPer(r), v = pvVerdict(o.net, P.t);
+  const pr = lm === 'day' ? (function () { const d = addD(ld, -1); return [d, d]; })() : (function () { const [y, m] = lmo.split('-').map(Number); return [ymd(new Date(y, m - 2, 1)), ymd(new Date(y, m - 1, 0))]; })();
+  const prevT = pvPer(pr).t, [yy, mm] = lmo.split('-').map(Number);
+  const label = lm === 'day' ? fd(ld) : MON[mm - 1] + ' ' + yy;
+  const sub = lm === 'day' ? relDay(ld) : (lmo === today().slice(0, 7) ? 'এই মাসের এখন পর্যন্ত' : 'পুরো মাস');
+  const pw = lm === 'day' ? 'আগের দিনের' : 'আগের মাসের';
+  const prevLine = (prevT > 0 || P.t > 0) ? '<div class="sm mut">' + pw + ' ব্যক্তিগত খরচ ছিল <b class="num">' + money(prevT) + '</b>'
+    + (Math.abs(P.t - prevT) >= 1 ? ' · এখন <b class="' + (P.t > prevT ? 'bad' : 'good') + '">' + money(Math.abs(P.t - prevT)) + (P.t > prevT ? ' বেশি' : ' কম') + '</b>' : '') + '</div>' : '';
+  const bar = P.t > 0 ? '<div class="mbar' + (v.over ? ' r' : '') + '"><i style="width:' + Math.max(3, Math.min(100, v.p)) + '%"></i></div>' : '';
+  const cats = Object.entries(P.cat).sort((a, b) => b[1] - a[1]), ws = Object.entries(P.w).sort((a, b) => b[1] - a[1]);
+  const brk = P.t > 0 ? '<details class="fold ipbox"><summary><b class="sm">কোন খাতে / কোন অ্যাকাউন্ট থেকে গেল</b></summary><div style="margin-top:6px">'
+    + cats.map(c => kv(esc(c[0]), money(c[1]))).join('')
+    + '<div class="fxh" style="margin:10px 0 2px">কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে</div>'
+    + ws.map(w => kv(esc(wName(w[0])), money(w[1]))).join('') + '</div></details>' : '';
+  let days = '';
+  if (lm === 'month') {
+    const rows = [], end = r[1] < today() ? r[1] : today();
+    for (let d = r[0], g = 0; d <= end && g < 32; d = addD(d, 1), g++) {
+      const od = overall([d, d]), per = P.day[d] || 0;
+      if (Math.abs(od.income) < 0.5 && od.exp.shop < 0.5 && per < 0.5) continue;
+      rows.push({ d, net: od.net, per });
+    }
+    rows.reverse();
+    const cols = 'grid-template-columns:64px 1fr 1fr 22px';
+    days = '<details class="fold ipbox"><summary><b class="sm">দিন অনুযায়ী লাভ বনাম ব্যক্তিগত খরচ (' + rows.length + ' দিন)</b></summary><div style="margin-top:8px;overflow-x:auto">'
+      + '<div class="sm mut" style="display:grid;gap:4px;font-weight:700;' + cols + '"><span>তারিখ</span><span style="text-align:right">লাভ</span><span style="text-align:right">ব্যক্তিগত</span><span></span></div>'
+      + (rows.length ? rows.map(x => '<div style="display:grid;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer;' + cols + '" onclick="pvJump(' + jarg(x.d) + ')"><span class="sm">' + fd(x.d) + '</span>'
+        + '<span class="num sm ' + (x.net >= 0 ? 'good' : 'bad') + '" style="text-align:right">' + money(x.net) + '</span>'
+        + '<span class="num sm" style="text-align:right">' + (x.per > 0 ? money(x.per) : '—') + '</span>'
+        + '<span class="sm ' + (x.per <= Math.max(0, x.net) ? 'good' : 'bad') + '" style="text-align:center">' + (x.per <= Math.max(0, x.net) ? '✓' : '⚠') + '</span></div>').join('') : '<div class="empty">এই মাসে কিছু নেই</div>')
+      + '</div><div class="sm mut" style="margin-top:8px">✓ = ওই দিন ব্যক্তিগত খরচ লাভের মধ্যে ছিল, ⚠ = লাভের চেয়ে বেশি। ভাড়া বা বেতনের মতো বড় খরচের দিনে দৈনিক লাভ কম বা মাইনাস দেখাতে পারে, তাই মাসের হিসাবটাই বেশি ভরসার।</div></details>';
+  }
+  const todayNote = (lm === 'day' && ld === today()) ? '<div class="sm mut">আজকের আয় পুরোপুরি আসবে দিন শেষের ক্যাশ লেখার পর।</div>' : '';
+  return '<div class="card stack" style="gap:12px"><div class="row between"><b>💼 লাভ ও ব্যক্তিগত খরচ</b><span class="sm mut">লাভ থেকে বাদ যায় না</span></div>'
+    + '<div class="seg"><button class="' + (lm === 'day' ? 'on' : '') + '" onclick="pvMode(\'day\')">দিন</button><button class="' + (lm === 'month' ? 'on' : '') + '" onclick="pvMode(\'month\')">মাস</button></div>'
+    + '<div class="row between"><button class="ib" onclick="pvShift(-1)" aria-label="আগের">‹</button><div style="text-align:center"><b>' + label + '</b><div class="sm mut">' + sub + '</div></div><button class="ib" onclick="pvShift(1)" aria-label="পরের">›</button></div>'
+    + '<div>' + kv('মোট আয়', money(o.income), 'good') + kv('দোকান খরচ', (o.exp.shop > 0 ? '−' : '') + money(o.exp.shop), o.exp.shop > 0 ? 'bad' : '')
+    + kv('<b style="color:var(--ink)">লাভ (আয় − দোকান খরচ)</b>', '<b>' + money(o.net) + '</b>', o.net >= 0 ? 'good' : 'bad') + '</div>' + todayNote
+    + '<div class="ipbox stack" style="gap:8px"><div class="row between"><span class="sm mut">👤 ব্যক্তিগত খরচ (আলাদা, বাদ দেওয়া হয়নি)</span><b class="num bad" style="font-size:19px">' + money(P.t) + '</b></div>'
+    + bar + '<div class="sm b ' + v.c + '">' + v.t + '</div>' + prevLine + '</div>'
+    + brk + days + '</div>';
 }
 function cashSumCard(o) {
   const M = cashModel(); if (!M.A.length) return '';
@@ -1935,9 +2026,16 @@ const wallets = () => {
 };
 const walletById = id => wallets().find(w => w.id === id) || wallets()[0] || { id: 'w_counter', name: 'Counter Drawer', kind: 'drawer' };
 const wName = id => { const w = wallets().find(x => x.id === id); return w ? w.name : 'Counter Drawer'; };
-const wPill = id => { const w = wallets().find(x => x.id === id); if (!w) return ''; const k = WKIND[w.kind] || WKIND.drawer; return '<span class="pill ' + k.badge + '" style="font-size:10.5px;padding:1px 7px">' + esc(w.name) + '</span>'; };
-function wSelectHtml(elId, selId, extraStyle) {
+const isMultiW = () => S.settings.dhMode === 'multi';
+function setDhMode(m) { S.settings.dhMode = (m === 'multi' ? 'multi' : 'total'); saveSettings(); render(); toast(m === 'multi' ? 'আলাদা ড্রয়ার/ব্যাংক মোড চালু হয়েছে' : 'সহজ টোটাল মেথড (১-বক্স হিসাব) চালু হয়েছে'); }
+const wPill = id => { if (!isMultiW()) return ''; const w = wallets().find(x => x.id === id); if (!w) return ''; const k = WKIND[w.kind] || WKIND.drawer; return '<span class="pill ' + k.badge + '" style="font-size:10.5px;padding:1px 7px">' + esc(w.name) + '</span>'; };
+window._wdef = {};
+function lastW(id, def, x) { const k = id + (x || '') + '|' + def; window._wdef[id] = k; let v = null; try { v = localStorage.getItem('rtc_lw_' + k); } catch (e) { } return (v && wallets().some(w => w.id === v)) ? v : def; }
+function rememberW(el) { const k = el.dataset.mk; if (k) { try { localStorage.setItem('rtc_lw_' + k, el.value); } catch (e) { } } }
+function wSelectHtml(elId, selId, extraStyle, forceShow) {
   const ws = wallets(), cur = selId || (ws[0] && ws[0].id) || 'w_counter';
+  const mk = window._wdef && window._wdef[elId]; if (mk) delete window._wdef[elId];
+  if (!isMultiW() && !forceShow) return '<input type="hidden" id="' + elId + '" value="' + esc(cur) + '">';
   const groups = [['drawer', '🗄️ ক্যাশ ড্রয়ার'], ['mfs', '📱 বিকাশ / নগদ / রকেট / উপায়'], ['bank_biz', '🏦 বিজনেস ব্যাংক'], ['bank_per', '🏛️ পার্সোনাল ব্যাংক']];
   let opts = '';
   groups.forEach(([k, label]) => {
@@ -1946,10 +2044,11 @@ function wSelectHtml(elId, selId, extraStyle) {
       opts += '<optgroup label="' + esc(label) + '">' + items.map(w => '<option value="' + esc(w.id) + '"' + (w.id === cur ? ' selected' : '') + '>' + esc(w.name) + (w.owner ? ' (' + esc(w.owner) + ')' : '') + '</option>').join('') + '</optgroup>';
     }
   });
-  return '<select id="' + elId + '"' + (extraStyle ? ' style="' + extraStyle + '"' : '') + '>' + opts + '</select>';
+  return '<select id="' + elId + '"' + (mk ? ' data-mk="' + esc(mk) + '" onchange="rememberW(this)"' : '') + (extraStyle ? ' style="' + extraStyle + '"' : '') + '>' + opts + '</select>';
 }
-function wFieldHtml(elId, selId, label) {
-  return '<div class="field"><label for="' + elId + '">' + (label || 'কোন ড্রয়ার / বিকাশ / নগদ / ব্যাংক') + '</label>' + wSelectHtml(elId, selId) + '</div>';
+function wFieldHtml(elId, selId, label, forceShow) {
+  if (!isMultiW() && !forceShow) return wSelectHtml(elId, selId, '', false);
+  return '<div class="field"><label for="' + elId + '">' + (label || 'কোন ড্রয়ার / বিকাশ / নগদ / ব্যাংক') + '</label>' + wSelectHtml(elId, selId, '', true) + '</div>';
 }
 
 /* ভিসা অ্যাপয়েন্টমেন্ট খরচ ও ভিসা জমা/ফেরতের ড্রয়ার/ব্যাংক ম্যাপিং (S.vmeta) */
@@ -1970,7 +2069,7 @@ function visaFeeCtrlHtml(x) {
   if (fi.fee <= 0 && x.mode === 'RUNNING') return '';
   return '<div class="row between wrapr" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);gap:6px">'
     + '<span class="sm">ভিসা ও সফটওয়্যার খরচ: <b class="num">' + money(fi.fee) + '</b> '
-    + (fi.paid ? '<span class="pill good">✓ পরিশোধিত (' + (fi.date ? fd(fi.date) + ' · ' : '') + esc(wName(fi.w)) + ')</span>' : '<span class="pill warn">⏳ বাকি (পরে দেবেন)</span>') + '</span>'
+    + (fi.paid ? '<span class="pill good">✓ পরিশোধিত' + (fi.date ? ' (' + fd(fi.date) + (isMultiW() ? ' · ' + esc(wName(fi.w)) : '') + ')' : '') + '</span>' : '<span class="pill warn">⏳ বাকি (পরে দেবেন)</span>') + '</span>'
     + '<button type="button" class="btn sm ' + (fi.paid ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();visaFeeSheet(\'' + x.id + '\')">' + (fi.paid ? 'খরচ এডিট' : '💸 ভিসা খরচ দিন / বাকি রাখুন') + '</button></div>';
 }
 function visaFeeSheet(vid) {
@@ -2015,9 +2114,9 @@ function saveVisaPayW(vid, pkey) {
 /* ---------- দৈনিক হিসাব ইঞ্জিন: যেকোনো তারিখ D এর জন্য প্রতি ড্রয়ার/ব্যাংকের ওপেনিং, জমা (+), খরচ (−) এবং ক্লোজিং ---------- */
 function allTxForDate(D) {
   const list = [];
-  const push = (w, dir, amt, cat, title, sub, isRev, editJs) => {
+  const push = (w, dir, amt, cat, title, sub, isRev, editJs, unsetW) => {
     if (n(amt) <= 0) return;
-    list.push({ w: w || 'w_counter', dir, amt: n(amt), cat, title, sub: sub || '', isRev: !!isRev, editJs: editJs || '' });
+    list.push({ w: w || 'w_counter', dir, amt: n(amt), cat, title, sub: sub || '', isRev: !!isRev, editJs: editJs || '', unsetW: !!unsetW });
   };
 
   // ১. পাসপোর্ট ফাইল: ক্লায়েন্ট জমা (+), ফেরত (−), এবং চালান যদি ওই দিনে হয়
@@ -2029,8 +2128,8 @@ function allTxForDate(D) {
     arr(f.refunds).forEach(r => {
       if (r && r.date === D) push(r.w || 'w_passdoc', 'out', r.amt, 'পাসপোর্ট ফেরত', f.name || 'পাসপোর্ট ক্লায়েন্ট', 'রাখা চার্জ (আয়) ' + money(c.kept), false, "fileForm('" + f.id + "')");
     });
-    if (f.challan && f.challanDate === D && n(f.passFee) > 0 && f.challanW) {
-      push(f.challanW, 'out', f.passFee, 'পাসপোর্ট চালান ফি', f.name || 'পাসপোর্ট', 'সরকারি চালান খরচ', false, "fileForm('" + f.id + "')");
+    if (f.challan && f.challanDate === D && n(f.passFee) > 0 && (f.challanW || !isMultiW())) {
+      push(f.challanW || 'w_passdoc', 'out', f.passFee, 'পাসপোর্ট চালান ফি', f.name || 'পাসপোর্ট', 'সরকারি চালান খরচ (ফাইল ফর্ম থেকে)', false, "fileForm('" + f.id + "')");
     }
   });
 
@@ -2051,6 +2150,9 @@ function allTxForDate(D) {
     arr(d.spends).forEach(sp => {
       if (sp && sp.date === D) push(sp.w || 'w_passdoc', 'out', sp.amt, 'ডকুমেন্ট কাজের খরচ', (d.name || 'ক্লায়েন্ট') + ' (' + (d.cat || 'ডকুমেন্ট') + ')', (sp.note ? sp.note + ' · ' : '') + (sp.by || ''), false, "djForm('" + d.id + "')");
     });
+    if (!arr(d.spends).length && d.costDone && n(d.cost) > 0 && (d.costDate || d.doneDate || d.recvDate) === D) {
+      push('w_passdoc', 'out', n(d.cost), 'ডকুমেন্ট কাজের খরচ', (d.name || 'ক্লায়েন্ট') + ' (' + (d.cat || 'ডকুমেন্ট') + ')', 'কাজের ফর্মে খরচ টিক দেওয়া হয়েছে', false, "djForm('" + d.id + "')");
+    }
   });
 
   // ৪. কাউন্টার এক্সট্রা সার্ভিস (রেভিনিউ): প্রতিটি এন্ট্রি ও দিন শেষের ক্যাশ
@@ -2076,7 +2178,7 @@ function allTxForDate(D) {
     arr(v.payList).forEach(p => {
       if (p.d === D && p.amt > 0) {
         const pw = (vm.payW && vm.payW[p.key]) || p.w || 'w_visacash';
-        push(pw, 'in', p.amt, 'ভিসা টাকা জমা', (v.serial ? '#' + v.serial + ' ' : '') + v.name, (v.mode === 'RUNNING' ? 'গচ্ছিত ভিসা জমা' : 'ভিসা বিল জমা') + ' · মাধ্যম বদলাতে চাপুন', false, "visaPayWSheet('" + v.id + "','" + p.key + "','" + pw + "'," + jarg(v.name) + "," + p.amt + ")");
+        push(pw, 'in', p.amt, 'ভিসা টাকা জমা', (v.serial ? '#' + v.serial + ' ' : '') + v.name, (v.mode === 'RUNNING' ? 'গচ্ছিত ভিসা জমা (ভিসা অ্যাপ থেকে অটো)' : 'ভিসা বিল জমা (ভিসা অ্যাপ থেকে অটো)'), false, isMultiW() ? "visaPayWSheet('" + v.id + "','" + p.key + "','" + pw + "'," + jarg(v.name) + "," + p.amt + ")" : "go('visa')", isMultiW() && !((vm.payW && vm.payW[p.key]) || p.w));
       }
     });
     if (v.mode === 'RETURNED' && v.refund > 0) {
@@ -2158,7 +2260,6 @@ function dayReconcile(D) {
   const prevDates = Object.keys(S.dclose || {}).filter(d => d < D).sort();
   const curClose = S.dclose[D] || { counts: {}, customOpen: {}, openNote: {}, note: '', closed: false };
   const startDate = S.settings.dhStartDate || '';
-  // যদি ধ্রুব শুরুর তারিখ (dhStartDate) আগামীকাল বা ভবিষ্যতের কোনো দিন হয় এবং আমরা তার আগের দিন দেখছি, অথবা কোনো আগের ক্লোজিং না থাকে:
   const txs = (startDate && D < startDate) ? [] : allTxForDate(D);
   const byW = {};
 
@@ -2173,10 +2274,8 @@ function dayReconcile(D) {
         anchorDate = pd0;
         break;
       } else if (dc && dc.customOpen && dc.customOpen[w.id] !== undefined && dc.customOpen[w.id] !== '') {
-        // যদি ওই দিনে শুধু ওপেনিং সেট করা হয়ে থাকে, তবে সেদিন থেকে হিসাব শুরু
         autoOpen = n(dc.customOpen[w.id]);
         anchorDate = pd0;
-        // ওই দিনের লেনদেনও যোগ হবে
         allTxForDate(pd0).forEach(t => { if (t.w === w.id) autoOpen += (t.dir === 'in' ? t.amt : -t.amt); });
         break;
       }
@@ -2192,8 +2291,6 @@ function dayReconcile(D) {
     };
   });
 
-  // শুধুমাত্র যদি আগে কখনো ক্লোজিং সেভ করা থাকে (anchorDate থাকে), তবেই মাঝখানের মিস হওয়া দিনের লেনদেন যোগ হবে।
-  // কখনোই পুরনো বছরের বা আগের আন-ক্লোজড ইতিহাসের ফাইল টেনে ওপেনিং ব্যালেন্স বানানো হবে না!
   if (prevDates.length > 0) {
     const anchors = ws.map(w => byW[w.id].anchorDate).filter(Boolean).sort(), histDates = [];
     if (anchors[0]) { let dd = addD(anchors[0], 1), g = 0; while (dd < D && g++ < 400) { if (!startDate || dd >= startDate) histDates.push(dd); dd = addD(dd, 1); } }
@@ -2238,6 +2335,67 @@ function dayReconcile(D) {
     totOpen += c.open; totIn += c.inn; totOut += c.out; totExp += c.expected;
   });
 
+  // ===== সহজ টোটাল মেথড (Simple Total Method) ক্যালকুলেশন =====
+  // অভ্যন্তরীণ ট্রান্সফার বাদ দিয়ে প্রকৃত বাহ্যিক জমা (+) ও খরচ (−)
+  const extTxs = txs.filter(t => !t.cat.startsWith('ট্রান্সফার'));
+  const extInList = extTxs.filter(t => t.dir === 'in');
+  const extOutList = extTxs.filter(t => t.dir === 'out');
+  const extIn = extInList.reduce((acc, t) => acc + t.amt, 0);
+  const extOut = extOutList.reduce((acc, t) => acc + t.amt, 0);
+
+  // টোটাল মেথডের ওপেনিং ব্যালেন্স নির্ণয়:
+  let tAutoOpen = n(S.settings.totOpenBal !== undefined ? S.settings.totOpenBal : ws.reduce((a, w) => a + n(w.openBal), 0));
+  let tAnchor = '';
+  for (let i = prevDates.length - 1; i >= 0; i--) {
+    const pd0 = prevDates[i];
+    if (startDate && pd0 < startDate) continue;
+    const dc = S.dclose[pd0];
+    if (!dc) continue;
+    if (dc.totActual !== undefined && dc.totActual !== '') {
+      tAutoOpen = n(dc.totActual);
+      tAnchor = pd0;
+      break;
+    } else if (dc.counts && Object.keys(dc.counts).length > 0) {
+      tAutoOpen = ws.reduce((a, w) => a + (dc.counts[w.id] !== undefined && dc.counts[w.id] !== '' ? n(dc.counts[w.id]) : 0), 0);
+      tAnchor = pd0;
+      break;
+    } else if (dc.totCustomOpen !== undefined && dc.totCustomOpen !== '') {
+      tAutoOpen = n(dc.totCustomOpen);
+      allTxForDate(pd0).filter(t => !t.cat.startsWith('ট্রান্সফার')).forEach(t => { tAutoOpen += (t.dir === 'in' ? t.amt : -t.amt); });
+      tAnchor = pd0;
+      break;
+    }
+  }
+  if (tAnchor) {
+    let dd = addD(tAnchor, 1), g = 0;
+    while (dd < D && g++ < 400) {
+      if (!startDate || dd >= startDate) {
+        allTxForDate(dd).filter(t => !t.cat.startsWith('ট্রান্সফার')).forEach(t => {
+          tAutoOpen += (t.dir === 'in' ? t.amt : -t.amt);
+        });
+      }
+      dd = addD(dd, 1);
+    }
+  }
+  const hasTotCustomOpen = curClose.totCustomOpen !== undefined && curClose.totCustomOpen !== '';
+  const tOpen = hasTotCustomOpen ? n(curClose.totCustomOpen) : tAutoOpen;
+  const tExpected = tOpen + extIn - extOut;
+  const hasTotActual = curClose.totActual !== undefined && curClose.totActual !== '';
+  const tActual = hasTotActual ? n(curClose.totActual) : (anyAct ? totAct : null);
+  const tHasAct = hasTotActual || anyAct;
+  const tDiff = tHasAct ? (tActual - tExpected) : 0;
+
+  // খাতওয়ারী (Category-wise) জমা ও খরচের গ্রুপ তৈরি (যাতে ১ নজরে বোঝা যায় কোথা থেকে কত আসলো আর কোথায় কত গেল)
+  const inByCat = {}, outByCat = {};
+  extInList.forEach(t => {
+    const g = inByCat[t.cat] || (inByCat[t.cat] = { cat: t.cat, sum: 0, items: [] });
+    g.sum += t.amt; g.items.push(t);
+  });
+  extOutList.forEach(t => {
+    const g = outByCat[t.cat] || (outByCat[t.cat] = { cat: t.cat, sum: 0, items: [] });
+    g.sum += t.amt; g.items.push(t);
+  });
+
   // Today's revenue vs customer deposit vs shop/personal expense summary
   let revCounter = 0, revKept = 0, revDocPass = 0, shopExp = 0, perExp = 0, visaDepositIn = 0, visaFeePending = 0;
   txs.forEach(t => {
@@ -2261,21 +2419,43 @@ function dayReconcile(D) {
     if ((v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !fi.paid && fi.fee > 0) visaFeePending += fi.fee;
   });
 
-  return { D, ws, byW, txs, curClose, totOpen, totIn, totOut, totExp, totAct, anyAct, allMatched, revCounter, revKept, revDocPass, shopExp, perExp, visaDepositIn, visaFeePending };
+  return {
+    D, ws, byW, txs, extTxs, extInList, extOutList, inByCat, outByCat,
+    curClose, totOpen, totIn, totOut, totExp, totAct, anyAct, allMatched,
+    tAutoOpen, tAnchor, hasTotCustomOpen, tOpen, extIn, extOut, tExpected, tActual, tHasAct, tDiff,
+    revCounter, revKept, revDocPass, shopExp, perExp, visaDepositIn, visaFeePending
+  };
 }
 
-/* ---------- নতুন করে দৈনিক হিসাব শুরু করার সেটআপ শিট (Fresh Start / Set All Opening Balances) ---------- */
+/* ---------- নতুন করে দৈনিক হিসাব শুরু করার সেটআপ শিট (Fresh Start — ১টি মোট ওপেনিং ব্যালেন্স) ---------- */
 function freshStartSheet(defDate) {
   const tmr = addD(today(), 1);
   const D = defDate || UI.dhd || tmr;
+  const R = dayReconcile(D);
+  const dc = S.dclose[D] || {};
+  const curTot = dc.totCustomOpen !== undefined && dc.totCustomOpen !== '' ? n(dc.totCustomOpen) : (S.settings.totOpenBal !== undefined ? n(S.settings.totOpenBal) : R.tOpen);
+
+  if (!isMultiW()) {
+    sheet('🚀 নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু করুন',
+      '<div class="mut sm">আপনি যেদিন থেকে (যেমন: আগামীকাল বা আজ) হিসাব শুরু করতে চান সেই তারিখটি বাছুন এবং আপনার দোকানের সব ক্যাশ ড্রয়ার + বিকাশ/নগদ + ব্যাংক মিলিয়ে শুরুর দিন সকালে মোট যত টাকা আছে তা নিচে এক ঘরে বসিয়ে দিন।<br><br><b>নিশ্চিন্ত থাকুন:</b> আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না! এরপর থেকে খরচ করলে কমবে, কাস্টমার বিল বা ভিসা জমা দিলে বাড়বে, আর কেউ বাকি নিলে কমবে।</div>'
+      + '<div class="field"><label for="fs_date">কবে থেকে হিসাব শুরু করবেন?</label>'
+      + '<div class="row" style="gap:6px"><input id="fs_date" type="date" value="' + D + '">'
+      + '<button type="button" class="btn sm ghost" onclick="$(\x27fs_date\x27).value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
+      + '<button type="button" class="btn sm" onclick="$(\x27fs_date\x27).value=\'' + tmr + '\'">আগামীকাল (' + fd(tmr) + ')</button></div></div>'
+      + '<div class="field"><label for="fs_tot_open">শুরুর মোট ব্যালেন্স — Opening Balance (৳)</label>'
+      + '<input id="fs_tot_open" type="number" inputmode="decimal" style="font-size:20px;font-weight:700" placeholder="যেমন: 50000" value="' + (curTot || '') + '"></div>'
+      + '<div class="field"><label for="fs_tot_note">📝 নোট (ঐচ্ছিক)</label><input id="fs_tot_note" value="' + esc(dc.totOpenNote || '') + '" placeholder="যেমন: সব ক্যাশ + বিকাশ + ব্যাংক মিলিয়ে শুরুর ব্যালেন্স"></div>'
+      + '<button class="btn block" onclick="saveFreshStartSimple()">✅ এই ওপেনিং ব্যালেন্স দিয়ে শুরু করুন</button>');
+    return;
+  }
+
   const ws = wallets();
-  const dc = S.dclose[D] || { customOpen: {} };
   sheet('🚀 নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করুন',
     '<div class="mut sm">আপনি যেদিন থেকে (যেমন: আগামীকাল বা আজ) নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করতে চান, সেই তারিখটি বাছুন এবং প্রতিটি ড্রয়ার ও বিকাশ/ব্যাংকে শুরুর দিন সকালে যত টাকা থাকবে তা নিচে বসিয়ে সেভ করুন। আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
     + '<div class="field"><label for="fs_date">কবে থেকে নতুন হিসাব শুরু করবেন?</label>'
     + '<div class="row" style="gap:6px"><input id="fs_date" type="date" value="' + D + '">'
-    + '<button type="button" class="btn sm ghost" onclick="$(\'fs_date\').value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
-    + '<button type="button" class="btn sm" onclick="$(\'fs_date\').value=\'' + tmr + '\'">আগামীকাল (' + fd(tmr) + ')</button></div></div>'
+    + '<button type="button" class="btn sm ghost" onclick="$(\x27fs_date\x27).value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
+    + '<button type="button" class="btn sm" onclick="$(\x27fs_date\x27).value=\'' + tmr + '\'">আগামীকাল (' + fd(tmr) + ')</button></div></div>'
     + '<div class="row between"><b class="sm">প্রতিটি ড্রয়ার ও ব্যাংকের শুরুর ব্যালেন্স (৳):</b>'
     + '<button type="button" class="chip" style="padding:3px 10px;font-size:12px" onclick="zeroAllFs()">সব ০ (শূন্য) করুন</button></div>'
     + '<div class="stack" style="gap:8px">'
@@ -2290,6 +2470,30 @@ function freshStartSheet(defDate) {
     + '<button class="btn block" onclick="saveFreshStart()">✅ এই ব্যালেন্স দিয়ে নতুন হিসাব শুরু করুন</button>');
 }
 
+function saveFreshStartSimple() {
+  const D = val('fs_date') || today();
+  const v = n(val('fs_tot_open'));
+  const nt = val('fs_tot_note').trim() || 'নতুন শুরুর ব্যালেন্স';
+  const ws = wallets().slice();
+  ws.forEach((w, i) => { w.openBal = (i === 0 ? v : 0); });
+  S.settings.wallets = ws;
+  S.settings.totOpenBal = v;
+  S.settings.dhStartDate = D;
+  saveSettings();
+
+  const dc = S.dclose[D] || { id: D, date: D, counts: {}, customOpen: {}, openNote: {}, note: '' };
+  dc.totCustomOpen = v;
+  dc.totOpenNote = nt;
+  dc.customOpen = dc.customOpen || {};
+  ws.forEach((w, i) => { dc.customOpen[w.id] = (i === 0 ? v : 0); });
+  dc.updatedAt = Date.now();
+  S.dclose[D] = dc;
+  save('dclose', D);
+  UI.dhd = D === today() ? '' : D;
+  closeSheet();
+  toast('🚀 ' + fd(D) + ' থেকে ওপেনিং ব্যালেন্স ' + money(v) + ' সেট হয়েছে!');
+}
+
 function zeroAllFs() {
   wallets().forEach(w => { const el = $('fs_w_' + w.id); if (el) el.value = 0; });
 }
@@ -2300,16 +2504,19 @@ function saveFreshStart() {
   const dc = S.dclose[D] || { id: D, date: D, counts: {}, customOpen: {}, openNote: {}, note: '' };
   dc.customOpen = dc.customOpen || {};
   dc.openNote = dc.openNote || {};
+  let tot = 0;
   ws.forEach(w => {
     const v = n(val('fs_w_' + w.id));
     w.openBal = v;
+    tot += v;
     dc.customOpen[w.id] = v;
     dc.openNote[w.id] = 'নতুন শুরুর ব্যালেন্স';
   });
+  dc.totCustomOpen = tot;
+  S.settings.totOpenBal = tot;
   S.settings.wallets = ws;
   S.settings.dhStartDate = D;
   saveSettings();
-  // আগের কোনো ক্লোজিং থাকলে এবং ইউজার নতুন করে শুরু করলে D তারিখের ওপেনিং সেভ হয়
   dc.updatedAt = Date.now();
   S.dclose[D] = dc;
   save('dclose', D);
@@ -2318,250 +2525,347 @@ function saveFreshStart() {
   toast('🚀 ' + fd(D) + ' থেকে নতুন শুরুর ব্যালেন্স সেট হয়েছে!');
 }
 
-/* ---------- স্মার্ট গরমিল ডিটেক্টর (Smart Discrepancy Helper) ---------- */
+/* ---------- মোট শুরুর ব্যালেন্স এডিট শিট (Total Opening Balance Edit) ---------- */
+function totOpenBalSheet(D) {
+  const R = dayReconcile(D);
+  const dc = S.dclose[D] || {};
+  sheet('শুরুর ব্যালেন্স (Opening Balance) — ' + fd(D),
+    '<div class="mut sm">গতকালের ক্লোজিং থেকে অটোমেটিক আজকের শুরুর ব্যালেন্স বসেছে <b>' + money(R.tAutoOpen) + '</b>। আপনি যদি আজ সকালে নতুন কোনো ব্যালেন্স দিয়ে দিন শুরু করতে চান, তবে নিচে লিখুন:</div>'
+    + '<div class="card" style="box-shadow:none;background:var(--bg)">'
+    + kv('আগের হিসাব অনুযায়ী অটো ওপেনিং', money(R.tAutoOpen), 'good')
+    + (R.hasTotCustomOpen ? kv('আপনার দেওয়া কাস্টম ওপেনিং', money(R.tOpen), 'warnc') : '')
+    + '</div>'
+    + '<div class="field"><label for="tob_val">আজকের শুরুর মোট ব্যালেন্স (৳) — অটো রাখতে চাইলে খালি রাখুন</label><input id="tob_val" type="number" inputmode="decimal" value="' + (R.hasTotCustomOpen ? R.tOpen : '') + '" placeholder="অটো: ' + Math.round(R.tAutoOpen) + '"></div>'
+    + '<div class="field"><label for="tob_note">📝 নোট / পরিবর্তনের কারণ (ঐচ্ছিক)</label><input id="tob_note" value="' + esc(dc.totOpenNote || '') + '" placeholder="যেমন: আজ থেকে নতুন ওপেনিং ব্যালেন্স শুরু"></div>'
+    + '<div class="grid2"><button class="btn block" onclick="saveTotCustomOpen(\'' + D + '\')">সেভ করুন</button>'
+    + '<button class="btn ghost block" onclick="$(\'tob_val\').value=\'\';saveTotCustomOpen(\'' + D + '\')">🔄 অটো ব্যালেন্সে ফেরান</button></div>');
+}
+function saveTotCustomOpen(D) {
+  const dc = S.dclose[D] || { id: D, date: D, counts: {}, customOpen: {}, openNote: {}, note: '' };
+  const raw = val('tob_val').trim();
+  if (raw === '') {
+    delete dc.totCustomOpen;
+    delete dc.totOpenNote;
+  } else {
+    dc.totCustomOpen = n(raw);
+    dc.totOpenNote = val('tob_note').trim();
+  }
+  dc.updatedAt = Date.now();
+  S.dclose[D] = dc;
+  save('dclose', D);
+  closeSheet();
+  toast(raw === '' ? 'অটো ওপেনিং ব্যালেন্স চালু হয়েছে' : 'আজকের শুরুর ব্যালেন্স সেভ হয়েছে');
+}
+
+/* ---------- স্মার্ট গরমিল ডিটেক্টর ---------- */
+function smartHintsForTotal(R) {
+  if (!R.tHasAct || Math.abs(R.tDiff) < 0.5) return '';
+  const absD = Math.round(Math.abs(R.tDiff));
+  const hints = [];
+  R.extTxs.forEach(t => {
+    if (Math.abs(t.amt - absD) < 2) {
+      hints.push('🔎 আজ <b>' + esc(t.title) + ' (' + esc(t.cat) + ': ' + money(t.amt) + ')</b> এন্ট্রি দেওয়া হয়েছে — এটি কি দুবার লেখা হয়েছে বা বাদ পড়েছে?');
+    }
+  });
+  if (R.tDiff < 0) {
+    hints.push('💸 <b>হিসাবের চেয়ে ' + money(absD) + ' কম আছে (Short):</b> (১) আজ কোনো দোকান খরচ, ব্যক্তিগত খরচ, চালান বা ভিসা/ডকুমেন্ট খরচ হয়েছে যা এখনো অ্যাপে লেখেননি? (২) কেউ কি আজ বাকি নিয়েছে যা বাকি খাতায় তোলা হয়নি?');
+  } else {
+    hints.push('💰 <b>হিসাবের চেয়ে ' + money(absD) + ' বেশি আছে (Extra):</b> (১) কোনো কাস্টমার কি পাসপোর্ট, ভিসা বা ডকুমেন্টের বিল দিয়েছে যা এখনো ফাইলে "জমা নিলাম" দেওয়া হয়নি? (২) কাউন্টারের ফটোকপি/অনলাইন কাজের ক্যাশ কি এখনো কাউন্টার ট্যাবে বা এক্সট্রা আয়ে তোলা হয়নি?');
+  }
+  return '<div class="ipbox stack" style="gap:6px;background:var(--warnbg);border-color:var(--warn);font-size:13px">'
+    + '<b style="color:var(--warn)">💡 কেন গরমিল হতে পারে (স্মার্ট ক্লু):</b>'
+    + hints.map(h => '<div>' + h + '</div>').join('')
+    + '</div>';
+}
+
 function smartHintsForWallet(R, wid) {
   const c = R.byW[wid];
   if (!c || !c.hasActual || Math.abs(c.diff) < 0.5) return '';
   const absD = Math.round(Math.abs(c.diff));
   const hints = [];
-
-  // ১. অন্য কোনো ড্রয়ার বা বিকাশ/ব্যাংকে উল্টো গরমিল আছে কিনা (ভুল ড্রয়ার সিলেক্ট করা হয়েছে কিনা)
   R.ws.forEach(other => {
     if (other.id === wid) return;
     const oc = R.byW[other.id];
     if (oc && oc.hasActual && Math.abs(oc.diff + c.diff) < 2) {
-      hints.push('🔄 <b>ড্রয়ার/ব্যাংক অদলবদল হতে পারে:</b> এই মাধ্যমে ' + (c.diff < 0 ? 'কম ' : 'বেশি ') + money(absD) + ' আর <b>' + esc(other.name) + '</b>-এ ঠিক উল্টো ' + (oc.diff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(oc.diff)) + ' দেখাচ্ছে! সম্ভবত একটি এন্ট্রিতে ভুল মাধ্যম সিলেক্ট হয়েছে বা ট্রান্সফার লেখা হয়নি।');
+      hints.push('🔄 <b>ড্রয়ার/ব্যাংক অদলবদল হতে পারে:</b> এই মাধ্যমে ' + (c.diff < 0 ? 'কম ' : 'বেশি ') + money(absD) + ' আর <b>' + esc(other.name) + '</b>-এ ঠিক উল্টো ' + (oc.diff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(oc.diff)) + ' দেখাচ্ছে!');
     }
   });
-
-  // ২. আজকের কোনো এন্ট্রির টাকার অংকের সমান কিনা
-  R.txs.forEach(t => {
-    if (Math.abs(t.amt - absD) < 2 && t.w !== wid) {
-      hints.push('🔎 আজ <b>' + esc(wName(t.w)) + '</b>-এ <b>' + esc(t.title) + ' (' + money(t.amt) + ')</b> লেখা হয়েছে — সেটি কি আসলে এই ড্রয়ার/ব্যাংকে হয়েছিল?');
-    }
-  });
-
-  // ৩. বিকাশ/নগদ ক্যাশ-ইন বা ক্যাশ-আউট চার্জের কারণে গরমিল কিনা
-  if (c.w.kind === 'mfs') {
-    hints.push('📱 <b>বিকাশ/নগদ এক্সট্রা চার্জ বা কমিশন:</b> ক্যাশ-ইন বা ক্যাশ-আউট করার ফলে একাউন্টে এক্সট্রা চার্জ/কমিশন যোগ বা কেটেছে কিনা দেখুন। হলে উপরে <b>«📱 বিকাশ/নগদ ক্যাশ-ইন/আউট ও এক্সট্রা»</b> বাটনে চাপ দিয়ে মিলিয়ে নিন।');
-  }
-
-  // ৪. সাধারণ কারণসমূহ
   if (c.diff < 0) {
-    hints.push('💸 <b>টাকা কম (Short ' + money(absD) + '):</b> (ক) দোকান বা ব্যক্তিগত কোনো খরচ এন্ট্রি দিতে ভুলে গেছেন কিনা, (খ) কাউকে বাকি দিয়েছেন বা আগের কোনো খরচ আজ পরিশোধ করেছেন কিনা, অথবা (গ) এই ড্রয়ার থেকে বিকাশ/ব্যাংকে টাকা পাঠিয়েছেন কিনা চেক করুন।');
+    hints.push('💸 <b>টাকা কম (Short ' + money(absD) + '):</b> কোনো খরচ বা প্রদান লেখেননি অথবা অন্য ড্রয়ারে লেখা হয়েছে কিনা দেখুন।');
   } else {
-    hints.push('💰 <b>টাকা বেশি (Extra ' + money(absD) + '):</b> (ক) কোনো কাস্টমার আগের বাকি টাকা আজ দিয়ে গেছে কিনা যা এখনও ফাইলে তোলা হয়নি, অথবা (খ) কাউন্টারের কোনো এক্সট্রা সার্ভিসের টাকা উঠেছে কিনা চেক করুন।');
+    hints.push('💰 <b>টাকা বেশি (Extra ' + money(absD) + '):</b> কোনো কাস্টমারের জমা বা কাউন্টারের আয় লেখা বাকি আছে কিনা দেখুন।');
   }
-
   return '<div class="ipbox stack" style="gap:6px;background:var(--warnbg);border-color:var(--warn);font-size:12.5px">'
     + '<b style="color:var(--warn)">💡 গরমিল মেলানোর স্মার্ট ক্লু:</b>'
     + hints.map(h => '<div>' + h + '</div>').join('')
     + '</div>';
 }
 
-/* ---------- কাস্টম ওপেনিং ব্যালেন্স শিট (Smart Auto + Manual Override) ---------- */
+/* ---------- কাস্টম ওপেনিং ব্যালেন্স শিট (আলাদা ড্রয়ার মোডের জন্য) ---------- */
 function openBalSheet(D, wid) {
   const R = dayReconcile(D), c = R.byW[wid];
   if (!c) return;
   sheet('শুরুর ব্যালেন্স (Opening) — ' + esc(c.w.name),
-    '<div class="mut sm"><b>স্মার্ট নিয়ম:</b> গতকাল রাতে আপনি যে ক্লোজিং ব্যালেন্স সেভ করেছেন (' + money(c.autoOpen) + '), আজ সকালে সেটাই অটোমেটিক বসেছে। এতে কখনো হিসাব গরমিল হয় না।<br><br>তবে যদি কখনো সকালে এসে দেখেন ড্রয়ারে টাকার পরিমাণ ভিন্ন, আপনি নিচে কাস্টম ওপেনিং ব্যালেন্স বসাতে পারবেন (কারণসহ রেকর্ড থাকবে)।</div>'
-    + '<div class="card" style="box-shadow:none;background:var(--bg)">'
-    + kv('গতকালের ক্লোজিং অনুযায়ী অটো ওপেনিং', money(c.autoOpen), 'good')
-    + (c.hasCustomOpen ? kv('বর্তমানে কাস্টম ওপেনিং দেওয়া আছে', money(c.open), 'warnc') : '')
-    + '</div>'
-    + '<div class="field"><label for="ob_val">আজকের শুরুর ব্যালেন্স (৳) — অটো রাখতে চাইলে খালি রাখুন</label><input id="ob_val" type="number" inputmode="decimal" value="' + (c.hasCustomOpen ? c.open : '') + '" placeholder="অটো: ' + Math.round(c.autoOpen) + '"></div>'
-    + '<div class="field"><label for="ob_note">📝 পরিবর্তনের কারণ (কাস্টম দিলে)</label><input id="ob_note" value="' + esc(c.openNote) + '" placeholder="যেমন: সকালে বাসা থেকে ১০০০ টাকা ভাংতি আনা হয়েছে"></div>'
+    '<div class="mut sm">গতকালের ক্লোজিং অনুযায়ী অটো ওপেনিং <b>' + money(c.autoOpen) + '</b>। কাস্টম ওপেনিং দিতে চাইলে নিচে লিখুন:</div>'
+    + '<div class="field"><label for="ob_val">আজকের শুরুর ব্যালেন্স (৳)</label><input id="ob_val" type="number" inputmode="decimal" value="' + (c.hasCustomOpen ? c.open : '') + '" placeholder="অটো: ' + Math.round(c.autoOpen) + '"></div>'
+    + '<div class="field"><label for="ob_note">📝 কারণ</label><input id="ob_note" value="' + esc(c.openNote) + '"></div>'
     + '<div class="grid2"><button class="btn block" onclick="saveCustomOpen(\'' + D + '\',\'' + wid + '\')">সেভ করুন</button>'
-    + '<button class="btn ghost block" onclick="$(\'ob_val\').value=\'\';saveCustomOpen(\'' + D + '\',\'' + wid + '\')">🔄 অটো ব্যালেন্সে ফেরান</button></div>'
-    + '<div class="sm mut">প্রথমবার সফটওয়্যার শুরু করার ব্যালেন্স বদলাতে চাইলে নিচে "ড্রয়ার এডিট" থেকে প্রাথমিক শুরুর ব্যালেন্স বদলান।</div>');
+    + '<button class="btn ghost block" onclick="$(\'ob_val\').value=\'\';saveCustomOpen(\'' + D + '\',\'' + wid + '\')">🔄 অটো ব্যালেন্সে ফেরান</button></div>');
 }
 function saveCustomOpen(D, wid) {
   const dc = S.dclose[D] || { id: D, date: D, counts: {}, customOpen: {}, openNote: {}, note: '' };
   dc.customOpen = dc.customOpen || {};
   dc.openNote = dc.openNote || {};
   const raw = val('ob_val').trim();
-  if (raw === '') {
-    delete dc.customOpen[wid];
-    delete dc.openNote[wid];
-  } else {
-    dc.customOpen[wid] = n(raw);
-    dc.openNote[wid] = val('ob_note').trim();
-  }
-  dc.updatedAt = Date.now();
-  S.dclose[D] = dc;
-  save('dclose', D);
-  closeSheet();
+  if (raw === '') { delete dc.customOpen[wid]; delete dc.openNote[wid]; }
+  else { dc.customOpen[wid] = n(raw); dc.openNote[wid] = val('ob_note').trim(); }
+  dc.updatedAt = Date.now(); S.dclose[D] = dc; save('dclose', D); closeSheet();
   toast(raw === '' ? 'অটো ওপেনিং ব্যালেন্স চালু হয়েছে' : 'কাস্টম ওপেনিং ব্যালেন্স সেভ হয়েছে');
 }
 
-/* ---------- পূর্ণাঙ্গ ব্যবহারের নির্দেশিকা ও বাস্তব উদাহরণ (Instruction Box inside App) ---------- */
-function toggleDhGuide(force) {
-  UI.showGuide = force !== undefined ? !!force : !UI.showGuide;
-  render();
-}
-
-function toggleWBreak(wid) {
-  UI.wexp = UI.wexp || {};
-  UI.wexp[wid] = !UI.wexp[wid];
-  render();
-}
-
-function toggleAllWBreak(openAll) {
-  UI.wexp = UI.wexp || {};
-  wallets().forEach(w => { UI.wexp[w.id] = !!openAll; });
-  render();
-}
+function toggleDhGuide(force) { UI.showGuide = force !== undefined ? !!force : !UI.showGuide; render(); }
+function toggleWBreak(wid) { UI.wexp = UI.wexp || {}; UI.wexp[wid] = !UI.wexp[wid]; render(); }
+function toggleAllWBreak(openAll) { UI.wexp = UI.wexp || {}; wallets().forEach(w => { UI.wexp[w.id] = !!openAll; }); render(); }
 
 function walletBreakdownHtml(D, c) {
   const isOpen = !!(UI.wexp && UI.wexp[c.w.id]);
   const ins = c.txs.filter(t => t.dir === 'in');
   const outs = c.txs.filter(t => t.dir === 'out');
-  const openSrc = c.hasCustomOpen
-    ? 'আপনার সেট করা শুরুর ব্যালেন্স' + (c.openNote ? ' (' + esc(c.openNote) + ')' : '')
-    : (c.anchorDate ? fd(c.anchorDate) + ' তারিখের ক্লোজিং ব্যালেন্স থেকে অটো এসেছে' : 'প্রাথমিক শুরুর ব্যালেন্স (আগের পুরনো ফাইল বাদ দিয়ে)');
-
   const btnBar = '<div class="row between wrapr" style="gap:6px;padding-top:4px;border-top:1px dashed var(--line)">'
     + '<button type="button" class="btn sm ' + (isOpen ? 'warnb' : 'ghost') + '" style="flex:1" onclick="toggleWBreak(\'' + c.w.id + '\')">'
-    + (isOpen ? '🔼 হিসাবের বিস্তারিত লুকান (Hide Details)' : '🔍 কীভাবে ' + money(c.expected) + ' থাকার কথা হলো? সব হিসাব দেখুন (' + c.txs.length + 'টি)')
-    + '</button>'
-    + '<button type="button" class="btn sm ghost" onclick="walletMathSheet(\'' + D + '\',\'' + c.w.id + '\')" title="পপ-আপে বড় করে দেখুন">📑 পূর্ণ খতিয়ান</button>'
-    + '</div>';
-
+    + (isOpen ? '🔼 বিস্তারিত লুকান' : '🔍 কীভাবে ' + money(c.expected) + ' হলো? হিসাব দেখুন (' + c.txs.length + 'টি)')
+    + '</button></div>';
   if (!isOpen) return btnBar;
-
-  const inRows = ins.length
-    ? ins.map((t, i) => '<div class="kv" style="align-items:center;padding:6px 0;cursor:' + (t.editJs ? 'pointer' : 'default') + '"' + (t.editJs ? ' onclick="' + t.editJs + '"' : '') + '>'
-        + '<span style="color:var(--ink);min-width:0;flex:1"><span class="sno">' + (i + 1) + '</span><b>' + esc(t.title) + '</b> <span class="pill ' + (t.isRev ? 'good' : '') + '" style="font-size:10.5px">' + esc(t.cat) + (t.isRev ? ' · রেভিনিউ' : '') + '</span>'
-        + (t.sub ? '<div class="sm mut">' + esc(t.sub) + '</div>' : '') + '</span>'
-        + '<b class="num good">+' + money(t.amt) + '</b></div>').join('')
-    : '<div class="sm mut" style="padding:4px 0">আজ কোনো টাকা জমা হয়নি (৳০)</div>';
-
-  const outRows = outs.length
-    ? outs.map((t, i) => '<div class="kv" style="align-items:center;padding:6px 0;cursor:' + (t.editJs ? 'pointer' : 'default') + '"' + (t.editJs ? ' onclick="' + t.editJs + '"' : '') + '>'
-        + '<span style="color:var(--ink);min-width:0;flex:1"><span class="sno">' + (i + 1) + '</span><b>' + esc(t.title) + '</b> <span class="pill bad" style="font-size:10.5px">' + esc(t.cat) + '</span>'
-        + (t.sub ? '<div class="sm mut">' + esc(t.sub) + '</div>' : '') + '</span>'
-        + '<b class="num bad">−' + money(t.amt) + '</b></div>').join('')
-    : '<div class="sm mut" style="padding:4px 0">আজ কোনো খরচ বা প্রদান হয়নি (৳০)</div>';
-
-  return btnBar
-    + '<div class="ipbox stack" style="gap:10px;background:var(--bg);border:1.5px solid var(--acc)">'
-    + '<div class="row between"><b>🧮 কীভাবে ' + money(c.expected) + ' থাকার কথা হলো তার সম্পূর্ণ হিসাব:</b><button type="button" class="x" onclick="toggleWBreak(\'' + c.w.id + '\')" title="লুকান">✕ লুকান</button></div>'
-    + '<div class="card" style="padding:10px 12px;box-shadow:none">'
-    + '<div class="row between"><span><b>১. সকালে শুরুতে ছিল (Opening Balance)</b><div class="sm mut">' + openSrc + '</div></span><b class="num" style="font-size:15px">' + money(c.open) + '</b></div>'
-    + '</div>'
-    + '<div class="card" style="padding:10px 12px;box-shadow:none">'
-    + '<div class="row between" style="border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px"><b class="good">২. আজ কোথা থেকে কত টাকা ঢুকেছে (+' + ins.length + 'টি লেনদেন)</b><b class="num good">+' + money(c.inn) + '</b></div>'
-    + inRows
-    + '</div>'
-    + '<div class="card" style="padding:10px 12px;box-shadow:none">'
-    + '<div class="row between" style="border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:4px"><b class="bad">৩. আজ কোথায় কত টাকা বের হয়েছে (−' + outs.length + 'টি লেনদেন)</b><b class="num bad">−' + money(c.out) + '</b></div>'
-    + outRows
-    + '</div>'
-    + '<div class="card" style="padding:11px 12px;box-shadow:none;background:var(--soft);border:1px solid var(--acc)">'
-    + '<div class="row between wrapr" style="gap:6px"><span class="sm"><b>চূড়ান্ত সূত্র:</b> শুরুতে (' + money(c.open) + ') + জমা (' + money(c.inn) + ') − খরচ (' + money(c.out) + ')</span>'
-    + '<span style="font-size:16px"><b>থাকার কথা = <span class="num" style="color:var(--acc)">' + money(c.expected) + '</span></b></span></div>'
-    + (c.hasActual ? '<div class="row between sm" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line)"><span>আপনি গুনে পেয়েছেন: <b class="num">' + money(c.actual) + '</b></span><b class="' + (Math.abs(c.diff) < 0.5 ? 'good' : 'bad') + '">' + (Math.abs(c.diff) < 0.5 ? '✓ হুবহু মিলেছে' : (c.diff < 0 ? '⚠ কম (Short): ' + money(Math.abs(c.diff)) : '⚠ বেশি (Extra): ' + money(c.diff))) + '</b></div>' : '')
-    + '</div>'
-    + '<div class="sm mut">💡 টিপস: ওপরের যেকোনো লেনদেনের ওপর ট্যাপ করলেই সেটি সরাসরি এডিট বা ঠিক করতে পারবেন।</div>'
-    + '</div>';
+  const inRows = ins.length ? ins.map((t, i) => '<div class="kv" style="align-items:center;padding:6px 0;cursor:' + (t.editJs ? 'pointer' : 'default') + '"' + (t.editJs ? ' onclick="' + t.editJs + '"' : '') + '><span style="color:var(--ink);min-width:0;flex:1"><span class="sno">' + (i + 1) + '</span><b>' + esc(t.title) + '</b> <span class="pill" style="font-size:10.5px">' + esc(t.cat) + '</span>' + (t.sub ? '<div class="sm mut">' + esc(t.sub) + '</div>' : '') + '</span><b class="num good">+' + money(t.amt) + '</b></div>').join('') : '<div class="sm mut">আজ কোনো জমা নেই</div>';
+  const outRows = outs.length ? outs.map((t, i) => '<div class="kv" style="align-items:center;padding:6px 0;cursor:' + (t.editJs ? 'pointer' : 'default') + '"' + (t.editJs ? ' onclick="' + t.editJs + '"' : '') + '><span style="color:var(--ink);min-width:0;flex:1"><span class="sno">' + (i + 1) + '</span><b>' + esc(t.title) + '</b> <span class="pill bad" style="font-size:10.5px">' + esc(t.cat) + '</span>' + (t.sub ? '<div class="sm mut">' + esc(t.sub) + '</div>' : '') + '</span><b class="num bad">−' + money(t.amt) + '</b></div>').join('') : '<div class="sm mut">আজ কোনো খরচ নেই</div>';
+  return btnBar + '<div class="ipbox stack" style="gap:8px;background:var(--bg);border:1.5px solid var(--acc)">'
+    + kv('১. সকালে শুরুতে ছিল', money(c.open))
+    + '<div><b class="sm good">২. আজ জমা (+' + money(c.inn) + ')</b>' + inRows + '</div>'
+    + '<div><b class="sm bad">৩. আজ খরচ (−' + money(c.out) + ')</b>' + outRows + '</div>'
+    + kv('<b>থাকার কথা</b>', '<b>' + money(c.expected) + '</b>') + '</div>';
 }
 
 function walletMathSheet(D, wid) {
-  const R = dayReconcile(D), c = R.byW[wid];
-  if (!c) return;
-  UI.wexp = UI.wexp || {};
-  const prev = UI.wexp[wid];
-  UI.wexp[wid] = true;
-  const html = walletBreakdownHtml(D, c);
-  UI.wexp[wid] = prev;
+  const R = dayReconcile(D), c = R.byW[wid]; if (!c) return;
+  UI.wexp = UI.wexp || {}; const prev = UI.wexp[wid]; UI.wexp[wid] = true;
+  const html = walletBreakdownHtml(D, c); UI.wexp[wid] = prev;
   sheet(esc(c.w.name) + ' — পূর্ণ হিসাব (' + fd(D) + ')', html);
 }
 
+/* ---------- টোটাল মেথডের সহজ ও পরিষ্কার গাইড ---------- */
 function dailyGuideHtml() {
   const open = !!UI.showGuide;
   const toggleBtn = '<div class="card row between wrapr" style="padding:12px 15px;border:1.5px solid var(--acc);background:var(--soft);gap:10px">'
-    + '<div style="min-width:0"><b>📖 দৈনিক হিসাব রাখার নিয়ম ও উদাহরণ (Instruction Guide)</b><div class="sm mut">কীভাবে ৩টি ড্রয়ার, বিকাশ/নগদ চার্জ ও ব্যাংক মেলাবেন তার সহজ গাইড</div></div>'
-    + '<button type="button" class="btn sm ' + (open ? 'danger' : '') + '" onclick="toggleDhGuide()">' + (open ? '✕ নির্দেশিকা লুকান (Hide)' : '👁️ নির্দেশিকা দেখুন (Show)') + '</button>'
+    + '<div style="min-width:0"><b>📖 কীভাবে সহজ টোটাল মেথডে দিন শেষে হিসাব মেলাবেন?</b><div class="sm mut">কোনো ড্রয়ার বাছাইয়ের ঝামেলা ছাড়াই ১ বক্সে সব হিসাব মেলানোর নিয়ম</div></div>'
+    + '<button type="button" class="btn sm ' + (open ? 'danger' : '') + '" onclick="toggleDhGuide()">' + (open ? '✕ গাইড লুকান' : '👁️ নিয়ম দেখুন') + '</button>'
     + '</div>';
-
   if (!open) return toggleBtn;
-
   return toggleBtn
-    + '<div class="card stack" style="gap:10px;border:1.5px solid var(--acc);background:var(--soft)">'
-    + '<div class="row between"><b>📘 বিস্তারিত নির্দেশিকা ও উদাহরণ</b><button type="button" class="btn sm danger" onclick="toggleDhGuide(false)">✕ বন্ধ করুন (Hide)</button></div>'
-    + '<div class="stack" style="gap:10px;font-size:13.5px;line-height:1.55">'
-    + '<div class="ipbox" style="background:var(--card)"><b>১. আপনার ড্রয়ার ও ব্যাংক স্ট্রাকচার (মোট ৪ ধরনের জায়গা):</b><br>'
-    + '• <b>Counter Drawer:</b> ফটোকপি, অনলাইন আবেদন, ফর্ম পূরণ ও এক্সট্রা সার্ভিসের সব ক্যাশ টাকা এখানে রাখবেন (এগুলো সরাসরি আপনার রেভিনিউ/আয়)।<br>'
-    + '• <b>Passport / Documents Drawer:</b> পাসপোর্টের বিল/অগ্রিম, ডকুমেন্ট কাজের নগদ জমা এবং এগুলোর নগদ খরচ ও ফেরত এই ড্রয়ার থেকে করবেন।<br>'
-    + '• <b>Visa Cash Drawer:</b> কাস্টমার নগদে ভিসার টাকা জমা রাখলে এখানে রাখবেন এবং নগদ ভিসা রিফান্ড বা ভিসা খরচ এখান থেকে দেবেন।<br>'
-    + '• <b>মোবাইল ব্যাংকিং ও ব্যাংক (Business / Personal):</b> কাস্টমার যদি বিকাশ, নগদ, রকেট, উপায় বা ব্যাংকে টাকা দেয় অথবা আপনি সেখান থেকে পেমেন্ট/খরচ দেন, এন্ট্রি দেওয়ার সময় শুধু সেই মাধ্যমটি সিলেক্ট করবেন।</div>'
-
-    + '<div class="ipbox" style="background:var(--card)"><b>২. ম্যানুয়ালি (বাস্তবে দোকানে) ও সফটওয়্যারে সারাদিন কী করবেন?</b><br>'
-    + '• <b>সকালে (Opening):</b> কিছুই করতে হবে না! গতকাল রাতে যে ক্লোজিং ব্যালেন্স সেভ করেছেন, আজ সকালে সেটাই অটোমেটিক প্রতিটি ড্রয়ারে <b>«শুরুতে ছিল»</b> হিসেবে বসে থাকবে। (হাতে বদলাতে চাইলে <b>«শুরুতে ছিল ✎»</b> বাটনে চাপ দেবেন)।<br>'
-    + '• <b>আগের কোনো খরচ আজ দিলে বা পরের খরচ আজ অগ্রিম দিলে:</b> আমাদের দৈনিক ক্যাশবুক চলে <b>«আজ আসলে কত টাকা ঢুকল আর কত টাকা বের হলো»</b> তার ওপর। তাই আগের বকেয়া ভিসা ফি/IP আজ দেন কিংবা আগামী মাসের দোকান ভাড়া আজ অগ্রিম দেন — যেহেতু টাকাটা <b>আজ</b> আপনার ড্রয়ার বা ব্যাংক থেকে বের হয়েছে, তাই আজকের তারিখেই এন্ট্রি দেবেন। তাহলেই আজ রাতে ড্রয়ার গুনে ১০০% মিলবে!<br>'
-    + '• <b>আগের বাকি টাকা আজ পেলে:</b> কোনো কাস্টমার আগের ফাইল বা ডকুমেন্টের বাকি টাকা আজ দিলে ওই ফাইলে গিয়ে <b>«+ জমা নিলাম»</b> চাপুন এবং কোন ড্রয়ার বা বিকাশে দিল তা সিলেক্ট করুন। টাকাটা আজকের হিসাবে যোগ হয়ে যাবে।<br>'
-    + '• <b>দোকান খরচ ও ব্যক্তিগত খরচ:</b> চা-নাস্তা, কারেন্ট বিল বা বাসার খরচের টাকা যেখান থেকেই নিন (Counter Drawer হোক বা Personal bKash/Bank হোক), <b>«দোকান খরচ»</b> বা <b>«ব্যক্তিগত খরচ»</b> বাটনে গিয়ে সেই ড্রয়ার/ব্যাংক সিলেক্ট করে লিখুন।</div>'
-
-    + '<div class="ipbox" style="background:var(--card)"><b>৩. বিকাশ/নগদে ক্যাশ-ইন বা ক্যাশ-আউট করলে যে এক্সট্রা টাকা যোগ হয়, সেটা কীভাবে মেলাবেন?</b><br>'
-    + 'ধরুন কাস্টমার আপনার বিকাশে ১,০০০ টাকা পাঠাল এবং ক্যাশ-আউট চার্জসহ ১,০২০ টাকা পাঠাল, আর আপনি তাকে ক্যাশ ড্রয়ার থেকে ১,০০০ টাকা নগদ দিলেন। এখানে বিকাশে ঢুকল +১,০২০ টাকা, কিন্তু ক্যাশ ড্রয়ার থেকে কমল −১,০০০ টাকা (২০ টাকা এক্সট্রা আপনার বিকাশ একাউন্টে রইল)।<br>'
-    + '👉 এজন্য নিচে <b>«📱 বিকাশ/নগদ চার্জ ও ক্যাশ-ইন/আউট»</b> বাটনে চাপ দিন! সেখানে ৪টি রেডি অপশন আছে:<br>'
-    + '১) কাস্টমার বিকাশে পাঠাল (চার্জসহ) ➔ আপনি নগদ ক্যাশ দিলেন<br>'
-    + '২) আপনি বিকাশ থেকে পাঠালেন ➔ কাস্টমার নগদ ক্যাশ (চার্জসহ) দিল<br>'
-    + '৩) আপনি বিকাশ/নগদ থেকে কোনো বিল/ভিসা ফি পেমেন্ট করলেন যেখানে বিকাশ এক্সট্রা চার্জ কাটল<br>'
-    + '৪) দিন শেষে বিকাশ/নগদে সারাদিনের মোট এক্সট্রা কমিশন/চার্জ এক ক্লিকে যোগ বা বিয়োগ করা।</div>'
-
-    + '<div class="ipbox" style="background:var(--card)"><b>৪. বাস্তব উদাহরণ — দিন শেষে কীভাবে ১ মিনিটে হিসাব মেলে দেখুন:</b><br>'
-    + 'ধরুন আজ সকালে আপনার <b>Counter Drawer</b>-এ ছিল <b>১,০০০ ৳</b>, <b>Visa Drawer</b>-এ <b>০ ৳</b>, আর <b>bKash</b>-এ ছিল <b>৫,০০০ ৳</b>।<br>'
-    + '• সারাদিনে কাউন্টারে এক্সট্রা সার্ভিস (ফটোকপি/অনলাইন) পেলেন <b>+৮০০ ৳</b> (Counter Drawer)।<br>'
-    + '• একজন ভিসা কাস্টমার নগদ জমা দিল <b>+১০,০০০ ৳</b> (Visa Drawer)।<br>'
-    + '• আরেকজন ভিসা ফাইল ফেরত নিল: তার জমা ছিল ২,০০০ ৳; আপনি <b>৩০০ ৳ চার্জ রেখে (যা আপনার রেভিনিউ)</b> তাকে Visa Drawer থেকে <b>−১,৭০০ ৳</b> ফেরত দিলেন।<br>'
-    + '• বিকাশ থেকে একটি ভিসা অ্যাপয়েন্টমেন্ট খরচ দিলেন <b>−১,৫০০ ৳</b> + চার্জ <b>−৩০ ৳</b> = <b>−১,৫৩০ ৳</b> (bKash)।<br>'
-    + '• Counter Drawer থেকে দোকান খরচ (নাস্তা) গেল <b>−১০০ ৳</b> এবং মালিকের ব্যক্তিগত খরচ গেল <b>−২০০ ৳</b>।<br><br>'
-    + '<b>রাত ৯টায় সফটওয়্যার আপনাকে অটোমেটিক দেখাবে (থাকার কথা):</b><br>'
-    + '✅ <b>Counter Drawer:</b> ১,০০০ + ৮০০ − ১০০ − ২০০ = <b>১,৫০০ ৳</b><br>'
-    + '✅ <b>Visa Drawer:</b> ০ + ১০,০০০ − ১,৭০০ = <b>৮,৩০০ ৳</b><br>'
-    + '✅ <b>bKash:</b> ৫,০০০ − ১,৫৩০ = <b>৩,৪৭০ ৳</b><br>'
-    + 'আপনি শুধু ড্রয়ার গুনে ও বিকাশ ব্যালেন্স দেখে সংখ্যা বসিয়ে <b>«✅ দিন শেষের হিসাব সেভ করুন»</b> চাপবেন—ব্যাস, আজকের হিসাব ক্লোজ!</div>'
-    + '<button type="button" class="btn sm ghost block" onclick="toggleDhGuide(false)">🔼 নির্দেশিকা লুকিয়ে রাখুন (Hide Instructions)</button>'
-    + '</div></div>';
+    + '<div class="card stack" style="gap:10px;border:1.5px solid var(--acc);background:var(--soft);font-size:13.5px;line-height:1.55">'
+    + '<div class="ipbox" style="background:var(--card)"><b>১. কাল বা আজ থেকে কীভাবে শুরু করবেন?</b><br>'
+    + '• উপরে <b>«🚀 নতুন শুরুর ব্যালেন্স সেট করুন»</b> বাটনে চাপ দিন।<br>'
+    + '• তারিখ বাছুন (যেমন: আগামীকাল বা আজ) এবং আপনার কাছে থাকা সব নগদ ক্যাশ + বিকাশ/নগদ + ব্যাংক মিলিয়ে মোট যত টাকা আছে তা এক ঘরে বসিয়ে সেভ করুন। আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
+    + '<div class="ipbox" style="background:var(--card)"><b>২. সারাদিন কীভাবে কাজ করবেন? (ড্রয়ার সিলেক্ট করতে হবে না!)</b><br>'
+    + '• <b>কাস্টমার বিল দিলে (+):</b> পাসপোর্ট, ডকুমেন্ট বা ভিসা ফাইলে কাস্টমার টাকা জমা দিলে শুধু টাকাটা লিখুন। সফটওয়্যার নিজে থেকেই <b>«আজ মোট এসেছে (+)»</b>-এ যোগ করে নেবে।<br>'
+    + '• <b>কাউন্টারের কাজ (+):</b> ফটোকপি, প্রিন্ট, অনলাইনের খুচরা কাজের টাকা দিন শেষে কাউন্টার ট্যাবে বা এখানে <b>«কাউন্টার এক্সট্রা আয়»</b> বাটনে একবারে লিখে দিন।<br>'
+    + '• <b>খরচ করলে (−):</b> দোকান খরচ, ব্যক্তিগত খরচ, ডকুমেন্টের খরচ, পাসপোর্টের চালান বা IP পরিশোধ এবং ভিসার অ্যাপয়েন্টমেন্ট খরচ লিখলেই <b>«আজ মোট গেছে (−)»</b> থেকে অটোমেটিক বাদ যাবে।<br>'
+    + '• <b>বাকি খাতা (+/−):</b> কেউ বাকি নিলে বা ধার নিলে আজকের ব্যালেন্স থেকে কমবে (−), আর কেউ বাকি শোধ করলে বা ফেরত দিলে আজকের ব্যালেন্সে যোগ হবে (+)।</div>'
+    + '<div class="ipbox" style="background:var(--card)"><b>৩. দিন শেষে কীভাবে মেলাবেন?</b><br>'
+    + '• রাতের বেলা আপনার সব ক্যাশ + বিকাশ/নগদ + ব্যাংকের টাকা যোগ করে <b>«দিন শেষে হাতে/অ্যাকাউন্টে মোট কত আছে»</b> বক্সে বসিয়ে সেভ করুন।<br>'
+    + '• আজকের এই ক্লোজিং ব্যালেন্সই আগামীকাল সকালে অটোমেটিক আপনার <b>«শুরুতে ছিল (Opening Balance)»</b> হয়ে যাবে!</div>'
+    + '<button type="button" class="btn sm ghost block" onclick="toggleDhGuide(false)">🔼 গাইড বন্ধ করুন</button>'
+    + '</div>';
 }
 
 function dhShift(k) { UI.dhd = addD(UI.dhd || today(), k); if (UI.dhd === today()) UI.dhd = ''; render(); }
 function dhJump(d) { UI.dhd = (!d || d === today()) ? '' : d; render(); }
 
+/* ---------- সহজ টোটাল মেথডের সম্পূর্ণ স্বচ্ছ খতিয়ান (কোথা থেকে কী নিলো ও কীভাবে হিসাব করলো) ---------- */
+function totalMathDetailHtml(R) {
+  const openSrc = R.hasTotCustomOpen
+    ? 'আপনার সেট করা শুরুর ব্যালেন্স' + (R.curClose.totOpenNote ? ' (' + esc(R.curClose.totOpenNote) + ')' : '')
+    : (R.tAnchor ? fd(R.tAnchor) + ' তারিখের ক্লোজিং ব্যালেন্স থেকে অটো এসেছে' : 'প্রাথমিক শুরুর ব্যালেন্স (আগের পুরনো ফাইল বাদ দিয়ে)');
+
+  const inCats = Object.values(R.inByCat).sort((a, b) => b.sum - a.sum);
+  const outCats = Object.values(R.outByCat).sort((a, b) => b.sum - a.sum);
+
+  const renderGroup = (groups, isOut) => {
+    if (!groups.length) return '<div class="sm mut" style="padding:8px 0">' + (isOut ? 'আজ কোনো টাকা খরচ বা বের হয়নি (৳০)' : 'আজ কোনো টাকা জমা বা আসেনি (৳০)') + '</div>';
+    return groups.map(g => {
+      return '<details class="ipbox fold" style="background:var(--card);padding:10px 12px;margin-top:6px" open>'
+        + '<summary class="row between"><span class="b" style="font-size:14px">' + (isOut ? '📤 ' : '📥 ') + esc(g.cat) + ' <span class="pill">' + g.items.length + 'টি</span></span>'
+        + '<b class="num ' + (isOut ? 'bad' : 'good') + '" style="font-size:15px">' + (isOut ? '−' : '+') + money(g.sum) + '</b></summary>'
+        + '<div style="margin-top:6px;border-top:1px dashed var(--line);padding-top:4px">'
+        + g.items.map((t, idx) => '<div class="kv" style="align-items:center;padding:7px 0;cursor:' + (t.editJs ? 'pointer' : 'default') + '"' + (t.editJs ? ' onclick="' + t.editJs + '"' : '') + '>'
+          + '<span style="color:var(--ink);min-width:0;flex:1"><span class="sno">' + (idx + 1) + '</span><b>' + esc(t.title) + '</b>'
+          + (t.isRev ? ' <span class="pill good" style="font-size:10px">সরাসরি আয়</span>' : '')
+          + (t.sub ? '<div class="sm mut">' + esc(t.sub) + '</div>' : '')
+          + '</span>'
+          + '<b class="num ' + (isOut ? 'bad' : 'good') + '">' + (isOut ? '−' : '+') + money(t.amt) + '</b></div>').join('')
+        + '</div></details>';
+    }).join('');
+  };
+
+  return '<div class="card stack" style="gap:12px;border:1.5px solid var(--acc)">'
+    + '<div class="row between"><b>🧮 সফটওয়্যার কীভাবে ' + money(R.tExpected) + ' হিসাব করলো? (সম্পূর্ণ ব্রেকডাউন)</b><span class="pill">মোট ' + R.extTxs.length + 'টি এন্ট্রি</span></div>'
+    + '<div class="sm mut" style="margin-top:-6px">প্রতিটি খাতে কোথা থেকে কত টাকা এসেছে (+) এবং কোথায় কত টাকা গেছে (−) তার বিস্তারিত নিচে দেওয়া হলো। যেকোনো লাইনে ট্যাপ করলে সরাসরি সেই এন্ট্রি খুলে এডিট বা ঠিক করতে পারবেন:</div>'
+
+    + '<div class="ipbox row between" style="background:var(--soft);border-color:var(--acc);cursor:pointer" onclick="totOpenBalSheet(\'' + R.D + '\')">'
+    + '<div><b>১. সকালে শুরুতে ছিল (Opening Balance) ✎</b><div class="sm mut">' + openSrc + ' · বদলাতে এখানে চাপুন</div></div>'
+    + '<b class="num" style="font-size:18px">' + money(R.tOpen) + '</b></div>'
+
+    + '<div class="ipbox stack" style="gap:4px;border-left:5px solid var(--good)">'
+    + '<div class="row between"><b class="good" style="font-size:15px">২. আজ মোট এসেছে / জমা হয়েছে (+' + R.extInList.length + 'টি এন্ট্রি)</b><b class="num good" style="font-size:17px">+' + money(R.extIn) + '</b></div>'
+    + '<div class="sm mut">কাস্টমারের পাসপোর্ট/ডকুমেন্ট/ভিসা জমা, কাউন্টার আয়, অন্য আয় ও বাকি আদায়:</div>'
+    + renderGroup(inCats, false)
+    + '</div>'
+
+    + '<div class="ipbox stack" style="gap:4px;border-left:5px solid var(--bad)">'
+    + '<div class="row between"><b class="bad" style="font-size:15px">৩. আজ মোট গেছে / খরচ হয়েছে (−' + R.extOutList.length + 'টি এন্ট্রি)</b><b class="num bad" style="font-size:17px">−' + money(R.extOut) + '</b></div>'
+    + '<div class="sm mut">দোকান ও ব্যক্তিগত খরচ, ডকুমেন্ট/ভিসা/পাসপোর্ট খরচ, ফেরত ও বাকি প্রদান:</div>'
+    + renderGroup(outCats, true)
+    + '</div>'
+
+    + '<div class="ipbox stack" style="gap:6px;background:var(--soft);border:1.5px solid var(--acc)">'
+    + '<div class="row between wrapr" style="gap:6px">'
+    + '<span class="sm"><b>হিসাবের সূত্র:</b> শুরুতে (' + money(R.tOpen) + ') + আজ এসেছে (' + money(R.extIn) + ') − আজ গেছে (' + money(R.extOut) + ')</span>'
+    + '<span style="font-size:17px"><b>দিন শেষে থাকার কথা = <span class="num" style="color:var(--acc)">' + money(R.tExpected) + '</span></b></span>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
+}
+
 function vDhisab() {
   const D = UI.dhd || today(), rel = relDay(D), R = dayReconcile(D);
-  const wFilter = UI.dhw || 'all';
   const pendVisaFees = VISA.rows.filter(v => (v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !visaFeeInfo(v).paid && visaFeeInfo(v).fee > 0);
-  const anyExpanded = R.ws.some(w => UI.wexp && UI.wexp[w.id]);
-
-  // Header Date Bar + Fresh Start Banner
   const startD = S.settings.dhStartDate || '';
+
+  // Top Date Navigation + 1-Click Fresh Start Button
   const dateNav = '<div class="card stack" style="gap:10px">'
-    + '<div class="row between"><button class="ib" onclick="dhShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dh_dsel" type="date" value="' + D + '" onchange="dhJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + ' · দিন শেষের হিসাব মেলানো' + (startD ? ' (শুরু: ' + fd(startD) + ')' : '') + '</div></div><button class="ib" onclick="dhShift(1)" aria-label="পরের দিন">›</button></div>'
+    + '<div class="row between"><button class="ib" onclick="dhShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dh_dsel" type="date" value="' + D + '" onchange="dhJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + ' · দিন শেষের হিসাব' + (startD ? ' (শুরু: ' + fd(startD) + ')' : '') + '</div></div><button class="ib" onclick="dhShift(1)" aria-label="পরের দিন">›</button></div>'
     + '<div class="row between wrapr" style="gap:8px;padding-top:8px;border-top:1px dashed var(--line)">'
-    + '<span class="sm mut">কাল বা আজ থেকে নতুন ব্যালেন্স দিয়ে শুরু করতে চান?</span>'
+    + '<span class="sm mut">কাল বা আজ থেকে নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু করবেন?</span>'
     + '<button type="button" class="btn sm good" onclick="freshStartSheet(\'' + D + '\')">🚀 নতুন শুরুর ব্যালেন্স সেট করুন</button>'
     + '</div></div>';
 
-  // Hero Summary Card
-  const isPer = w => w.kind === 'bank_per' || /personal|ব্যক্তিগত/i.test((w.owner || '') + ' ' + (w.name || ''));
+  // Pending Visa Appointment Fees Section
+  const visaPendHtml = pendVisaFees.length ? ('<h2>⏳ ভিসা অ্যাপয়েন্টমেন্ট হয়েছে কিন্তু ভিসা খরচ এখনো বাকি (' + pendVisaFees.length + 'টি)</h2>'
+    + '<div class="card stack" style="gap:8px">'
+    + '<div class="sm mut">ভিসা অ্যাপয়েন্টমেন্ট হলে যে ভিসা ফি ও সফটওয়্যার চার্জ আজ বা পরে দিতে হয়, সেগুলোর বাকি তালিকা (আজ পরিশোধ করলে "খরচ দিন" চাপুন):</div>'
+    + pendVisaFees.map(v => {
+      const fi = visaFeeInfo(v);
+      return '<div class="kv" style="align-items:center"><span style="color:var(--ink)"><b>' + (v.serial ? '#' + esc(v.serial) + ' ' : '') + esc(v.name) + '</b><div class="sm mut">' + (v.apptDate ? 'Appt: ' + fd(v.apptDate) + ' · ' : '') + 'ভিসা ফি ' + money(v.baseFee) + ' + সফটওয়্যার ' + money(v.softFee) + '</div></span>'
+        + '<span class="row" style="gap:8px"><b class="num bad">' + money(fi.fee) + '</b><button class="btn sm warnb" onclick="visaFeeSheet(\'' + v.id + '\')">খরচ দিন</button></span></div>';
+    }).join('') + '</div>') : '';
+
+  // ===== ডিফল্ট: সহজ ১-বক্স টোটাল মেথড (Simple Total Method) =====
+  if (!isMultiW()) {
+    const ok = R.tHasAct && Math.abs(R.tDiff) < 0.5;
+    const stPill = !R.tHasAct
+      ? '<span class="pill">দিন শেষে মিলিয়ে নিন</span>'
+      : (ok ? '<span class="pill good">✓ হিসাব মিলেছে</span>' : '<span class="pill bad">⚠ ' + (R.tDiff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(R.tDiff)) + '</span>');
+
+    const heroSimple = '<div class="card hero">'
+      + '<div class="row between"><span class="sm" style="opacity:.85">দিন শেষে মোট থাকার কথা (ক্যাশ + বিকাশ/নগদ + ব্যাংক সব মিলিয়ে)</span>' + stPill + '</div>'
+      + '<div class="big num">' + money(R.tExpected) + '</div>'
+      + '<div class="sm" style="opacity:.9">শুরুতে ছিল <b class="num">' + money(R.tOpen) + '</b> &nbsp;+&nbsp; আজ এসেছে <b class="num">+' + money(R.extIn) + '</b> &nbsp;−&nbsp; আজ গেছে <b class="num">−' + money(R.extOut) + '</b></div>'
+      + '<div class="tri">'
+      + '<div style="cursor:pointer" onclick="totOpenBalSheet(\'' + D + '\')"><small>১. শুরুতে ছিল ✎</small><b class="num">' + money(R.tOpen) + '</b></div>'
+      + '<div><small>২. আজ মোট এসেছে (+)</small><b class="num">+' + money(R.extIn) + '</b></div>'
+      + '<div><small>৩. আজ মোট গেছে (−)</small><b class="num">−' + money(R.extOut) + '</b></div>'
+      + '</div></div>';
+
+    // 1-Box End of Day Matching Card
+    const matchCard = '<div class="card stack" style="gap:12px;border-left:5px solid ' + (!R.tHasAct ? 'var(--acc)' : (ok ? 'var(--good)' : 'var(--bad)')) + '">'
+      + '<div class="row between"><div><b style="font-size:17px">✅ দিন শেষে মোট টাকা মিলিয়ে নিন (১-বক্স টোটাল মেথড)</b><div class="sm mut">আপনার দোকানের ক্যাশ + বিকাশ/নগদ + ব্যাংকে এখন মোট কত টাকা আছে তা নিচে লিখুন</div></div></div>'
+      + '<div class="mini num" style="grid-template-columns:repeat(4,1fr)">'
+      + '<div style="cursor:pointer" onclick="totOpenBalSheet(\'' + D + '\')"><small>শুরুতে ছিল ✎</small><b>' + Math.round(R.tOpen) + '</b></div>'
+      + '<div><small>আজ এসেছে (+)</small><b class="good">+' + Math.round(R.extIn) + '</b></div>'
+      + '<div><small>আজ গেছে (−)</small><b class="bad">−' + Math.round(R.extOut) + '</b></div>'
+      + '<div><small>থাকার কথা</small><b style="color:var(--acc)">' + Math.round(R.tExpected) + '</b></div>'
+      + '</div>'
+      + '<div class="row" style="gap:8px">'
+      + '<div style="flex:1"><input id="dc_tot_act" type="number" inputmode="decimal" style="font-size:18px;font-weight:700" placeholder="দিন শেষে হাতে/অ্যাকাউন্টে মোট কত আছে লিখুন (৳)" value="' + (R.tHasAct ? R.tActual : '') + '" oninput="dhTotLiveDiff(' + R.tExpected + ')"></div>'
+      + '<button type="button" class="btn sm ghost" onclick="$(\'dc_tot_act\').value=' + Math.round(R.tExpected) + ';dhTotLiveDiff(' + R.tExpected + ')">✓ মিলেছে</button>'
+      + '</div>'
+      + '<div class="row between sm"><span id="dc_tot_df" class="' + (!R.tHasAct ? 'mut' : (ok ? 'good b' : 'bad b')) + '" style="font-size:14px">'
+      + (!R.tHasAct ? 'মোট টাকা লিখলে সাথে সাথে কম বা বেশি দেখাবে' : (ok ? '✓ হিসাবের সাথে হুবহু মিলেছে!' : (R.tDiff < 0 ? '⚠ হিসাবের চেয়ে ' + money(Math.abs(R.tDiff)) + ' কম আছে (Short)!' : '⚠ হিসাবের চেয়ে ' + money(R.tDiff) + ' বেশি আছে (Extra)!')))
+      + '</span></div>'
+      + smartHintsForTotal(R)
+      + '<div class="field"><label for="dh_close_note">📝 দিন শেষের নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: ক্যাশ ৩০,০০০ + বিকাশ ২০,০০০ = মোট ৫০,০০০ মিলেছে"></div>'
+      + '<button class="btn block" onclick="saveDayClosingSimple(\'' + D + '\')">💾 দিন শেষের ক্লোজিং সেভ করুন (কালকের ওপেনিং হয়ে যাবে)</button>'
+      + '</div>';
+
+    // Clean Quick Action Buttons (No drawer confusion)
+    const quickSimple = '<h2>⚡ চটজলদি এন্ট্রি (খরচ করলে যাবে · বিল দিলে আসবে · বাকি নিলে যাবে)</h2>'
+      + '<div class="quick" style="grid-template-columns:repeat(4,1fr)">'
+      + '<button onclick="quickDhEntry(\'shop_exp\')"><span class="qi r">' + ic('receipt') + '</span>দোকান খরচ (−)</button>'
+      + '<button onclick="quickDhEntry(\'per_exp\')"><span class="qi r">' + ic('down') + '</span>ব্যক্তিগত খরচ (−)</button>'
+      + '<button onclick="quickDhEntry(\'counter_rev\')"><span class="qi g">' + ic('print') + '</span>কাউন্টার/এক্সট্রা আয় (+)</button>'
+      + '<button onclick="go(\'loan\')"><span class="qi w">' + ic('swap') + '</span>বাকি খাতা (+/−)</button>'
+      + '<button onclick="djForm()"><span class="qi">' + ic('doc') + '</span>ডকুমেন্ট কাজ/জমা</button>'
+      + '<button onclick="fileForm()"><span class="qi">' + ic('id') + '</span>পাসপোর্ট ফাইল/জমা</button>'
+      + '<button onclick="quickDhEntry(\'visa_dep\')"><span class="qi g">' + ic('plane') + '</span>ভিসা জমা (+)</button>'
+      + '<button onclick="quickDhEntry(\'visa_cost\')"><span class="qi r">' + ic('coin') + '</span>ভিসা খরচ (−)</button>'
+      + '</div>'
+      + '<div class="grid2">'
+      + '<button class="btn sm ghost block" onclick="quickDhEntry(\'visa_ret\')">↩ ভিসা ফেরত ও রাখা চার্জ</button>'
+      + '<button class="btn sm ghost block" onclick="quickDhEntry(\'wallet_io\')">➕/➖ অন্য যেকোনো জমা বা খরচ</button>'
+      + '</div>';
+
+    // Recent 7 Days Closing History
+    const histDays = []; for (let i = 6; i >= 0; i--) histDays.push(addD(D, -i)); histDays.reverse();
+    const histRows = histDays.map(hd => {
+      if (startD && hd < startD) return '';
+      const r0 = dayReconcile(hd);
+      if (!r0.tHasAct && !r0.extIn && !r0.extOut && hd !== D) return '';
+      return '<div style="display:grid;grid-template-columns:64px 1fr 1fr 1fr 1fr;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);cursor:pointer' + (hd === D ? ';font-weight:700;color:var(--acc)' : '') + '" onclick="dhJump(\'' + hd + '\')">'
+        + '<span class="sm">' + fd(hd) + '</span>'
+        + '<span class="num sm" style="text-align:right">' + Math.round(r0.tOpen) + '</span>'
+        + '<span class="num sm good" style="text-align:right">+' + Math.round(r0.extIn) + '</span>'
+        + '<span class="num sm bad" style="text-align:right">−' + Math.round(r0.extOut) + '</span>'
+        + '<b class="num sm ' + (!r0.tHasAct ? '' : (Math.abs(r0.tDiff) < 0.5 ? 'good' : 'bad')) + '" style="text-align:right">' + Math.round(r0.tHasAct ? r0.tActual : r0.tExpected) + (r0.tHasAct ? (Math.abs(r0.tDiff) < 0.5 ? ' ✓' : ' ⚠') : '') + '</b></div>';
+    }).join('');
+    const histCard = histRows ? '<div class="card stack" style="gap:2px"><b style="margin-bottom:4px">📅 সাম্প্রতিক দিনের হিসাব (চাপলে ওই দিন খুলবে)</b>'
+      + '<div class="sm mut" style="display:grid;grid-template-columns:64px 1fr 1fr 1fr 1fr;gap:4px;font-weight:700"><span>তারিখ</span><span style="text-align:right">শুরুতে</span><span style="text-align:right">এসেছে</span><span style="text-align:right">গেছে</span><span style="text-align:right">দিন শেষে</span></div>'
+      + histRows + '</div>' : '';
+
+    const modeSwitchCard = '<div class="card row between wrapr" style="gap:8px;padding:10px 14px">'
+      + '<span class="sm mut">আপনি এখন <b>সহজ ১-বক্স টোটাল মেথড</b> ব্যবহার করছেন (কোনো ড্রয়ার বাছাই করতে হয় না)।</span>'
+      + '<button type="button" class="btn sm ghost" onclick="setDhMode(\'multi\')">আলাদা ড্রয়ার/ব্যাংক মোডে যান</button>'
+      + '</div>';
+
+    return dateNav + dailyGuideHtml() + heroSimple + matchCard + quickSimple + totalMathDetailHtml(R) + visaPendHtml + histCard + modeSwitchCard;
+  }
+
+  // ===== ঐচ্ছিক: মাল্টি-ড্রয়ার মোড (যদি কেউ আলাদা আলাদা ড্রয়ার মিলাতে চান) =====
+  const wFilter = UI.dhw || 'all';
+  const anyExpanded = R.ws.some(w => UI.wexp && UI.wexp[w.id]);
+  const modeTopBanner = '<div class="card row between wrapr" style="gap:8px;background:var(--warnbg);border-color:var(--warn);padding:10px 14px">'
+    + '<span class="sm">আপনি এখন <b>আলাদা ড্রয়ার/ব্যাংক মোডে</b> আছেন। ড্রয়ার সিলেক্ট করার ঝামেলা এড়াতে চাইলে সহজ টোটাল মেথডে যান:</span>'
+    + '<button type="button" class="btn sm" onclick="setDhMode(\'total\')">✅ সহজ ১-বক্স টোটাল মেথডে ফিরুন</button></div>';
+
+  const isPer = w => wIsPer(w) || /personal|ব্যক্তিগত/i.test(w.name || '');
   let bizT = 0, perT = 0; R.ws.forEach(w => { const c = R.byW[w.id], v = c.hasActual ? c.actual : c.expected; if (isPer(w)) perT += v; else bizT += v; });
-  const splitLine = '<div class="sm" style="opacity:.9;margin-top:8px">🏢 ব্যবসার মোট: <b class="num">' + money(bizT) + '</b> · 👤 ব্যক্তিগত মোট: <b class="num">' + money(perT) + '</b> <span style="opacity:.7">(গোনা থাকলে গোনা, নইলে থাকার কথা)</span></div>';
+  const B = R.ws.reduce((a, w) => { const c = R.byW[w.id]; a.o += c.open; a.i += c.inn; a.x += c.out; a.e += c.expected; return a; }, { o: 0, i: 0, x: 0, e: 0 });
+  const splitLine = R.ws.some(isPer) ? '<div class="sm" style="opacity:.9;margin-top:8px">👤 এর মধ্যে ব্যক্তিগত লেবেলের অ্যাকাউন্টে: <b class="num">' + money(perT) + '</b> <span style="opacity:.7">(ওপরের মোটে ধরা আছে)</span></div>' : '';
   const diffTot = R.totAct - R.totExp;
   const hero = '<div class="card hero">'
     + '<div class="row between"><span class="sm" style="opacity:.8">সব ড্রয়ার + বিকাশ/নগদ + ব্যাংক মিলিয়ে থাকার কথা</span>'
     + (R.allMatched ? '<span class="pill good">✓ সব হিসাব মিলেছে</span>' : (R.anyAct ? '<span class="pill warn">' + (Math.abs(diffTot) < 0.5 ? '✓ মিলেছে' : (diffTot < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(diffTot))) + '</span>' : '<span class="pill">দিন শেষে মিলিয়ে নিন</span>')) + '</div>'
-    + '<div class="big num">' + money(R.totExp) + '</div>'
-    + '<div class="sm" style="opacity:.82">শুরুতে ছিল <b class="num">' + money(R.totOpen) + '</b> · আজ ঢুকেছে <b class="num">+' + money(R.totIn) + '</b> · আজ বের হয়েছে <b class="num">−' + money(R.totOut) + '</b></div>'
+    + '<div class="big num">' + money(B.e) + '</div>'
+    + '<div class="sm" style="opacity:.82">শুরুতে ছিল <b class="num">' + money(B.o) + '</b> · আজ ঢুকেছে <b class="num">+' + money(B.i) + '</b> · আজ বের হয়েছে <b class="num">−' + money(B.x) + '</b></div>'
     + '<div class="tri">'
     + '<div><small>কাউন্টার ও সার্ভিস আয়</small><b class="num">' + money(R.revCounter + R.revKept + R.revDocPass) + '</b></div>'
     + '<div><small>ভিসা জমা (আমানত)</small><b class="num">' + money(R.visaDepositIn) + '</b></div>'
     + '<div><small>দোকান + ব্যক্তিগত খরচ</small><b class="num">' + money(R.shopExp + R.perExp) + '</b></div>'
     + '</div>' + splitLine + '</div>';
 
-  // Smart Quick Entry Bar (10 exact scenarios including bKash/Nagad Cash-In/Out & Extra charge)
-  const quickBar = '<h2>⚡ চটজলদি এন্ট্রি (১ ক্লিকে সঠিক ড্রয়ার বা ব্যাংকে)</h2>'
+  const unsetV = R.txs.filter(t => t.unsetW);
+  const unsetBox = unsetV.length ? '<div class="card stack" style="gap:8px;border-left:5px solid var(--warn)"><b>⚠ ' + unsetV.length + 'টি ভিসা জমার মাধ্যম বাছা হয়নি</b><div class="sm mut">ভিসা অ্যাপে টাকা কোন মাধ্যমে নিলেন তা থাকে না, তাই এখন Visa Cash Drawer ধরা আছে। বিকাশ/নগদ/ব্যাংকে নিয়ে থাকলে চেপে ঠিক করুন।</div>'
+    + unsetV.map(t => '<div class="kv" style="align-items:center;cursor:pointer" onclick="' + t.editJs + '"><span style="color:var(--ink)"><b>' + esc(t.title) + '</b></span><b class="num good">+' + money(t.amt) + '</b></div>').join('') + '</div>' : '';
+
+  const quickBar = '<h2>⚡ চটজলদি এন্ট্রি</h2>'
     + '<div class="quick" style="grid-template-columns:repeat(3,1fr)">'
     + '<button onclick="quickDhEntry(\'counter_rev\')"><span class="qi g">' + ic('print') + '</span>কাউন্টার এক্সট্রা আয়</button>'
     + '<button onclick="quickDhEntry(\'visa_dep\')"><span class="qi">' + ic('plane') + '</span>ভিসা টাকা জমা</button>'
@@ -2576,15 +2880,15 @@ function vDhisab() {
     + '<div class="grid2">'
     + '<button class="btn sm ghost block" onclick="quickDhEntry(\'transfer\')">🔄 এক ড্রয়ার ⇄ অন্য ড্রয়ার / ব্যাংক ট্রান্সফার</button>'
     + '<button class="btn sm ghost block" onclick="go(\'loan\')">📒 বাকি খাতা (কেউ নিল / ফেরত দিল)</button>'
-    + '</div>';
+    + '</div>'
+    + '<button class="btn sm ghost block" onclick="quickDhEntry(\'wallet_io\')">👤 ব্যক্তিগত ব্যাংক / মোবাইল ব্যাংকিংয়ের অন্য জমা-খরচ</button>';
 
   const expandAllBar = '<div class="card row between wrapr" style="padding:10px 14px;gap:8px">'
-    + '<span class="sm"><b>🔍 কীভাবে প্রতিটি ড্রয়ারে এত টাকা থাকার কথা হলো?</b> (কার্ডের নিচে বা এক ক্লিকে সব দেখুন)</span>'
+    + '<span class="sm"><b>🔍 কীভাবে প্রতিটি ড্রয়ারে এত টাকা থাকার কথা হলো?</b></span>'
     + '<button type="button" class="btn sm ' + (anyExpanded ? 'warnb' : 'ghost') + '" onclick="toggleAllWBreak(' + (!anyExpanded) + ')">'
     + (anyExpanded ? '🔼 সব ড্রয়ারের বিস্তারিত লুকান' : '🔽 সব ড্রয়ারের বিস্তারিত হিসাব খুলুন')
     + '</button></div>';
 
-  // Group wallets by category for end-of-day matching
   const wGroups = [
     ['drawer', '🗄️ ক্যাশ ড্রয়ারসমূহ (Counter · Passport/Docs · Visa)'],
     ['mfs', '📱 মোবাইল ব্যাংকিং (bKash · Nagad · Rocket · Upay)'],
@@ -2606,44 +2910,30 @@ function vDhisab() {
       return '<div class="card stack" style="gap:10px;border-left:5px solid ' + (!c.hasActual ? 'var(--acc)' : (ok ? 'var(--good)' : 'var(--bad)')) + '">'
         + '<div class="row between"><div style="min-width:0"><b style="font-size:16px">' + esc(w.name) + '</b>' + (w.owner ? ' <span class="pill">' + esc(w.owner) + '</span>' : '') + '</div>' + stPill + '</div>'
         + '<div class="mini num" style="grid-template-columns:repeat(4,1fr)">'
-        + '<div style="cursor:pointer" onclick="openBalSheet(\'' + D + '\',\'' + w.id + '\')" title="শুরুর ব্যালেন্স কাস্টমাইজ করতে চাপুন"><small>শুরুতে ছিল ' + (c.hasCustomOpen ? '✏️' : '✎') + '</small><b>' + Math.round(c.open) + '</b></div>'
-        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')" title="আজকের জমার তালিকা দেখতে চাপুন"><small>আজ জমা (+)</small><b class="good">+' + Math.round(c.inn) + '</b></div>'
-        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')" title="আজকের খরচের তালিকা দেখতে চাপুন"><small>আজ খরচ (−)</small><b class="bad">−' + Math.round(c.out) + '</b></div>'
-        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')" title="কীভাবে এই টাকা হলো তা দেখতে চাপুন"><small>থাকার কথা 🔍</small><b style="color:var(--acc)">' + Math.round(c.expected) + '</b></div>'
+        + '<div style="cursor:pointer" onclick="openBalSheet(\'' + D + '\',\'' + w.id + '\')"><small>শুরুতে ছিল ' + (c.hasCustomOpen ? '✏️' : '✎') + '</small><b>' + Math.round(c.open) + '</b></div>'
+        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')"><small>আজ জমা (+)</small><b class="good">+' + Math.round(c.inn) + '</b></div>'
+        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')"><small>আজ খরচ (−)</small><b class="bad">−' + Math.round(c.out) + '</b></div>'
+        + '<div style="cursor:pointer" onclick="toggleWBreak(\'' + w.id + '\')"><small>থাকার কথা 🔍</small><b style="color:var(--acc)">' + Math.round(c.expected) + '</b></div>'
         + '</div>'
-        + (c.hasCustomOpen ? '<div class="sm warnc">✏️ কাস্টম ওপেনিং দেওয়া আছে (অটো ছিল ' + money(c.autoOpen) + ')' + (c.openNote ? ' · কারণ: ' + esc(c.openNote) : '') + '</div>' : '')
         + '<div class="row" style="gap:8px">'
         + '<div style="flex:1"><input id="dc_w_' + w.id + '" type="number" inputmode="decimal" placeholder="দিন শেষে আসল ব্যালেন্স লিখুন (৳)" value="' + (c.hasActual ? c.actual : '') + '" oninput="dhLiveDiff(\'' + w.id + '\',' + c.expected + ')"></div>'
         + '<button type="button" class="btn sm ghost" onclick="$(\'dc_w_' + w.id + '\').value=' + Math.round(c.expected) + ';dhLiveDiff(\'' + w.id + '\',' + c.expected + ')">✓ মিলেছে</button>'
         + '</div>'
         + '<div class="row between sm"><span id="dc_df_' + w.id + '" class="' + (!c.hasActual ? 'mut' : (ok ? 'good b' : 'bad b')) + '">'
         + (!c.hasActual ? 'গোনা টাকা লিখলে সাথে সাথে কম/বেশি দেখাবে' : (ok ? '✓ হিসাবের সাথে হুবহু মিলেছে' : (c.diff < 0 ? '⚠ হিসাবের চেয়ে ' + money(Math.abs(c.diff)) + ' কম আছে!' : '⚠ হিসাবের চেয়ে ' + money(c.diff) + ' বেশি আছে!')))
-        + '</span>'
-        + '</div>'
-        + '<input id="dc_n_' + w.id + '" value="' + esc((R.curClose.wnotes || {})[w.id] || '') + '" placeholder="📝 এই জায়গার নোট — কম/বেশি হলে কেন (ঐচ্ছিক)" style="font-size:13px">' + smartHintsForWallet(R, w.id)
+        + '</span></div>'
+        + '<input id="dc_n_' + w.id + '" value="' + esc((R.curClose.wnotes || {})[w.id] || '') + '" placeholder="📝 এই জায়গার নোট (ঐচ্ছিক)" style="font-size:13px">' + smartHintsForWallet(R, w.id)
         + walletBreakdownHtml(D, c)
         + '</div>';
     }).join('') + '</div>';
   });
 
   const saveCloseBox = '<div class="card stack" style="gap:10px">'
-    + '<div class="field"><label for="dh_close_note">📝 দিন শেষের ক্লোজিং নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: সব ড্রয়ার ও বিকাশ মেলানো শেষ / ৫০ টাকা ভাংতি কম ছিল"></div>'
+    + '<div class="field"><label for="dh_close_note">📝 দিন শেষের ক্লোজিং নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: সব ড্রয়ার ও বিকাশ মেলানো শেষ"></div>'
     + '<div class="grid2"><button class="btn block" onclick="saveDayClosing(\'' + D + '\')">✅ দিন শেষের হিসাব সেভ করুন</button>'
     + '<button class="btn ghost block" onclick="fillAllExpected(\'' + D + '\')">⚡ সবগুলোতে "থাকার কথা" বসান</button></div>'
-    + '<div class="sm mut">টিপস: আজ যে আসল ব্যালেন্স দিয়ে সেভ করবেন, আগামীকাল সকালের হিসাবে সেটাই অটোমেটিক "শুরুতে ছিল (Opening Balance)" হিসেবে বসে যাবে। কোনো ড্রয়ারের ওপেনিং হাতে বদলাতে চাইলে ওই কার্ডের <b>«শুরুতে ছিল ✎»</b> ঘরে ট্যাপ করুন।</div>'
     + '</div>';
 
-  // Pending Visa Appointment Fees Section
-  const visaPendHtml = pendVisaFees.length ? ('<h2>⏳ ভিসা অ্যাপয়েন্টমেন্ট হয়েছে কিন্তু ভিসা খরচ এখনো বাকি (' + pendVisaFees.length + 'টি)</h2>'
-    + '<div class="card stack" style="gap:8px">'
-    + '<div class="sm mut">ভিসা অ্যাপয়েন্টমেন্ট হলে যে ভিসা ফি ও সফটওয়্যার চার্জ আজ বা পরে দিতে হয়, সেগুলোর বাকি তালিকা:</div>'
-    + pendVisaFees.map(v => {
-      const fi = visaFeeInfo(v);
-      return '<div class="kv" style="align-items:center"><span style="color:var(--ink)"><b>' + (v.serial ? '#' + esc(v.serial) + ' ' : '') + esc(v.name) + '</b><div class="sm mut">' + (v.apptDate ? 'Appt: ' + fd(v.apptDate) + ' · ' : '') + 'ভিসা ফি ' + money(v.baseFee) + ' + সফটওয়্যার ' + money(v.softFee) + '</div></span>'
-        + '<span class="row" style="gap:8px"><b class="num bad">' + money(fi.fee) + '</b><button class="btn sm warnb" onclick="visaFeeSheet(\'' + v.id + '\')">খরচ দিন</button></span></div>';
-    }).join('') + '</div>') : '';
-
-  // Detailed Transaction Log for the Day (filterable by Drawer/Wallet)
   const filtTxs = wFilter === 'all' ? R.txs : R.txs.filter(t => t.w === wFilter);
   const txSec = '<div id="dh_tx_sec"></div><h2>📋 ' + rel + 'র সব লেনদেনের বিস্তারিত (' + filtTxs.length + 'টি)</h2>'
     + '<div class="hs">' + chipB('সব মাধ্যম (' + R.txs.length + ')', wFilter === 'all', "UI.dhw='all';render()")
@@ -2657,7 +2947,34 @@ function vDhisab() {
     + '</div>'
     + '<button class="btn ghost block" onclick="walletManageSheet()">⚙️ ড্রয়ার, বিকাশ/নগদ/রকেট/উপায় ও ব্যাংক যোগ বা পরিবর্তন করুন</button>';
 
-  return dateNav + dhHelp('date') + dailyGuideHtml() + hero + dhHelp('hero') + quickBar + dhHelp('quick') + expandAllBar + dhHelp('wcard') + drawerCards + saveCloseBox + dhHelp('close') + visaPendHtml + (pendVisaFees.length ? dhHelp('visapend') : '') + txSec + dhHelp('txlog') + dhHelp('manage');
+  return modeTopBanner + dateNav + dailyGuideHtml() + hero + unsetBox + quickBar + expandAllBar + drawerCards + saveCloseBox + visaPendHtml + txSec;
+}
+
+function dhTotLiveDiff(exp) {
+  const raw = val('dc_tot_act').trim(), el = $('dc_tot_df');
+  if (!el) return;
+  if (raw === '') { el.className = 'mut'; el.textContent = 'মোট টাকা লিখলে সাথে সাথে কম বা বেশি দেখাবে'; return; }
+  const act = n(raw), df = act - exp;
+  if (Math.abs(df) < 0.5) { el.className = 'good b'; el.textContent = '✓ হিসাবের সাথে হুবহু মিলেছে!'; }
+  else if (df < 0) { el.className = 'bad b'; el.textContent = '⚠ হিসাবের চেয়ে ' + money(Math.abs(df)) + ' কম আছে (Short)!'; }
+  else { el.className = 'bad b'; el.textContent = '⚠ হিসাবের চেয়ে ' + money(df) + ' বেশি আছে (Extra)!'; }
+}
+
+function saveDayClosingSimple(D) {
+  const prev = S.dclose[D] || {};
+  const raw = val('dc_tot_act').trim();
+  const R = dayReconcile(D);
+  const totAct = raw !== '' ? n(raw) : R.tExpected;
+  S.dclose[D] = Object.assign({}, prev, {
+    id: D, date: D,
+    totActual: totAct,
+    note: val('dh_close_note').trim(),
+    by: actor(),
+    updatedAt: Date.now()
+  });
+  save('dclose', D);
+  render();
+  toast('✅ দিন শেষের মোট হিসাব (' + money(totAct) + ') সেভ হয়েছে! এটি কালকের ওপেনিং ব্যালেন্স হবে।');
 }
 
 function dhLiveDiff(wid, exp) {
@@ -2682,15 +2999,16 @@ function fillAllExpected(D) {
 function saveDayClosing(D) {
   const prev = S.dclose[D] || {};
   const counts = Object.assign({}, prev.counts || {});
+  let tot = 0, any = false;
   wallets().forEach(w => {
     const inp = $('dc_w_' + w.id);
     if (!inp) return;
     const raw = inp.value.trim();
-    if (raw !== '') counts[w.id] = n(raw);
+    if (raw !== '') { counts[w.id] = n(raw); tot += n(raw); any = true; }
     else delete counts[w.id];
   });
   const wnotes = Object.assign({}, prev.wnotes || {}); wallets().forEach(w => { const e = $('dc_n_' + w.id); if (e) { const v = e.value.trim(); if (v) wnotes[w.id] = v; else delete wnotes[w.id]; } });
-  S.dclose[D] = { id: D, date: D, wnotes, counts, customOpen: prev.customOpen || {}, openNote: prev.openNote || {}, note: val('dh_close_note').trim(), by: actor(), updatedAt: Date.now() };
+  S.dclose[D] = { id: D, date: D, wnotes, counts, totActual: any ? tot : prev.totActual, totCustomOpen: prev.totCustomOpen, totOpenNote: prev.totOpenNote, customOpen: prev.customOpen || {}, openNote: prev.openNote || {}, note: val('dh_close_note').trim(), by: actor(), updatedAt: Date.now() };
   save('dclose', D);
   render();
   toast('✅ দিন শেষের হিসাব সেভ হয়েছে!');
@@ -2795,7 +3113,7 @@ function quickDhEntry(mode) {
     sheet('কাউন্টার এক্সট্রা সার্ভিস (সরাসরি রেভিনিউ)',
       '<div class="mut sm">ফটোকপি, প্রিন্ট, অনলাইন আবেদন, CV, ফর্ম পূরণ বা যেকোনো এক্সট্রা সার্ভিসের টাকা যা সরাসরি আপনার আয় (Revenue):</div>'
       + '<div class="grid2"><div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div><div class="field"><label for="qe_amt">টাকার অংক (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
-      + wFieldHtml('qe_w', 'w_counter', 'কোন ড্রয়ার / বিকাশ / ব্যাংকে টাকা রাখলেন')
+      + wFieldHtml('qe_w', lastW('qe_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংকে টাকা রাখলেন')
       + '<div class="field"><label for="qe_client">কী কাজের টাকা / বিবরণ</label><input id="qe_client" placeholder="যেমন: দিন শেষের কাউন্টার এক্সট্রা সার্ভিস / ফটোকপি ও অনলাইন"></div>'
       + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="ঐচ্ছিক"></div>'
       + '<button class="btn block" onclick="saveQuickWtx(\'in\',\'কাউন্টার এক্সট্রা সার্ভিস (আয়)\',true)">সেভ করুন</button>');
@@ -2803,7 +3121,7 @@ function quickDhEntry(mode) {
     sheet('ভিসা ক্লায়েন্টের টাকা জমা (আমানত)',
       '<div class="mut sm">কেউ ভিসার টাকা জমা রাখলে তা কোন ড্রয়ারে বা বিকাশ/নগদ/ব্যাংকে রাখলেন লিখে রাখুন:</div>'
       + '<div class="grid2"><div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div><div class="field"><label for="qe_amt">জমা টাকা (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
-      + wFieldHtml('qe_w', 'w_visacash', 'কোথায় জমা রাখলেন (Visa Drawer / bKash / Nagad / Bank)')
+      + wFieldHtml('qe_w', lastW('qe_w','w_visacash'), 'কোথায় জমা রাখলেন (Visa Drawer / bKash / Nagad / Bank)')
       + '<div class="field"><label for="qe_client">ক্লায়েন্টের নাম / ফাইল</label><input id="qe_client" placeholder="ক্লায়েন্টের নাম ও মোবাইল"></div>'
       + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="যেমন: ভারত ভিসা ফাইল জমা"></div>'
       + '<button class="btn block" onclick="saveQuickWtx(\'in\',\'ভিসা টাকা জমা\',false)">জমা সেভ করুন</button>');
@@ -2813,17 +3131,28 @@ function quickDhEntry(mode) {
       + '<div class="field"><label for="vr_client">ক্লায়েন্টের নাম / ফাইল</label><input id="vr_client" placeholder="ক্লায়েন্টের নাম"></div>'
       + '<div class="grid2"><div class="field"><label for="vr_gross">জমা ছিল (৳)</label><input id="vr_gross" type="number" inputmode="decimal" placeholder="যেমন: 2000" oninput="vrCalc()"></div><div class="field"><label for="vr_kept">চার্জ রাখলাম — রেভিনিউ (৳)</label><input id="vr_kept" type="number" inputmode="decimal" placeholder="যেমন: 300" oninput="vrCalc()"></div></div>'
       + '<div class="grid2"><div class="field"><label for="vr_ref">ক্লায়েন্টকে ফেরত দিলাম (৳)</label><input id="vr_ref" type="number" inputmode="decimal" placeholder="যেমন: 1700"></div><div class="field"><label for="vr_date">তারিখ</label><input id="vr_date" type="date" value="' + D + '"></div></div>'
-      + wFieldHtml('vr_w', 'w_visacash', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন')
+      + wFieldHtml('vr_w', lastW('vr_w','w_visacash'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন')
       + '<div class="field"><label for="vr_note">📝 নোট (ঐচ্ছিক)</label><input id="vr_note" placeholder="যেমন: স্লট না পাওয়ায় ফেরত"></div>'
       + '<button class="btn block" onclick="saveVisaReturnWtx()">সেভ করুন</button>');
   } else if (mode === 'visa_cost') {
     sheet('ভিসা অ্যাপয়েন্টমেন্ট খরচ (নগদ বা বাকি)',
       '<div class="mut sm">ভিসা অ্যাপয়েন্টমেন্ট হলে ভিসা খরচ যদি আজ দিয়ে থাকেন তবে মাধ্যম সিলেক্ট করুন। আর যদি পরে দিতে হয় তবে নিচে ভিসা ফাইল থেকেও বাকি রাখতে পারেন।</div>'
       + '<div class="grid2"><div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div><div class="field"><label for="qe_amt">খরচের টাকা (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
-      + wFieldHtml('qe_w', 'w_visacash', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ দিলেন')
+      + wFieldHtml('qe_w', lastW('qe_w','w_visacash'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ দিলেন')
       + '<div class="field"><label for="qe_client">ফাইল / ক্লায়েন্টের নাম</label><input id="qe_client" placeholder="ক্লায়েন্ট বা এজেন্টের নাম"></div>'
       + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="যেমন: ২টি ফাইলের ভিসা ফি ও সফটওয়্যার খরচ"></div>'
       + '<button class="btn block" onclick="saveQuickWtx(\'out\',\'ভিসা অ্যাপয়েন্টমেন্ট খরচ\',false)">খরচ সেভ করুন</button>');
+  } else if (mode === 'wallet_io') {
+    const ws0 = wallets(), pw0 = ws0.find(w => w.kind !== 'drawer' && wIsPer(w)) || ws0[0];
+    window._wio = 'out';
+    sheet('অন্য জমা / খরচ (যেকোনো ড্রয়ার, বিকাশ বা ব্যাংকে)',
+      '<div class="mut sm">ব্যক্তিগত ব্যাংক বা মোবাইল ব্যাংকিংয়ে যা ঢুকল বা বের হলো এখানে লিখুন, যাতে দিন শেষে ওই অ্যাকাউন্টের হিসাব মেলে। এটা শুধু ওই অ্যাকাউন্টের ব্যালেন্সে ধরা হয়, দোকানের আয় বা লাভে ধরা হয় না। ব্যক্তিগত <b>খরচ</b> হলে "ব্যক্তিগত খরচ" বাটন চাপুন, তাহলে লাভের নিচের হিসাবেও আসবে।</div>'
+      + '<div class="grid2"><button type="button" id="wio_out" class="chip on" style="text-align:center" onclick="wioDir(\'out\')">⬆ বের হলো</button><button type="button" id="wio_in" class="chip" style="text-align:center" onclick="wioDir(\'in\')">⬇ ঢুকল</button></div>'
+      + '<div class="grid2"><div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div><div class="field"><label for="qe_amt">টাকা (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
+      + wFieldHtml('qe_w', lastW('qe_w', pw0 ? pw0.id : 'w_counter', '_wio'), 'কোন অ্যাকাউন্টে')
+      + '<div class="field"><label for="qe_client">বিবরণ</label><input id="qe_client" placeholder="যেমন: ব্যাংক চার্জ / বাসা থেকে পাঠাল"></div>'
+      + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="ঐচ্ছিক"></div>'
+      + '<button class="btn block" onclick="saveWalletIo()">সেভ করুন</button>');
   } else if (mode === 'shop_exp') {
     UI.ek = 'shop'; expForm();
   } else if (mode === 'per_exp') {
@@ -2832,13 +3161,20 @@ function quickDhEntry(mode) {
     const ws = wallets();
     sheet('ড্রয়ার ⇄ বিকাশ/নগদ/ব্যাংক ট্রান্সফার (Contra)',
       '<div class="mut sm">এক ড্রয়ার থেকে আরেক ড্রয়ারে, অথবা ক্যাশ থেকে বিকাশ/নগদ/ব্যাংকে টাকা পাঠালে বা তুললে এখানে লিখুন (মোট লাভ-লোকসানে প্রভাব ফেলবে না, শুধু দুই মাধ্যমের ব্যালেন্স ঠিক রাখবে):</div>'
-      + '<div class="grid2"><div class="field"><label for="tr_from">কোথা থেকে গেল (From)</label>' + wSelectHtml('tr_from', 'w_counter') + '</div><div class="field"><label for="tr_to">কোথায় ঢুকল (To)</label>' + wSelectHtml('tr_to', ws[3] ? ws[3].id : 'w_bkash') + '</div></div>'
+      + '<div class="grid2"><div class="field"><label for="tr_from">কোথা থেকে গেল (From)</label>' + wSelectHtml('tr_from', lastW('tr_from','w_counter')) + '</div><div class="field"><label for="tr_to">কোথায় ঢুকল (To)</label>' + wSelectHtml('tr_to', ws[3] ? ws[3].id : 'w_bkash') + '</div></div>'
       + '<div class="grid2"><div class="field"><label for="tr_date">তারিখ</label><input id="tr_date" type="date" value="' + D + '"></div><div class="field"><label for="tr_amt">টাকার অংক (৳)</label><input id="tr_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
       + '<div class="field"><label for="tr_note">📝 নোট (ঐচ্ছিক)</label><input id="tr_note" placeholder="যেমন: ক্যাশ থেকে বিকাশে এজেন্ট ক্যাশ-ইন / ব্যাংকে জমা"></div>'
       + '<button class="btn block" onclick="saveTransferWtx()">ট্রান্সফার সেভ করুন</button>');
   }
 }
 
+function wioDir(k) { window._wio = k === 'in' ? 'in' : 'out'; $('wio_out').className = 'chip' + (window._wio === 'out' ? ' on' : ''); $('wio_in').className = 'chip' + (window._wio === 'in' ? ' on' : ''); }
+function saveWalletIo() {
+  const amt = n(val('qe_amt')); if (amt <= 0) { toast('টাকার অংক দিন'); return; }
+  const dir = window._wio === 'in' ? 'in' : 'out', id = uid();
+  S.wtx[id] = { id, type: 'simple', dir, cat: dir === 'in' ? 'অন্য জমা' : 'অন্য খরচ', isRev: false, date: val('qe_date') || today(), amt, w: val('qe_w') || 'w_counter', client: val('qe_client').trim(), note: val('qe_note').trim(), by: actor(), createdAt: Date.now() };
+  save('wtx', id); closeSheet(); toast('সেভ হয়েছে');
+}
 function vrCalc() {
   const g = n(val('vr_gross')), k = n(val('vr_kept'));
   if (g > 0) $('vr_ref').value = Math.max(0, g - k);
@@ -2932,82 +3268,99 @@ function wtxSheet(id) {
   }
 }
 
-/* ---------- ড্রয়ার, মোবাইল ব্যাংকিং (bKash/Nagad/Rocket/Upay) ও ব্যাংক (Business/Personal) ম্যানেজার ---------- */
+/* ---------- ড্রয়ার, মোবাইল ব্যাংকিং ও ব্যাংক ম্যানেজার (যোগ / এডিট / মোছা) ---------- */
+const WPROV = [['bKash', 'বিকাশ'], ['Nagad', 'নগদ'], ['Upay', 'উপায়'], ['Rocket', 'রকেট'], ['Other', 'অন্য']];
+const WBANKS = ['BRAC Bank', 'City Bank', 'Dutch-Bangla Bank', 'Islami Bank', 'Sonali Bank', 'Janata Bank', 'Agrani Bank', 'Eastern Bank', 'Prime Bank', 'Mutual Trust Bank', 'Southeast Bank', 'AB Bank', 'UCB', 'Standard Chartered'];
+const ACCT_L = { agent: 'এজেন্ট', personal: 'পার্সোনাল', current: 'কারেন্ট', savings: 'সেভিংস' };
+const wIsPer = w => w.kind === 'bank_per' || w.acct === 'personal' || /personal|ব্যক্তিগত/i.test(w.owner || '');
 function walletSetCard() {
   const ws = wallets();
   return '<div class="card stack" style="gap:10px">'
-    + '<div class="row between"><b>🗄️ ড্রয়ার, বিকাশ/নগদ/রকেট/উপায় ও ব্যাংক তালিকা</b><button class="btn sm" onclick="walletForm()">＋ নতুন যোগ</button></div>'
-    + '<span class="mut sm">আপনার ৩টি ড্রয়ার (Counter, Passport/Docs, Visa), সব মোবাইল ব্যাংকিং (bKash, Nagad, Rocket, Upay) এবং যেকোনো ব্যাংক (Business ও Personal) ইচ্ছেমতো যোগ, এডিট বা ডিলিট করতে পারবেন:</span>'
+    + '<div><b>🗄️ ড্রয়ার, বিকাশ/নগদ/উপায়/রকেট ও ব্যাংক তালিকা</b><div class="mut sm">নিচের বাটন চেপে নতুন যোগ করুন, কোনোটিতে চেপে এডিট বা মুছুন। প্রতিটির ধরন (এজেন্ট/পার্সোনাল, কারেন্ট/সেভিংস, ব্যবসা/ব্যক্তিগত) এখানেই ঠিক হবে।</div></div>'
+    + '<div class="row wrapr" style="gap:6px"><button class="btn sm" onclick="walletForm(\'\',\'drawer\')">＋ ক্যাশ ড্রয়ার</button><button class="btn sm" onclick="walletForm(\'\',\'mfs\')">＋ বিকাশ/নগদ/উপায়/রকেট</button><button class="btn sm" onclick="walletForm(\'\',\'bank_biz\')">＋ ব্যাংক</button></div>'
     + ws.map(w => {
       const k = WKIND[w.kind] || WKIND.drawer;
       return '<div class="ipbox row between" style="gap:8px;cursor:pointer" onclick="walletForm(\'' + w.id + '\')">'
         + '<div style="min-width:0"><b>' + esc(w.name) + '</b> <span class="pill ' + k.badge + '">' + k.short + '</span>'
-        + '<div class="sm mut">' + (w.sub ? esc(w.sub) + ' · ' : '') + (w.owner ? esc(w.owner) + ' · ' : '') + 'শুরুর ব্যালেন্স: ' + money(w.openBal) + '</div></div>'
+        + '<div class="sm mut">' + (w.kind === 'drawer' ? (w.owner ? esc(w.owner) + ' · ' : '') : (w.sub ? esc(w.sub) + ' · ' : '') + (ACCT_L[w.acct] ? ACCT_L[w.acct] + ' · ' : '') + (wIsPer(w) ? '👤 ব্যক্তিগত' : '🏢 ব্যবসা') + ' · ') + 'শুরুর ব্যালেন্স: ' + money(w.openBal) + '</div></div>'
         + '<span class="btn sm ghost">এডিট</span></div>';
     }).join('')
     + '</div>';
 }
-
-function walletManageSheet() {
-  sheet('ড্রয়ার, মোবাইল ব্যাংকিং ও ব্যাংক কাস্টমাইজ', walletSetCard());
+function walletManageSheet() { sheet('ড্রয়ার, মোবাইল ব্যাংকিং ও ব্যাংক কাস্টমাইজ', walletSetCard()); }
+function wfAutoName() {
+  const f = UI.wf; if (f.g === 'drawer') return '';
+  if (f.g === 'mfs') return (f.prov === 'Other' ? (f.provOther || 'MFS') : f.prov) + ' ' + (f.acct === 'personal' ? 'Personal' : 'Agent');
+  return (f.bank || 'Bank') + ' ' + (f.acct === 'savings' ? 'Savings' : 'Current') + ' (' + (f.use === 'personal' ? 'Personal' : 'Business') + ')';
 }
-
+function wfRefresh() {
+  const f = UI.wf; if (!$('wf_name')) return;
+  document.querySelectorAll('#sheet [data-wk]').forEach(b => { b.className = 'chip' + (f[b.dataset.wk] === b.dataset.v ? ' on' : ''); });
+  $('wf_mfs').hidden = f.g !== 'mfs'; $('wf_bank').hidden = f.g !== 'bank'; $('wf_provo').hidden = f.prov !== 'Other';
+  if (f.auto && f.g !== 'drawer') $('wf_name').value = wfAutoName();
+  const per = f.g === 'mfs' ? f.acct === 'personal' : f.use === 'personal';
+  $('wf_hint').innerHTML = f.g === 'drawer' ? 'ড্রয়ার ব্যবসার হিসাবে ধরা হবে।' : (per ? '👤 <b>ব্যক্তিগত</b> লেবেল — শুধু চেনার জন্য। হিসাব মেলানোয় অন্য সব জায়গার মতোই সাধারণভাবে কাজ করবে।' : '🏢 <b>ব্যবসা</b> হিসেবে ধরা হবে।');
+}
+function wfSet(k, v) {
+  const f = UI.wf; f[k] = v;
+  if (k === 'g') { if (v === 'mfs' && !['agent', 'personal'].includes(f.acct)) f.acct = 'agent'; if (v === 'bank' && !['current', 'savings'].includes(f.acct)) f.acct = 'current'; }
+  wfRefresh();
+}
+function wChips(k, list) { return '<div class="hs">' + list.map(([v, t]) => '<button type="button" class="chip" data-wk="' + k + '" data-v="' + v + '" onclick="wfSet(\'' + k + '\',\'' + v + '\')">' + t + '</button>').join('') + '</div>'; }
 function walletForm(id, defKind) {
   const w = id ? wallets().find(x => x.id === id) : null;
-  const cur = w || { id: '', name: '', kind: defKind || 'drawer', sub: '', owner: '', openBal: 0 };
-  sheet(w ? 'এডিট — ' + esc(w.name) : 'নতুন ড্রয়ার / বিকাশ / ব্যাংক যোগ করুন',
-    '<div class="field"><label for="wf_kind">মাধ্যমের ধরন</label><select id="wf_kind">'
-    + Object.keys(WKIND).map(k => '<option value="' + k + '"' + (cur.kind === k ? ' selected' : '') + '>' + WKIND[k].t + '</option>').join('')
-    + '</select></div>'
-    + '<div class="field"><label for="wf_name">নাম (যেমন: Counter Drawer / Islami Bank Business / Dutch-Bangla Personal / bKash Agent)</label><input id="wf_name" value="' + esc(cur.name) + '" placeholder="নাম লিখুন"></div>'
-    + '<div class="grid2"><div class="field"><label for="wf_sub">ব্যাংক বা সার্ভিসের নাম</label><input id="wf_sub" value="' + esc(cur.sub) + '" placeholder="যেমন: bKash / Nagad / City Bank"></div>'
-    + '<div class="field"><label for="wf_owner">ধরন বা দায়িত্ব (Business / Personal / স্টাফ)</label><input id="wf_owner" value="' + esc(cur.owner) + '" placeholder="Business / Personal / নাম"></div></div>'
-    + '<div class="field"><label for="wf_open">প্রাথমিক শুরুর ব্যালেন্স (Opening Balance ৳)</label><input id="wf_open" type="number" inputmode="decimal" value="' + n(cur.openBal) + '"></div>'
+  const cur = w || { id: '', name: '', kind: defKind || 'mfs', sub: '', acct: '', owner: '', openBal: 0 };
+  const g = cur.kind === 'drawer' ? 'drawer' : (cur.kind === 'mfs' ? 'mfs' : 'bank'), known = WPROV.some(p => p[0] === cur.sub && p[0] !== 'Other');
+  UI.wf = { g, prov: g === 'mfs' ? (known ? cur.sub : (cur.sub ? 'Other' : 'bKash')) : 'bKash', provOther: (g === 'mfs' && cur.sub && !known) ? cur.sub : '',
+    acct: cur.acct || (g === 'mfs' ? (wIsPer(cur) ? 'personal' : 'agent') : 'current'), bank: g === 'bank' ? cur.sub : '', use: wIsPer(cur) ? 'personal' : 'business', auto: !w };
+  sheet(w ? 'এডিট — ' + esc(w.name) : 'নতুন যোগ করুন',
+    '<div class="field"><label>কী যোগ করছেন?</label>' + wChips('g', [['drawer', '🗄️ ক্যাশ ড্রয়ার'], ['mfs', '📱 বিকাশ/নগদ/উপায়/রকেট'], ['bank', '🏦 ব্যাংক']]) + '</div>'
+    + '<div id="wf_mfs"><div class="field"><label for="wf_prov">কোনটি?</label><select id="wf_prov" onchange="UI.wf.prov=this.value;wfRefresh()">' + WPROV.map(([v, t]) => '<option value="' + v + '"' + (UI.wf.prov === v ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>'
+    + '<div class="field" id="wf_provo"><label for="wf_provo_i">নাম লিখুন</label><input id="wf_provo_i" value="' + esc(UI.wf.provOther) + '" oninput="UI.wf.provOther=this.value;wfRefresh()"></div>'
+    + '<div class="field"><label>অ্যাকাউন্টের ধরন</label>' + wChips('acct', [['agent', 'এজেন্ট (ব্যবসা)'], ['personal', 'পার্সোনাল (ব্যক্তিগত)']]) + '</div></div>'
+    + '<div id="wf_bank"><div class="field"><label for="wf_bankn">ব্যাংকের নাম (তালিকা থেকে বা নিজে লিখুন)</label><input id="wf_bankn" list="wf_bl" value="' + esc(UI.wf.bank) + '" placeholder="যেমন: BRAC Bank" oninput="UI.wf.bank=this.value;wfRefresh()"><datalist id="wf_bl">' + WBANKS.map(b => '<option value="' + b + '">').join('') + '</datalist></div>'
+    + '<div class="field"><label>অ্যাকাউন্টের ধরন</label>' + wChips('acct', [['current', 'কারেন্ট'], ['savings', 'সেভিংস']]) + '</div>'
+    + '<div class="field"><label>কার জন্য ব্যবহার হয়?</label>' + wChips('use', [['business', '🏢 ব্যবসা'], ['personal', '👤 ব্যক্তিগত']]) + '</div></div>'
+    + '<div class="field"><label for="wf_name">নাম (অটো বসে, চাইলে বদলান)</label><input id="wf_name" value="' + esc(cur.name) + '" oninput="UI.wf.auto=false" placeholder="যেমন: Counter Drawer"></div>'
+    + '<div class="field"><label for="wf_open">প্রাথমিক শুরুর ব্যালেন্স (৳)</label><input id="wf_open" type="number" inputmode="decimal" value="' + n(cur.openBal) + '"></div>'
+    + '<div class="sm mut" id="wf_hint"></div>'
     + '<button class="btn block" onclick="saveWalletItem(\'' + (cur.id || '') + '\')">সেভ করুন</button>'
-    + (w ? '<button class="btn danger block" onclick="arm(this,function(){delWalletItem(\'' + w.id + '\')})">এই ড্রয়ার/ব্যাংক মুছে ফেলুন</button>' : ''));
+    + (w ? '<button class="btn danger block" onclick="arm(this,function(){delWalletItem(\'' + w.id + '\')})">এটি মুছে ফেলুন</button><div class="sm mut">যেটিতে এন্ট্রি আছে সেটি মোছা যাবে না (পুরনো হিসাব নষ্ট হবে বলে)। তখন শুধু নাম বদলে নিন।</div>' : ''));
+  wfRefresh();
 }
-
 function saveWalletItem(id) {
-  const nm = val('wf_name').trim();
+  const f = UI.wf, nm = val('wf_name').trim();
   if (!nm) { toast('নাম লিখুন'); return; }
-  const list = wallets().slice();
-  const rec = {
-    id: id || ('w_' + uid()),
-    name: nm,
-    kind: val('wf_kind') || 'drawer',
-    sub: val('wf_sub').trim(),
-    owner: val('wf_owner').trim(),
-    openBal: n(val('wf_open'))
-  };
+  if (f.g === 'bank' && !(f.bank || '').trim()) { toast('ব্যাংকের নাম লিখুন'); return; }
+  const list = wallets().slice(), old = list.find(x => x.id === id) || {};
+  const per = f.g === 'mfs' ? f.acct === 'personal' : f.use === 'personal';
+  const rec = { id: id || ('w_' + uid()), name: nm, kind: f.g === 'drawer' ? 'drawer' : (f.g === 'mfs' ? 'mfs' : (per ? 'bank_per' : 'bank_biz')),
+    sub: f.g === 'mfs' ? (f.prov === 'Other' ? (f.provOther || '').trim() : f.prov) : (f.g === 'bank' ? f.bank.trim() : (old.sub || '')),
+    acct: f.g === 'drawer' ? '' : f.acct, owner: f.g === 'drawer' ? (old.owner || '') : (per ? 'Personal' : 'Business'), openBal: n(val('wf_open')) };
   const idx = list.findIndex(x => x.id === rec.id);
   if (idx >= 0) list[idx] = rec; else list.push(rec);
-  S.settings.wallets = list;
-  saveSettings();
-  closeSheet();
-  toast('সেভ হয়েছে');
+  S.settings.wallets = list; saveSettings(); closeSheet(); toast('সেভ হয়েছে');
 }
-
+function wUsed(id) { const x = Object.assign({}, S); delete x.settings; delete x.dclose; delete x.alog; return JSON.stringify(x).includes('"' + id + '"'); }
 function delWalletItem(id) {
   const list = wallets().filter(x => x.id !== id);
   if (!list.length) { toast('অন্তত ১টি ড্রয়ার রাখতে হবে'); return; }
-  S.settings.wallets = list;
-  saveSettings();
-  closeSheet();
-  toast('মুছে ফেলা হয়েছে');
+  if (wUsed(id)) { toast('এতে এন্ট্রি আছে, তাই মোছা যাবে না। শুধু নাম বদলান।'); return; }
+  S.settings.wallets = list; saveSettings(); closeSheet(); toast('মুছে ফেলা হয়েছে');
 }
 
-
 /* ---------- প্রতিটি অপশনের নোট ও নির্দেশনা ---------- */
-const DHG = { drawer: 'ফিজিক্যাল নগদ টাকা — দোকানের ড্রয়ারে হাত দিয়ে গুনে মেলান', mfs: 'অ্যাপ খুলে ব্যালেন্স দেখে লিখুন (এজেন্ট ও পার্সোনাল আলাদা নামে রাখুন)', bank_biz: 'ব্যবসার ব্যাংক — ব্যাংক অ্যাপ/স্টেটমেন্টের ব্যালেন্স দেখে লিখুন', bank_per: 'ব্যক্তিগত ব্যাংক — ব্যবসার মোটে মিশবে না, আলাদা মোট দেখাবে' };
+const DHG = { drawer: 'ফিজিক্যাল নগদ টাকা — দোকানের ড্রয়ারে হাত দিয়ে গুনে মেলান', mfs: 'অ্যাপ খুলে ব্যালেন্স দেখে লিখুন (এজেন্ট ও পার্সোনাল আলাদা নামে রাখুন)', bank_biz: 'ব্যবসার ব্যাংক — ব্যাংক অ্যাপ/স্টেটমেন্টের ব্যালেন্স দেখে লিখুন', bank_per: 'ব্যক্তিগত ব্যাংক — অন্য জায়গার মতোই মেলান। "ব্যক্তিগত" শুধু চেনার লেবেল' };
 const DHH = {
   date: { t: 'তারিখ বার ও "নতুন শুরুর ব্যালেন্স"', what: 'যে দিনের হিসাব দেখবেন বা মেলাবেন সেই দিন বাছার জায়গা।', when: 'রোজ রাতে (দোকান বন্ধের আগে) আজকের দিনে মেলান। ভুলে গেলে আগের দিন বেছে মিলিয়ে নিতে পারবেন।', how: ['‹ › চেপে আগের/পরের দিন যান, বা তারিখে চেপে ক্যালেন্ডার থেকে বাছুন।', '🚀 নতুন শুরুর ব্যালেন্স: প্রথমবার চালু করার সময় একবারই চাপবেন। প্রতিটি ড্রয়ার/বিকাশ/ব্যাংকে ওই সকালে কত ছিল লিখে দিন। এর আগের পুরনো ফাইলের টাকা আর হিসাবে মিশবে না।'], ex: 'আগামীকাল থেকে চালু করতে চাইলে: ড্রয়ার গুনুন, বিকাশ/ব্যাংকের ব্যালেন্স দেখুন, "আগামীকাল" বাছুন, সব বসিয়ে সেভ।' },
-  hero: { t: 'ওপরের সারাংশ কার্ড', what: 'সব জায়গা মিলিয়ে আজ শুরুতে কত ছিল, কত ঢুকল, কত বেরোল আর কত থাকার কথা।', when: 'মেলানোর আগে ও পরে এক নজরে দেখতে।', how: ['"থাকার কথা" = শুরুতে ছিল + আজ ঢুকেছে − আজ বেরিয়েছে।', '🏢 ব্যবসা ও 👤 ব্যক্তিগত মোট আলাদা দেখায়: ব্যাংক "পার্সোনাল" ধরন বা নামে/দায়িত্বে Personal লেখা জায়গা ব্যক্তিগত ধরা হয়।', 'নিচের তিন ঘর: আজকের আয়, ভিসা জমা (এটা গচ্ছিত, আয় নয়), দোকান+ব্যক্তিগত খরচ।'], ex: 'শুরুতে ২০,০০০ + ঢুকল ১২,০০০ − বেরোল ৮,০০০ = থাকার কথা ২৪,০০০।' },
+  hero: { t: 'ওপরের সারাংশ কার্ড', what: 'সব জায়গা মিলিয়ে আজ শুরুতে কত ছিল, কত ঢুকল, কত বেরোল আর কত থাকার কথা।', when: 'মেলানোর আগে ও পরে এক নজরে দেখতে।', how: ['"থাকার কথা" = শুরুতে ছিল + আজ ঢুকেছে − আজ বেরিয়েছে।', 'বড় সংখ্যাটি সব জায়গার মোট (ব্যক্তিগত লেবেলের বিকাশ/ব্যাংকসহ)। এর মধ্যে ব্যক্তিগতটা কত, নিচে এক লাইনে দেখায়।', 'নিচের তিন ঘর: আজকের আয়, ভিসা জমা (এটা গচ্ছিত, আয় নয়), দোকান+ব্যক্তিগত খরচ।'], ex: 'শুরুতে ২০,০০০ + ঢুকল ১২,০০০ − বেরোল ৮,০০০ = থাকার কথা ২৪,০০০।' },
   quick: { t: 'চটজলদি এন্ট্রি বাটনগুলো কখন চাপবেন', what: 'প্রতিটি বাটন একটি বাস্তব কাজের জন্য। টাকা কোন ড্রয়ার/বিকাশ/ব্যাংকে গেল সেটা প্রতিবার নিজে বেছে দেবেন, তাতেই ওই জায়গার হিসাব মেলে।', when: 'টাকা হাতে বা অ্যাকাউন্টে নড়ার সাথে সাথে, দিন শেষের জন্য ফেলে রাখবেন না।', how: ['কাউন্টার এক্সট্রা আয়: ফটোকপি, প্রিন্ট, অনলাইন আবেদন। আয় ধরা হয়।', 'ভিসা টাকা জমা: ক্লায়েন্ট ভিসার টাকা রাখলে। আয় নয়, গচ্ছিত।', 'ভিসা ফেরত ও চার্জ: ফাইল ফেরত দিলে। রাখা চার্জ আয়, বাকিটা ফেরত।', 'ভিসা অ্যাপয়েন্ট খরচ: অ্যাপয়েন্টমেন্ট হলে ভিসা ফি + সফটওয়্যার খরচ কোথা থেকে দিলেন।', 'ডকুমেন্ট কাজ/জমা ও পাসপোর্ট বিল/বাকি: ফর্মে গিয়ে "কোথায় রাখলেন" বাছুন।', 'দোকান খরচ / ব্যক্তিগত খরচ: যে জায়গা থেকে দিলেন সেটা বাছুন (নিয়মিত ⭐ খরচও এখানে)।', '📱 বিকাশ/নগদ চার্জ ও ক্যাশ-ইন/আউট: এজেন্ট লেনদেনে ড্রয়ার ও বিকাশ একসাথে ঠিক হয়।', '🔄 ট্রান্সফার: এক জায়গা থেকে আরেক জায়গায় টাকা সরালে (লাভ-ক্ষতি নয়)। যেমন পাসপোর্ট ড্রয়ার → মেইন, মেইন → বিকাশ।', '📒 বাকি খাতা: কেউ বাকি নিলে/ফেরত দিলে।'], ex: 'বিকাশে ফি দিয়ে দিন শেষে সেই টাকা মেইন ড্রয়ারে নিলেন: ট্রান্সফার, থেকে "পাসপোর্ট ড্রয়ার", যাবে "মেইন ড্রয়ার"।' },
   wcard: { t: 'প্রতিটি ড্রয়ার/বিকাশ/ব্যাংক কার্ড', what: 'প্রতিটি জায়গার আলাদা হিসাব কার্ড।', when: 'দিন শেষে প্রতিটি জায়গা গুনে/দেখে সংখ্যা বসাতে।', how: ['শুরুতে ছিল: কালকের সেভ করা সংখ্যা অটো আসে। হাতে বদলাতে চাপুন (কারণ লিখে রাখুন)।', 'আজ জমা (+) / আজ খরচ (−) / থাকার কথা: চাপলে কোন এন্ট্রি থেকে কত হলো দেখা যায়, এন্ট্রিতে চেপে ঠিকও করা যায়।', 'আসল ব্যালেন্স ঘর: ড্রয়ার গুনে বা অ্যাপে দেখে এখানে লিখুন। কম/বেশি সাথে সাথে দেখাবে।', '✓ মিলেছে: মিলে গেলে এক চাপে বসান।', '📝 নোট: কম/বেশি হলে কারণ লিখে রাখুন।', 'নিচের 💡 ক্লু: গরমিল হলে সম্ভাব্য কারণ বলে দেয়।'], ex: 'থাকার কথা ৩,৪৭০ কিন্তু গুনে পেলেন ৩,৪৫০: ঘরে ৩৪৫০ লিখুন, ৳২০ কম দেখাবে, নোটে "চার্জ" লিখুন।' },
   close: { t: 'দিন শেষের ক্লোজিং', what: 'আজকের গোনা সংখ্যা সেভ করলে কাল সকালে সেটাই "শুরুতে ছিল" হয়ে যায়।', when: 'সব জায়গা গুনে সংখ্যা বসানোর পর, শেষ ধাপে।', how: ['✅ সেভ: যেসব জায়গায় সংখ্যা বসিয়েছেন সবগুলো সেভ হয়। ফাঁকা রাখলে ওই জায়গা আজ ক্লোজ হয় না।', '⚡ "থাকার কথা" বসান: সব ঘরে হিসাবের সংখ্যা ভরে। আসলে গুনে মিলিয়ে নিশ্চিত হলেই ব্যবহার করুন, নইলে ভুল ঢাকা পড়ে।', 'ক্লোজিং নোট: যেমন "৫০ টাকা ভাংতি কম"।'], ex: 'গরমিল (কম/বেশি) সংখ্যাসহই সেভ হয়, কাল ওই আসল সংখ্যা থেকেই শুরু হবে।' },
   visapend: { t: 'ভিসা খরচ বাকি তালিকা', what: 'অ্যাপয়েন্টমেন্ট/ডেলিভারি হয়েছে অথচ ভিসা ফি ও সফটওয়্যার খরচ এখনো দেননি।', when: 'যেদিন টাকা দিলেন সেদিন "খরচ দিন" চাপুন।', how: ['"খরচ দিন" চাপুন, তারিখ ও কোন জায়গা থেকে দিলেন বাছুন।', 'পরিশোধ না করলে বাকি তালিকায় থাকবে, কোনো ড্রয়ার থেকে টাকা কমবে না।'], ex: 'ভিসা ফি ৮,৫০০ বিকাশ এজেন্ট থেকে দিলেন: বিকাশ এজেন্ট বাছুন, ওই বিকাশের থাকার কথা ৮,৫০০ কমবে।' },
   txlog: { t: 'আজকের সব লেনদেনের তালিকা', what: 'সব জায়গার সব এন্ট্রি এক তালিকায়।', when: 'কিছু মিলছে না বা এন্ট্রি ঠিক করতে হলে।', how: ['ওপরের চিপ চেপে একটি জায়গার এন্ট্রি আলাদা করে দেখুন।', 'এন্ট্রিতে চাপলে সেই ফর্ম খুলে ঠিক বা মুছতে পারবেন।', 'সবুজ "আয়" ট্যাগ মানে রেভিনিউ।'], ex: 'বিকাশে যাওয়া এন্ট্রি ভুলে ড্রয়ারে বসেছে: এন্ট্রি চেপে জায়গা বদলান।' },
-  manage: { t: 'ড্রয়ার/বিকাশ/ব্যাংক যোগ বা পরিবর্তন', what: 'আপনার সব জায়গার তালিকা বানানো ও বদলানোর সেটিং।', when: 'নতুন বিকাশ/ব্যাংক খুললে বা নাম বদলাতে হলে।', how: ['＋ নতুন যোগ: ধরন বাছুন, নাম দিন, শুরুর ব্যালেন্স দিন।', 'দায়িত্ব ঘরে Business বা Personal লিখুন, তাতে মোট আলাদা হবে।', 'মুছে ফেললে ওই জায়গার পুরনো এন্ট্রি প্রথম ড্রয়ারে চলে যায়, তাই মোছার বদলে নাম বদলানো ভালো।'], ex: 'নাম: "বিকাশ এজেন্ট", দায়িত্ব: Business। নাম: "বিকাশ পার্সোনাল", দায়িত্ব: Personal।' },
+  manage: { t: 'ড্রয়ার/বিকাশ/ব্যাংক যোগ বা পরিবর্তন', what: 'আপনার সব জায়গার তালিকা বানানো ও বদলানোর সেটিং।', when: 'নতুন বিকাশ/ব্যাংক খুললে বা নাম বদলাতে হলে।', how: ['＋ নতুন যোগ: ধরন বাছুন, নাম দিন, শুরুর ব্যালেন্স দিন।', 'ব্যবসা/ব্যক্তিগত শুধু চেনার লেবেল, হিসাব মেলানোয় সবই সাধারণ।', 'এন্ট্রি আছে এমন জায়গা মোছা যায় না, শুধু নাম বদলানো যায়।'], ex: 'bKash Agent (ব্যবসা), bKash Personal (ব্যক্তিগত), BRAC Bank Current (ব্যবসা)।' },
+  wallet_io: { t: 'অন্য জমা / খরচ (যেকোনো অ্যাকাউন্টে)', what: 'ব্যক্তিগত ব্যাংক, মোবাইল ব্যাংকিং বা যেকোনো ড্রয়ারে এমন টাকা ঢুকলে বা বেরোলে যেটা দোকানের আয়-খরচ না, শুধু ব্যালেন্সে ধরা দরকার।', when: 'লেনদেন হওয়ার সময়, বা দিন শেষে মেলানোর আগে।', how: ['বের হলো / ঢুকল বাছুন।', 'কোন অ্যাকাউন্টে বাছুন (ব্যক্তিগত ব্যাংক বা বিকাশ ইত্যাদি)।', 'এটা দোকানের লাভে ধরা হয় না, শুধু ওই অ্যাকাউন্টের থাকার কথা বদলায়।', 'ব্যক্তিগত খরচ হলে এটা না, "ব্যক্তিগত খরচ" বাটন চাপুন, তাহলে লাভের নিচের হিসাবেও আসবে।'], ex: 'ব্যাংক চার্জ ৫০ কাটল: বের হলো, Personal Bank, ৫০, বিবরণ "ব্যাংক চার্জ"।' },
   counter_rev: { t: 'কাউন্টার এক্সট্রা আয়', what: 'ফটোকপি, প্রিন্ট, অনলাইন আবেদন বা যেকোনো সরাসরি সার্ভিসের আয়।', when: 'টাকা পাওয়ার সময় বা দিন শেষে সারাদিনের মোট একবারে।', how: ['তারিখ ও টাকার অংক দিন।', 'টাকা কোথায় রাখলেন বাছুন (সাধারণত Counter Drawer)।', 'বিবরণে কী কাজের টাকা লিখুন, নোটে বাড়তি কথা।'], ex: 'ফটোকপি ৩০০ + প্রিন্ট ২০০ = ৫০০, Counter Drawer, বিবরণ "ফটোকপি ও প্রিন্ট"।' },
   visa_dep: { t: 'ভিসা টাকা জমা (গচ্ছিত)', what: 'ক্লায়েন্ট ভিসার জন্য টাকা রাখলে। এটা আয় নয়, ফেরতযোগ্য আমানত।', when: 'টাকা পাওয়ার সাথে সাথে।', how: ['ক্লায়েন্টের নাম/ফাইল লিখুন।', 'কোথায় রাখলেন বাছুন: Visa Drawer, বিকাশ, নগদ বা ব্যাংক।'], ex: 'রহিম ৫,০০০ বিকাশে পাঠাল: জায়গা "বিকাশ এজেন্ট"।' },
   visa_ret: { t: 'ভিসা ফাইল ফেরত ও রাখা চার্জ', what: 'ফাইল বাতিল হলে ক্লায়েন্টকে টাকা ফেরত ও আপনার রাখা চার্জ।', when: 'ফেরত দেওয়ার দিন।', how: ['জমা ছিল লিখুন, রাখা চার্জ লিখুন: ফেরত অংক অটো হিসাব হয়।', 'কোন জায়গা থেকে ফেরত দিলেন বাছুন।', 'রাখা চার্জ আপনার আয় ধরা হয়।'], ex: 'জমা ২,০০০, চার্জ ৩০০, ফেরত ১,৭০০ Visa Drawer থেকে।' },
@@ -3018,7 +3371,7 @@ const DHH = {
   fresh: { t: 'নতুন শুরুর ব্যালেন্স', what: 'কোনো দিন থেকে একেবারে নতুন করে হিসাব চালু করা।', when: 'প্রথমবার, বা বড় গোলমালের পর নতুন করে শুরু।', how: ['তারিখ বাছুন (আজ বা আগামীকাল)।', 'প্রতিটি জায়গায় ওই সকালে কত থাকবে লিখুন, না থাকলে ০।', 'সেভ চাপলে এর আগের পুরনো এন্ট্রি আর শুরুর ব্যালেন্সে মিশবে না।'], ex: 'ড্রয়ার গুনে ও অ্যাপ দেখে লিখে দিন, তারপর রোজ রাতে শুধু মেলাবেন।' },
   visafee: { t: 'ভিসা অ্যাপয়েন্ট খরচ (পরিশোধ বা বাকি)', what: 'এই ফাইলের ভিসা ফি ও সফটওয়্যার খরচ দিয়েছেন কিনা ও কোথা থেকে।', when: 'টাকা দিলে বা বাকি রাখলে।', how: ['দিয়েছি: তারিখ ও কোন জায়গা থেকে দিলেন বাছুন, ওই জায়গার টাকা কমবে।', 'বাকি: কোনো জায়গার টাকা কমবে না, বাকি তালিকায় থাকবে।', 'ভিসা সফটওয়্যারে "PAID" থাকলে এখানে না বদলালে Visa Drawer থেকে গেছে ধরা হয়, ভিন্ন জায়গা হলে বদলান।'], ex: 'এজেন্টকে বিকাশ করলাম: জায়গা "বিকাশ এজেন্ট", নোট "এজেন্টকে পাঠালাম"।' },
   visapayw: { t: 'ভিসা জমার মাধ্যম বদল', what: 'ক্লায়েন্ট কোথায় টাকা দিয়েছে সেটা ঠিক করা।', when: 'ভুল জায়গা ধরা পড়লে।', how: ['সঠিক ড্রয়ার/বিকাশ/ব্যাংক বাছুন, সেভ করুন।'], ex: 'নগদ ধরা ছিল কিন্তু বিকাশে এসেছে: বিকাশ বাছুন।' },
-  walletform: { t: 'নতুন জায়গা যোগ / এডিট', what: 'একটি ড্রয়ার, বিকাশ/নগদ বা ব্যাংকের তথ্য।', when: 'নতুন অ্যাকাউন্ট খুললে বা নাম/ব্যালেন্স বদলাতে।', how: ['ধরন: ড্রয়ার / মোবাইল ব্যাংকিং / বিজনেস ব্যাংক / পার্সোনাল ব্যাংক।', 'নাম এমন দিন যাতে আলাদা চেনা যায়, যেমন "বিকাশ এজেন্ট"।', 'দায়িত্বে Business বা Personal লিখলে ব্যবসা/ব্যক্তিগত মোট আলাদা দেখাবে।', 'প্রাথমিক শুরুর ব্যালেন্স: প্রথম দিনের আগে কত ছিল।'], ex: 'নাম: City Bank Current, ধরন: বিজনেস ব্যাংক, দায়িত্ব: Business।' }
+  walletform: { t: 'নতুন জায়গা যোগ / এডিট', what: 'একটি ড্রয়ার, বিকাশ/নগদ/উপায়/রকেট বা ব্যাংক অ্যাকাউন্টের তথ্য।', when: 'নতুন অ্যাকাউন্ট খুললে, নাম বদলাতে বা ব্যবহার (ব্যবসা/ব্যক্তিগত) ঠিক করতে।', how: ['"কী যোগ করছেন" বাছুন: ড্রয়ার, বিকাশ/নগদ/উপায়/রকেট, বা ব্যাংক।', 'মোবাইল ব্যাংকিং: কোনটি (বিকাশ/নগদ/উপায়/রকেট) আর এজেন্ট না পার্সোনাল বাছুন। পার্সোনাল হলে ব্যক্তিগত ধরা হয়।', 'ব্যাংক: নাম লিখুন বা তালিকা থেকে নিন (BRAC, City, Dutch-Bangla ইত্যাদি), কারেন্ট বা সেভিংস, আর ব্যবসা বা ব্যক্তিগত বাছুন।', 'নাম অটো বসে, চাইলে নিজে বদলান। প্রাথমিক শুরুর ব্যালেন্স প্রথম দিনের আগে কত ছিল।', 'মোছা: যেটিতে কোনো এন্ট্রি নেই শুধু সেটিই মোছা যায়।'], ex: 'বিকাশ + এজেন্ট = "bKash Agent" (ব্যবসা)। BRAC Bank + কারেন্ট + ব্যবসা = "BRAC Bank Current (Business)"। Dutch-Bangla + সেভিংস + ব্যক্তিগত = "Dutch-Bangla Bank Savings (Personal)"।' }
 };
 function dhHelp(k) {
   const h = DHH[k]; if (!h) return '';
