@@ -2148,22 +2148,36 @@ function allTxForDate(D) {
 }
 
 /* তারিখ D-এর শুরুতে প্রতিটি ড্রয়ার/ব্যাংকের ওপেনিং ব্যালেন্স:
-   ১) যদি ওই দিনে কাস্টম ওপেনিং (customOpen) দেওয়া থাকে, তবে সেটাই বসবে (এবং অটো ওপেনিংয়ের সাথে পার্থক্য দেখাবে যাতে গরমিল না হয়)।
-   ২) নাহলে আগের দিন যে ক্লোজিং (গোনা ব্যালেন্স) সেভ করা হয়েছে, সেটাই অটোমেটিক আজকের "শুরুতে ছিল" হবে। */
+   গুরুত্বপূর্ণ নিয়ম:
+   - পুরনো (দৈনিক হিসাব শুরু করার আগের) পাসপোর্ট/ভিসা/ডকুমেন্ট এন্ট্রি কখনোই নিজে থেকে ওপেনিং ব্যালেন্সে যোগ/বিয়োগ হবে না!
+   - ওপেনিং ব্যালেন্স শুরু হবে ০ (শূন্য) বা আপনার সেট করা শুরুর ব্যালেন্স থেকে।
+   - কেবল যেদিন আপনি রাতের ক্লোজিং ব্যালেন্স (S.dclose) সেভ করবেন, তার পরের দিন থেকে সেই ক্লোজিং ব্যালেন্সই পরের দিনের ওপেনিং ব্যালেন্স হবে।
+   - আর আপনি চাইলে যেকোনো দিন "🚀 নতুন করে শুরুর ব্যালেন্স বসান" বা "শুরুতে ছিল ✎" চেপে নিজের হাতের ব্যালেন্স দিয়ে নতুনভাবে শুরু করতে পারবেন। */
 function dayReconcile(D) {
   const ws = wallets();
   const prevDates = Object.keys(S.dclose || {}).filter(d => d < D).sort();
   const curClose = S.dclose[D] || { counts: {}, customOpen: {}, openNote: {}, note: '', closed: false };
-  const txs = allTxForDate(D);
+  const startDate = S.settings.dhStartDate || '';
+  // যদি ধ্রুব শুরুর তারিখ (dhStartDate) আগামীকাল বা ভবিষ্যতের কোনো দিন হয় এবং আমরা তার আগের দিন দেখছি, অথবা কোনো আগের ক্লোজিং না থাকে:
+  const txs = (startDate && D < startDate) ? [] : allTxForDate(D);
   const byW = {};
 
   ws.forEach(w => {
     let autoOpen = n(w.openBal), anchorDate = '';
     for (let i = prevDates.length - 1; i >= 0; i--) {
-      const pd0 = prevDates[i], dc = S.dclose[pd0];
+      const pd0 = prevDates[i];
+      if (startDate && pd0 < startDate) continue;
+      const dc = S.dclose[pd0];
       if (dc && dc.counts && dc.counts[w.id] !== undefined && dc.counts[w.id] !== '') {
         autoOpen = n(dc.counts[w.id]);
         anchorDate = pd0;
+        break;
+      } else if (dc && dc.customOpen && dc.customOpen[w.id] !== undefined && dc.customOpen[w.id] !== '') {
+        // যদি ওই দিনে শুধু ওপেনিং সেট করা হয়ে থাকে, তবে সেদিন থেকে হিসাব শুরু
+        autoOpen = n(dc.customOpen[w.id]);
+        anchorDate = pd0;
+        // ওই দিনের লেনদেনও যোগ হবে
+        allTxForDate(pd0).forEach(t => { if (t.w === w.id) autoOpen += (t.dir === 'in' ? t.amt : -t.amt); });
         break;
       }
     }
@@ -2178,29 +2192,22 @@ function dayReconcile(D) {
     };
   });
 
-  // Add movements between anchorDate (exclusive) and D (exclusive) to autoOpen
-  const histDates = new Set();
-  const collectD = d => { if (d && d < D) histDates.add(d); };
-  Object.values(S.files).forEach(f => { arr(f.payments).forEach(p => collectD(p.date)); arr(f.refunds).forEach(p => collectD(p.date)); if (f.challanDate) collectD(f.challanDate); });
-  Object.values(S.ipPays).forEach(p => collectD(p.date));
-  Object.values(S.docs).forEach(d => { arr(d.payments).forEach(p => collectD(p.date)); arr(d.refunds).forEach(p => collectD(p.date)); arr(d.spends).forEach(p => collectD(p.date)); });
-  Object.values(S.cnt).forEach(c => arr(c.payments).forEach(p => collectD(p.date)));
-  Object.keys(S.cday || {}).forEach(k => collectD(S.cday[k] && S.cday[k].date));
-  Object.values(S.expenses).forEach(e => collectD(e.date));
-  Object.values(S.loans).forEach(l => arr(l.entries).forEach(e => collectD(e.date)));
-  Object.values(S.wtx).forEach(t => collectD(t.date));
-  VISA.rows.forEach(v => { arr(v.payList).forEach(p => collectD(p.d)); const fi = visaFeeInfo(v); if (fi.date) collectD(fi.date); });
-
-  Array.from(histDates).sort().forEach(hd => {
-    const hlist = allTxForDate(hd);
-    hlist.forEach(t => {
-      const cell = byW[t.w];
-      if (!cell) return;
-      if (!cell.anchorDate || hd > cell.anchorDate) {
-        cell.autoOpen += (t.dir === 'in' ? t.amt : -t.amt);
-      }
+  // শুধুমাত্র যদি আগে কখনো ক্লোজিং সেভ করা থাকে (anchorDate থাকে), তবেই মাঝখানের মিস হওয়া দিনের লেনদেন যোগ হবে।
+  // কখনোই পুরনো বছরের বা আগের আন-ক্লোজড ইতিহাসের ফাইল টেনে ওপেনিং ব্যালেন্স বানানো হবে না!
+  if (prevDates.length > 0) {
+    const anchors = ws.map(w => byW[w.id].anchorDate).filter(Boolean).sort(), histDates = [];
+    if (anchors[0]) { let dd = addD(anchors[0], 1), g = 0; while (dd < D && g++ < 400) { if (!startDate || dd >= startDate) histDates.push(dd); dd = addD(dd, 1); } }
+    histDates.forEach(hd => {
+      const hlist = allTxForDate(hd);
+      hlist.forEach(t => {
+        const cell = byW[t.w];
+        if (!cell || !cell.anchorDate) return;
+        if (hd > cell.anchorDate) {
+          cell.autoOpen += (t.dir === 'in' ? t.amt : -t.amt);
+        }
+      });
     });
-  });
+  }
 
   ws.forEach(w => {
     const c = byW[w.id];
@@ -2239,19 +2246,76 @@ function dayReconcile(D) {
     if (t.cat === 'ব্যক্তিগত খরচ' && t.dir === 'out') perExp += t.amt;
     if (t.cat === 'ভিসা টাকা জমা' && t.dir === 'in') visaDepositIn += t.amt;
   });
-  Object.values(S.wtx).forEach(t => {
-    if (!t || t.date !== D) return;
-    if (t.type === 'visa_return') revKept += n(t.kept);
-    if (t.type === 'mfs_io' && n(t.fee) > 0 && t.subType === 'cash_in_client' && !t.mfsCutFee) revCounter += n(t.fee);
-  });
-  Object.values(S.files).forEach(f => { const c = fileCalc(f); if (c.ret && f.retDate === D) revKept += c.kept; else if (!c.ret && f.appDate === D) revDocPass += c.profit; });
-  Object.values(S.docs).forEach(d => { const c = docCalc(d); if (c.real && docProfitDate(d) === D) { if (d.status === 'ret') revKept += c.kept; else revDocPass += c.profit; } });
+  if (!startDate || D >= startDate) {
+    Object.values(S.wtx).forEach(t => {
+      if (!t || t.date !== D) return;
+      if (t.type === 'visa_return') revKept += n(t.kept);
+      if (t.type === 'mfs_io' && n(t.fee) > 0 && t.subType === 'cash_in_client' && !t.mfsCutFee) revCounter += n(t.fee);
+      if (t.type === 'mfs_io' && n(t.mfsExtra) > 0 && t.subType === 'cash_out_client') revCounter += n(t.mfsExtra);
+    });
+    Object.values(S.files).forEach(f => { const c = fileCalc(f); if (c.ret && f.retDate === D) revKept += c.kept; else if (!c.ret && f.appDate === D) revDocPass += c.profit; });
+    Object.values(S.docs).forEach(d => { const c = docCalc(d); if (c.real && docProfitDate(d) === D) { if (d.status === 'ret') revKept += c.kept; else revDocPass += c.profit; } });
+  }
   VISA.rows.forEach(v => {
     const fi = visaFeeInfo(v);
     if ((v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !fi.paid && fi.fee > 0) visaFeePending += fi.fee;
   });
 
   return { D, ws, byW, txs, curClose, totOpen, totIn, totOut, totExp, totAct, anyAct, allMatched, revCounter, revKept, revDocPass, shopExp, perExp, visaDepositIn, visaFeePending };
+}
+
+/* ---------- নতুন করে দৈনিক হিসাব শুরু করার সেটআপ শিট (Fresh Start / Set All Opening Balances) ---------- */
+function freshStartSheet(defDate) {
+  const tmr = addD(today(), 1);
+  const D = defDate || UI.dhd || tmr;
+  const ws = wallets();
+  const dc = S.dclose[D] || { customOpen: {} };
+  sheet('🚀 নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করুন',
+    '<div class="mut sm">আপনি যেদিন থেকে (যেমন: আগামীকাল বা আজ) নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করতে চান, সেই তারিখটি বাছুন এবং প্রতিটি ড্রয়ার ও বিকাশ/ব্যাংকে শুরুর দিন সকালে যত টাকা থাকবে তা নিচে বসিয়ে সেভ করুন। আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
+    + '<div class="field"><label for="fs_date">কবে থেকে নতুন হিসাব শুরু করবেন?</label>'
+    + '<div class="row" style="gap:6px"><input id="fs_date" type="date" value="' + D + '">'
+    + '<button type="button" class="btn sm ghost" onclick="$(\'fs_date\').value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
+    + '<button type="button" class="btn sm" onclick="$(\'fs_date\').value=\'' + tmr + '\'">আগামীকাল (' + fd(tmr) + ')</button></div></div>'
+    + '<div class="row between"><b class="sm">প্রতিটি ড্রয়ার ও ব্যাংকের শুরুর ব্যালেন্স (৳):</b>'
+    + '<button type="button" class="chip" style="padding:3px 10px;font-size:12px" onclick="zeroAllFs()">সব ০ (শূন্য) করুন</button></div>'
+    + '<div class="stack" style="gap:8px">'
+    + ws.map(w => {
+      const curVal = (dc.customOpen && dc.customOpen[w.id] !== undefined) ? dc.customOpen[w.id] : n(w.openBal);
+      return '<div class="row between" style="gap:10px;background:var(--bg);padding:8px 10px;border-radius:11px;border:1px solid var(--line)">'
+        + '<div style="flex:1;min-width:0"><b class="sm">' + esc(w.name) + '</b><div class="sm mut" style="font-size:11px">' + (WKIND[w.kind] ? WKIND[w.kind].short : '') + (w.owner ? ' · ' + esc(w.owner) : '') + '</div></div>'
+        + '<input class="fs_inp" id="fs_w_' + w.id + '" type="number" inputmode="decimal" style="max-width:135px;text-align:right;font-weight:700" placeholder="0" value="' + curVal + '">'
+        + '</div>';
+    }).join('')
+    + '</div>'
+    + '<button class="btn block" onclick="saveFreshStart()">✅ এই ব্যালেন্স দিয়ে নতুন হিসাব শুরু করুন</button>');
+}
+
+function zeroAllFs() {
+  wallets().forEach(w => { const el = $('fs_w_' + w.id); if (el) el.value = 0; });
+}
+
+function saveFreshStart() {
+  const D = val('fs_date') || today();
+  const ws = wallets().slice();
+  const dc = S.dclose[D] || { id: D, date: D, counts: {}, customOpen: {}, openNote: {}, note: '' };
+  dc.customOpen = dc.customOpen || {};
+  dc.openNote = dc.openNote || {};
+  ws.forEach(w => {
+    const v = n(val('fs_w_' + w.id));
+    w.openBal = v;
+    dc.customOpen[w.id] = v;
+    dc.openNote[w.id] = 'নতুন শুরুর ব্যালেন্স';
+  });
+  S.settings.wallets = ws;
+  S.settings.dhStartDate = D;
+  saveSettings();
+  // আগের কোনো ক্লোজিং থাকলে এবং ইউজার নতুন করে শুরু করলে D তারিখের ওপেনিং সেভ হয়
+  dc.updatedAt = Date.now();
+  S.dclose[D] = dc;
+  save('dclose', D);
+  UI.dhd = D === today() ? '' : D;
+  closeSheet();
+  toast('🚀 ' + fd(D) + ' থেকে নতুন শুরুর ব্যালেন্স সেট হয়েছে!');
 }
 
 /* ---------- স্মার্ট গরমিল ডিটেক্টর (Smart Discrepancy Helper) ---------- */
@@ -2353,8 +2417,8 @@ function walletBreakdownHtml(D, c) {
   const ins = c.txs.filter(t => t.dir === 'in');
   const outs = c.txs.filter(t => t.dir === 'out');
   const openSrc = c.hasCustomOpen
-    ? 'কাস্টম শুরুর ব্যালেন্স (হাতে বসানো)' + (c.openNote ? ' · ' + esc(c.openNote) : '') + ' (অটো ছিল ' + money(c.autoOpen) + ')'
-    : (c.anchorDate ? fd(c.anchorDate) + ' তারিখের ক্লোজিং ব্যালেন্স থেকে অটো এসেছে' : 'প্রাথমিক শুরুর ব্যালেন্স (সেটিংস) ও আগের লেনদেন থেকে');
+    ? 'আপনার সেট করা শুরুর ব্যালেন্স' + (c.openNote ? ' (' + esc(c.openNote) + ')' : '')
+    : (c.anchorDate ? fd(c.anchorDate) + ' তারিখের ক্লোজিং ব্যালেন্স থেকে অটো এসেছে' : 'প্রাথমিক শুরুর ব্যালেন্স (আগের পুরনো ফাইল বাদ দিয়ে)');
 
   const btnBar = '<div class="row between wrapr" style="gap:6px;padding-top:4px;border-top:1px dashed var(--line)">'
     + '<button type="button" class="btn sm ' + (isOpen ? 'warnb' : 'ghost') + '" style="flex:1" onclick="toggleWBreak(\'' + c.w.id + '\')">'
@@ -2471,10 +2535,19 @@ function vDhisab() {
   const pendVisaFees = VISA.rows.filter(v => (v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !visaFeeInfo(v).paid && visaFeeInfo(v).fee > 0);
   const anyExpanded = R.ws.some(w => UI.wexp && UI.wexp[w.id]);
 
-  // Header Date Bar
-  const dateNav = '<div class="card row between"><button class="ib" onclick="dhShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dh_dsel" type="date" value="' + D + '" onchange="dhJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + ' · দিন শেষের হিসাব মেলানো</div></div><button class="ib" onclick="dhShift(1)" aria-label="পরের দিন">›</button></div>';
+  // Header Date Bar + Fresh Start Banner
+  const startD = S.settings.dhStartDate || '';
+  const dateNav = '<div class="card stack" style="gap:10px">'
+    + '<div class="row between"><button class="ib" onclick="dhShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dh_dsel" type="date" value="' + D + '" onchange="dhJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + ' · দিন শেষের হিসাব মেলানো' + (startD ? ' (শুরু: ' + fd(startD) + ')' : '') + '</div></div><button class="ib" onclick="dhShift(1)" aria-label="পরের দিন">›</button></div>'
+    + '<div class="row between wrapr" style="gap:8px;padding-top:8px;border-top:1px dashed var(--line)">'
+    + '<span class="sm mut">কাল বা আজ থেকে নতুন ব্যালেন্স দিয়ে শুরু করতে চান?</span>'
+    + '<button type="button" class="btn sm good" onclick="freshStartSheet(\'' + D + '\')">🚀 নতুন শুরুর ব্যালেন্স সেট করুন</button>'
+    + '</div></div>';
 
   // Hero Summary Card
+  const isPer = w => w.kind === 'bank_per' || /personal|ব্যক্তিগত/i.test((w.owner || '') + ' ' + (w.name || ''));
+  let bizT = 0, perT = 0; R.ws.forEach(w => { const c = R.byW[w.id], v = c.hasActual ? c.actual : c.expected; if (isPer(w)) perT += v; else bizT += v; });
+  const splitLine = '<div class="sm" style="opacity:.9;margin-top:8px">🏢 ব্যবসার মোট: <b class="num">' + money(bizT) + '</b> · 👤 ব্যক্তিগত মোট: <b class="num">' + money(perT) + '</b> <span style="opacity:.7">(গোনা থাকলে গোনা, নইলে থাকার কথা)</span></div>';
   const diffTot = R.totAct - R.totExp;
   const hero = '<div class="card hero">'
     + '<div class="row between"><span class="sm" style="opacity:.8">সব ড্রয়ার + বিকাশ/নগদ + ব্যাংক মিলিয়ে থাকার কথা</span>'
@@ -2485,7 +2558,7 @@ function vDhisab() {
     + '<div><small>কাউন্টার ও সার্ভিস আয়</small><b class="num">' + money(R.revCounter + R.revKept + R.revDocPass) + '</b></div>'
     + '<div><small>ভিসা জমা (আমানত)</small><b class="num">' + money(R.visaDepositIn) + '</b></div>'
     + '<div><small>দোকান + ব্যক্তিগত খরচ</small><b class="num">' + money(R.shopExp + R.perExp) + '</b></div>'
-    + '</div></div>';
+    + '</div>' + splitLine + '</div>';
 
   // Smart Quick Entry Bar (10 exact scenarios including bKash/Nagad Cash-In/Out & Extra charge)
   const quickBar = '<h2>⚡ চটজলদি এন্ট্রি (১ ক্লিকে সঠিক ড্রয়ার বা ব্যাংকে)</h2>'
@@ -2524,7 +2597,7 @@ function vDhisab() {
     const items = R.ws.filter(w => w.kind === gk);
     if (!items.length) return;
     drawerCards += '<h2>' + gtitle + ' <button type="button" class="pill" style="border:0;cursor:pointer;margin-left:6px" onclick="walletForm(\'\',\'' + gk + '\')">＋ যোগ</button></h2>';
-    drawerCards += '<div class="stack" style="gap:10px">' + items.map(w => {
+    drawerCards += '<div class="sm mut" style="margin:-4px 0 8px">' + DHG[gk] + ' · থাকার কথা মোট: <b class="num">' + money(items.reduce((s, w) => s + R.byW[w.id].expected, 0)) + '</b></div><div class="stack" style="gap:10px">' + items.map(w => {
       const c = R.byW[w.id];
       const ok = c.hasActual && Math.abs(c.diff) < 0.5;
       const stPill = !c.hasActual
@@ -2547,7 +2620,7 @@ function vDhisab() {
         + (!c.hasActual ? 'গোনা টাকা লিখলে সাথে সাথে কম/বেশি দেখাবে' : (ok ? '✓ হিসাবের সাথে হুবহু মিলেছে' : (c.diff < 0 ? '⚠ হিসাবের চেয়ে ' + money(Math.abs(c.diff)) + ' কম আছে!' : '⚠ হিসাবের চেয়ে ' + money(c.diff) + ' বেশি আছে!')))
         + '</span>'
         + '</div>'
-        + smartHintsForWallet(R, w.id)
+        + '<input id="dc_n_' + w.id + '" value="' + esc((R.curClose.wnotes || {})[w.id] || '') + '" placeholder="📝 এই জায়গার নোট — কম/বেশি হলে কেন (ঐচ্ছিক)" style="font-size:13px">' + smartHintsForWallet(R, w.id)
         + walletBreakdownHtml(D, c)
         + '</div>';
     }).join('') + '</div>';
@@ -2584,7 +2657,7 @@ function vDhisab() {
     + '</div>'
     + '<button class="btn ghost block" onclick="walletManageSheet()">⚙️ ড্রয়ার, বিকাশ/নগদ/রকেট/উপায় ও ব্যাংক যোগ বা পরিবর্তন করুন</button>';
 
-  return dateNav + dailyGuideHtml() + hero + quickBar + expandAllBar + drawerCards + saveCloseBox + visaPendHtml + txSec;
+  return dateNav + dhHelp('date') + dailyGuideHtml() + hero + dhHelp('hero') + quickBar + dhHelp('quick') + expandAllBar + dhHelp('wcard') + drawerCards + saveCloseBox + dhHelp('close') + visaPendHtml + (pendVisaFees.length ? dhHelp('visapend') : '') + txSec + dhHelp('txlog') + dhHelp('manage');
 }
 
 function dhLiveDiff(wid, exp) {
@@ -2616,7 +2689,8 @@ function saveDayClosing(D) {
     if (raw !== '') counts[w.id] = n(raw);
     else delete counts[w.id];
   });
-  S.dclose[D] = { id: D, date: D, counts, customOpen: prev.customOpen || {}, openNote: prev.openNote || {}, note: val('dh_close_note').trim(), by: actor(), updatedAt: Date.now() };
+  const wnotes = Object.assign({}, prev.wnotes || {}); wallets().forEach(w => { const e = $('dc_n_' + w.id); if (e) { const v = e.value.trim(); if (v) wnotes[w.id] = v; else delete wnotes[w.id]; } });
+  S.dclose[D] = { id: D, date: D, wnotes, counts, customOpen: prev.customOpen || {}, openNote: prev.openNote || {}, note: val('dh_close_note').trim(), by: actor(), updatedAt: Date.now() };
   save('dclose', D);
   render();
   toast('✅ দিন শেষের হিসাব সেভ হয়েছে!');
@@ -2921,6 +2995,42 @@ function delWalletItem(id) {
   closeSheet();
   toast('মুছে ফেলা হয়েছে');
 }
+
+
+/* ---------- প্রতিটি অপশনের নোট ও নির্দেশনা ---------- */
+const DHG = { drawer: 'ফিজিক্যাল নগদ টাকা — দোকানের ড্রয়ারে হাত দিয়ে গুনে মেলান', mfs: 'অ্যাপ খুলে ব্যালেন্স দেখে লিখুন (এজেন্ট ও পার্সোনাল আলাদা নামে রাখুন)', bank_biz: 'ব্যবসার ব্যাংক — ব্যাংক অ্যাপ/স্টেটমেন্টের ব্যালেন্স দেখে লিখুন', bank_per: 'ব্যক্তিগত ব্যাংক — ব্যবসার মোটে মিশবে না, আলাদা মোট দেখাবে' };
+const DHH = {
+  date: { t: 'তারিখ বার ও "নতুন শুরুর ব্যালেন্স"', what: 'যে দিনের হিসাব দেখবেন বা মেলাবেন সেই দিন বাছার জায়গা।', when: 'রোজ রাতে (দোকান বন্ধের আগে) আজকের দিনে মেলান। ভুলে গেলে আগের দিন বেছে মিলিয়ে নিতে পারবেন।', how: ['‹ › চেপে আগের/পরের দিন যান, বা তারিখে চেপে ক্যালেন্ডার থেকে বাছুন।', '🚀 নতুন শুরুর ব্যালেন্স: প্রথমবার চালু করার সময় একবারই চাপবেন। প্রতিটি ড্রয়ার/বিকাশ/ব্যাংকে ওই সকালে কত ছিল লিখে দিন। এর আগের পুরনো ফাইলের টাকা আর হিসাবে মিশবে না।'], ex: 'আগামীকাল থেকে চালু করতে চাইলে: ড্রয়ার গুনুন, বিকাশ/ব্যাংকের ব্যালেন্স দেখুন, "আগামীকাল" বাছুন, সব বসিয়ে সেভ।' },
+  hero: { t: 'ওপরের সারাংশ কার্ড', what: 'সব জায়গা মিলিয়ে আজ শুরুতে কত ছিল, কত ঢুকল, কত বেরোল আর কত থাকার কথা।', when: 'মেলানোর আগে ও পরে এক নজরে দেখতে।', how: ['"থাকার কথা" = শুরুতে ছিল + আজ ঢুকেছে − আজ বেরিয়েছে।', '🏢 ব্যবসা ও 👤 ব্যক্তিগত মোট আলাদা দেখায়: ব্যাংক "পার্সোনাল" ধরন বা নামে/দায়িত্বে Personal লেখা জায়গা ব্যক্তিগত ধরা হয়।', 'নিচের তিন ঘর: আজকের আয়, ভিসা জমা (এটা গচ্ছিত, আয় নয়), দোকান+ব্যক্তিগত খরচ।'], ex: 'শুরুতে ২০,০০০ + ঢুকল ১২,০০০ − বেরোল ৮,০০০ = থাকার কথা ২৪,০০০।' },
+  quick: { t: 'চটজলদি এন্ট্রি বাটনগুলো কখন চাপবেন', what: 'প্রতিটি বাটন একটি বাস্তব কাজের জন্য। টাকা কোন ড্রয়ার/বিকাশ/ব্যাংকে গেল সেটা প্রতিবার নিজে বেছে দেবেন, তাতেই ওই জায়গার হিসাব মেলে।', when: 'টাকা হাতে বা অ্যাকাউন্টে নড়ার সাথে সাথে, দিন শেষের জন্য ফেলে রাখবেন না।', how: ['কাউন্টার এক্সট্রা আয়: ফটোকপি, প্রিন্ট, অনলাইন আবেদন। আয় ধরা হয়।', 'ভিসা টাকা জমা: ক্লায়েন্ট ভিসার টাকা রাখলে। আয় নয়, গচ্ছিত।', 'ভিসা ফেরত ও চার্জ: ফাইল ফেরত দিলে। রাখা চার্জ আয়, বাকিটা ফেরত।', 'ভিসা অ্যাপয়েন্ট খরচ: অ্যাপয়েন্টমেন্ট হলে ভিসা ফি + সফটওয়্যার খরচ কোথা থেকে দিলেন।', 'ডকুমেন্ট কাজ/জমা ও পাসপোর্ট বিল/বাকি: ফর্মে গিয়ে "কোথায় রাখলেন" বাছুন।', 'দোকান খরচ / ব্যক্তিগত খরচ: যে জায়গা থেকে দিলেন সেটা বাছুন (নিয়মিত ⭐ খরচও এখানে)।', '📱 বিকাশ/নগদ চার্জ ও ক্যাশ-ইন/আউট: এজেন্ট লেনদেনে ড্রয়ার ও বিকাশ একসাথে ঠিক হয়।', '🔄 ট্রান্সফার: এক জায়গা থেকে আরেক জায়গায় টাকা সরালে (লাভ-ক্ষতি নয়)। যেমন পাসপোর্ট ড্রয়ার → মেইন, মেইন → বিকাশ।', '📒 বাকি খাতা: কেউ বাকি নিলে/ফেরত দিলে।'], ex: 'বিকাশে ফি দিয়ে দিন শেষে সেই টাকা মেইন ড্রয়ারে নিলেন: ট্রান্সফার, থেকে "পাসপোর্ট ড্রয়ার", যাবে "মেইন ড্রয়ার"।' },
+  wcard: { t: 'প্রতিটি ড্রয়ার/বিকাশ/ব্যাংক কার্ড', what: 'প্রতিটি জায়গার আলাদা হিসাব কার্ড।', when: 'দিন শেষে প্রতিটি জায়গা গুনে/দেখে সংখ্যা বসাতে।', how: ['শুরুতে ছিল: কালকের সেভ করা সংখ্যা অটো আসে। হাতে বদলাতে চাপুন (কারণ লিখে রাখুন)।', 'আজ জমা (+) / আজ খরচ (−) / থাকার কথা: চাপলে কোন এন্ট্রি থেকে কত হলো দেখা যায়, এন্ট্রিতে চেপে ঠিকও করা যায়।', 'আসল ব্যালেন্স ঘর: ড্রয়ার গুনে বা অ্যাপে দেখে এখানে লিখুন। কম/বেশি সাথে সাথে দেখাবে।', '✓ মিলেছে: মিলে গেলে এক চাপে বসান।', '📝 নোট: কম/বেশি হলে কারণ লিখে রাখুন।', 'নিচের 💡 ক্লু: গরমিল হলে সম্ভাব্য কারণ বলে দেয়।'], ex: 'থাকার কথা ৩,৪৭০ কিন্তু গুনে পেলেন ৩,৪৫০: ঘরে ৩৪৫০ লিখুন, ৳২০ কম দেখাবে, নোটে "চার্জ" লিখুন।' },
+  close: { t: 'দিন শেষের ক্লোজিং', what: 'আজকের গোনা সংখ্যা সেভ করলে কাল সকালে সেটাই "শুরুতে ছিল" হয়ে যায়।', when: 'সব জায়গা গুনে সংখ্যা বসানোর পর, শেষ ধাপে।', how: ['✅ সেভ: যেসব জায়গায় সংখ্যা বসিয়েছেন সবগুলো সেভ হয়। ফাঁকা রাখলে ওই জায়গা আজ ক্লোজ হয় না।', '⚡ "থাকার কথা" বসান: সব ঘরে হিসাবের সংখ্যা ভরে। আসলে গুনে মিলিয়ে নিশ্চিত হলেই ব্যবহার করুন, নইলে ভুল ঢাকা পড়ে।', 'ক্লোজিং নোট: যেমন "৫০ টাকা ভাংতি কম"।'], ex: 'গরমিল (কম/বেশি) সংখ্যাসহই সেভ হয়, কাল ওই আসল সংখ্যা থেকেই শুরু হবে।' },
+  visapend: { t: 'ভিসা খরচ বাকি তালিকা', what: 'অ্যাপয়েন্টমেন্ট/ডেলিভারি হয়েছে অথচ ভিসা ফি ও সফটওয়্যার খরচ এখনো দেননি।', when: 'যেদিন টাকা দিলেন সেদিন "খরচ দিন" চাপুন।', how: ['"খরচ দিন" চাপুন, তারিখ ও কোন জায়গা থেকে দিলেন বাছুন।', 'পরিশোধ না করলে বাকি তালিকায় থাকবে, কোনো ড্রয়ার থেকে টাকা কমবে না।'], ex: 'ভিসা ফি ৮,৫০০ বিকাশ এজেন্ট থেকে দিলেন: বিকাশ এজেন্ট বাছুন, ওই বিকাশের থাকার কথা ৮,৫০০ কমবে।' },
+  txlog: { t: 'আজকের সব লেনদেনের তালিকা', what: 'সব জায়গার সব এন্ট্রি এক তালিকায়।', when: 'কিছু মিলছে না বা এন্ট্রি ঠিক করতে হলে।', how: ['ওপরের চিপ চেপে একটি জায়গার এন্ট্রি আলাদা করে দেখুন।', 'এন্ট্রিতে চাপলে সেই ফর্ম খুলে ঠিক বা মুছতে পারবেন।', 'সবুজ "আয়" ট্যাগ মানে রেভিনিউ।'], ex: 'বিকাশে যাওয়া এন্ট্রি ভুলে ড্রয়ারে বসেছে: এন্ট্রি চেপে জায়গা বদলান।' },
+  manage: { t: 'ড্রয়ার/বিকাশ/ব্যাংক যোগ বা পরিবর্তন', what: 'আপনার সব জায়গার তালিকা বানানো ও বদলানোর সেটিং।', when: 'নতুন বিকাশ/ব্যাংক খুললে বা নাম বদলাতে হলে।', how: ['＋ নতুন যোগ: ধরন বাছুন, নাম দিন, শুরুর ব্যালেন্স দিন।', 'দায়িত্ব ঘরে Business বা Personal লিখুন, তাতে মোট আলাদা হবে।', 'মুছে ফেললে ওই জায়গার পুরনো এন্ট্রি প্রথম ড্রয়ারে চলে যায়, তাই মোছার বদলে নাম বদলানো ভালো।'], ex: 'নাম: "বিকাশ এজেন্ট", দায়িত্ব: Business। নাম: "বিকাশ পার্সোনাল", দায়িত্ব: Personal।' },
+  counter_rev: { t: 'কাউন্টার এক্সট্রা আয়', what: 'ফটোকপি, প্রিন্ট, অনলাইন আবেদন বা যেকোনো সরাসরি সার্ভিসের আয়।', when: 'টাকা পাওয়ার সময় বা দিন শেষে সারাদিনের মোট একবারে।', how: ['তারিখ ও টাকার অংক দিন।', 'টাকা কোথায় রাখলেন বাছুন (সাধারণত Counter Drawer)।', 'বিবরণে কী কাজের টাকা লিখুন, নোটে বাড়তি কথা।'], ex: 'ফটোকপি ৩০০ + প্রিন্ট ২০০ = ৫০০, Counter Drawer, বিবরণ "ফটোকপি ও প্রিন্ট"।' },
+  visa_dep: { t: 'ভিসা টাকা জমা (গচ্ছিত)', what: 'ক্লায়েন্ট ভিসার জন্য টাকা রাখলে। এটা আয় নয়, ফেরতযোগ্য আমানত।', when: 'টাকা পাওয়ার সাথে সাথে।', how: ['ক্লায়েন্টের নাম/ফাইল লিখুন।', 'কোথায় রাখলেন বাছুন: Visa Drawer, বিকাশ, নগদ বা ব্যাংক।'], ex: 'রহিম ৫,০০০ বিকাশে পাঠাল: জায়গা "বিকাশ এজেন্ট"।' },
+  visa_ret: { t: 'ভিসা ফাইল ফেরত ও রাখা চার্জ', what: 'ফাইল বাতিল হলে ক্লায়েন্টকে টাকা ফেরত ও আপনার রাখা চার্জ।', when: 'ফেরত দেওয়ার দিন।', how: ['জমা ছিল লিখুন, রাখা চার্জ লিখুন: ফেরত অংক অটো হিসাব হয়।', 'কোন জায়গা থেকে ফেরত দিলেন বাছুন।', 'রাখা চার্জ আপনার আয় ধরা হয়।'], ex: 'জমা ২,০০০, চার্জ ৩০০, ফেরত ১,৭০০ Visa Drawer থেকে।' },
+  visa_cost: { t: 'ভিসা অ্যাপয়েন্ট খরচ', what: 'ভিসা ফি ও সফটওয়্যার খরচ আজ দিলে এখানে লিখুন।', when: 'যেদিন টাকা দিলেন সেদিন (পরে দিলে ভিসা ফাইল থেকে "বাকি" রাখুন)।', how: ['খরচের টাকা ও তারিখ দিন।', 'কোন ড্রয়ার/বিকাশ/ব্যাংক থেকে দিলেন বাছুন, ওই জায়গার টাকা কমবে।'], ex: '২টি ফাইলের ভিসা ফি ১৭,০০০ ব্যাংক থেকে।' },
+  transfer: { t: 'ট্রান্সফার (এক জায়গা থেকে আরেক জায়গায়)', what: 'টাকা সরানো মাত্র, লাভ-ক্ষতি বদলায় না। এক জায়গা কমে আরেক জায়গা বাড়ে।', when: 'দিন শেষে ড্রয়ার থেকে মেইনে নেওয়া, ক্যাশ থেকে ব্যাংকে জমা, ব্যাংক থেকে তোলা।', how: ['থেকে (From) ও যাবে (To) আলাদা বাছুন।', 'টাকা ও তারিখ দিন, নোটে কারণ।'], ex: 'পাসপোর্ট ড্রয়ারে ৮,০০০ জমে আছে, ৭,০০০ মেইনে নিলেন: থেকে পাসপোর্ট ড্রয়ার, যাবে মেইন ড্রয়ার, ৭,০০০।' },
+  mfs: { t: 'বিকাশ/নগদ ক্যাশ-ইন/আউট ও চার্জ', what: 'এজেন্ট লেনদেনে ক্যাশ ড্রয়ার ও বিকাশ একসাথে বদলায়। এক এন্ট্রিতে দুটোই ঠিক হয়।', when: 'প্রতিটি লেনদেনে, বা দিন শেষে মোট অজানা চার্জ ৪ নম্বর দিয়ে।', how: ['১) কাস্টমার আমার বিকাশে পাঠাল, আমি নগদ দিলাম: মূল ১,০০০ + এক্সট্রা ২০ → বিকাশ +১,০২০, ড্রয়ার −১,০০০, ২০ আপনার আয়।', '২) আমি কাস্টমারকে বিকাশে পাঠালাম, সে নগদ দিল: মূল ১,০০০ + চার্জ ২০ → বিকাশ −১,০০০, ড্রয়ার +১,০২০, ২০ আয়।', '৩) আমি বিকাশ থেকে বিল বা ভিসা ফি দিলাম: মূল ১,৫০০ + চার্জ ৩০ → বিকাশ −১,৫৩০। এটা খরচ।', '৪) দিন শেষে বিকাশের ব্যালেন্সে অজানা বাড়তি/কম: শুধু বিকাশ ঠিক করে, ড্রয়ার বদলায় না। + হলে আয়।', 'নিচের প্রিভিউ লাইনে দেখুন কোন জায়গায় কত যোগ/বিয়োগ হবে, দেখে তবে সেভ।'], ex: 'দিন শেষে থাকার কথা ৩,৪৭০, অ্যাপে ৩,৫২০: ৪ নম্বর, ➕ যোগ, ৫০ টাকা।' },
+  openbal: { t: 'শুরুর ব্যালেন্স হাতে বদলানো', what: 'সাধারণত কালকের ক্লোজিং থেকে অটো আসে, হাতে বদলানোর দরকার নেই।', when: 'সকালে এসে ড্রয়ারে আলাদা টাকা পেলে বা বাসা থেকে ভাংতি আনলে।', how: ['নতুন সংখ্যা লিখুন ও কারণ লিখুন।', 'অটোতে ফিরতে ঘর খালি রেখে "অটো ব্যালেন্সে ফেরান" চাপুন।'], ex: 'সকালে বাসা থেকে ১,০০০ ভাংতি এনেছেন: শুরুর ব্যালেন্স বাড়ান, কারণ "ভাংতি এনেছি"।' },
+  fresh: { t: 'নতুন শুরুর ব্যালেন্স', what: 'কোনো দিন থেকে একেবারে নতুন করে হিসাব চালু করা।', when: 'প্রথমবার, বা বড় গোলমালের পর নতুন করে শুরু।', how: ['তারিখ বাছুন (আজ বা আগামীকাল)।', 'প্রতিটি জায়গায় ওই সকালে কত থাকবে লিখুন, না থাকলে ০।', 'সেভ চাপলে এর আগের পুরনো এন্ট্রি আর শুরুর ব্যালেন্সে মিশবে না।'], ex: 'ড্রয়ার গুনে ও অ্যাপ দেখে লিখে দিন, তারপর রোজ রাতে শুধু মেলাবেন।' },
+  visafee: { t: 'ভিসা অ্যাপয়েন্ট খরচ (পরিশোধ বা বাকি)', what: 'এই ফাইলের ভিসা ফি ও সফটওয়্যার খরচ দিয়েছেন কিনা ও কোথা থেকে।', when: 'টাকা দিলে বা বাকি রাখলে।', how: ['দিয়েছি: তারিখ ও কোন জায়গা থেকে দিলেন বাছুন, ওই জায়গার টাকা কমবে।', 'বাকি: কোনো জায়গার টাকা কমবে না, বাকি তালিকায় থাকবে।', 'ভিসা সফটওয়্যারে "PAID" থাকলে এখানে না বদলালে Visa Drawer থেকে গেছে ধরা হয়, ভিন্ন জায়গা হলে বদলান।'], ex: 'এজেন্টকে বিকাশ করলাম: জায়গা "বিকাশ এজেন্ট", নোট "এজেন্টকে পাঠালাম"।' },
+  visapayw: { t: 'ভিসা জমার মাধ্যম বদল', what: 'ক্লায়েন্ট কোথায় টাকা দিয়েছে সেটা ঠিক করা।', when: 'ভুল জায়গা ধরা পড়লে।', how: ['সঠিক ড্রয়ার/বিকাশ/ব্যাংক বাছুন, সেভ করুন।'], ex: 'নগদ ধরা ছিল কিন্তু বিকাশে এসেছে: বিকাশ বাছুন।' },
+  walletform: { t: 'নতুন জায়গা যোগ / এডিট', what: 'একটি ড্রয়ার, বিকাশ/নগদ বা ব্যাংকের তথ্য।', when: 'নতুন অ্যাকাউন্ট খুললে বা নাম/ব্যালেন্স বদলাতে।', how: ['ধরন: ড্রয়ার / মোবাইল ব্যাংকিং / বিজনেস ব্যাংক / পার্সোনাল ব্যাংক।', 'নাম এমন দিন যাতে আলাদা চেনা যায়, যেমন "বিকাশ এজেন্ট"।', 'দায়িত্বে Business বা Personal লিখলে ব্যবসা/ব্যক্তিগত মোট আলাদা দেখাবে।', 'প্রাথমিক শুরুর ব্যালেন্স: প্রথম দিনের আগে কত ছিল।'], ex: 'নাম: City Bank Current, ধরন: বিজনেস ব্যাংক, দায়িত্ব: Business।' }
+};
+function dhHelp(k) {
+  const h = DHH[k]; if (!h) return '';
+  return '<details class="ipbox dhh" style="margin:2px 0 10px"><summary><b>ⓘ ' + esc(h.t) + ' — কী, কখন, কীভাবে</b></summary><div class="stack" style="gap:6px;margin-top:8px;font-size:13px;line-height:1.55">'
+    + '<div><b>এটা কী:</b> ' + esc(h.what) + '</div><div><b>কখন:</b> ' + esc(h.when) + '</div>'
+    + '<div><b>কীভাবে:</b>' + h.how.map(x => '<div>• ' + esc(x) + '</div>').join('') + '</div>'
+    + '<div style="background:var(--nbg,#fff1a8);color:var(--nfg,#4a2f00);border-radius:8px;padding:6px 9px"><b>উদাহরণ:</b> ' + esc(h.ex) + '</div></div></details>';
+}
+function dhHelpInject(k) { const b = document.querySelector('#sheet .sh-b'); if (b) b.insertAdjacentHTML('afterbegin', dhHelp(k)); }
+[['quickDhEntry', null], ['mfsIoSheet', 'mfs'], ['openBalSheet', 'openbal'], ['freshStartSheet', 'fresh'], ['visaFeeSheet', 'visafee'], ['visaPayWSheet', 'visapayw'], ['walletForm', 'walletform']].forEach(([f, k]) => {
+  const o = window[f]; window[f] = function () { const r = o.apply(this, arguments); dhHelpInject(k || arguments[0]); return r; };
+});
 
 /* ---------- শুরু ---------- */
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
