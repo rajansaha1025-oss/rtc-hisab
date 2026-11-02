@@ -132,6 +132,7 @@ textarea{resize:vertical;min-height:66px}
 @media (prefers-reduced-motion:no-preference){.sh{animation:up .18s ease-out}@keyframes up{from{transform:translateY(40px);opacity:.4}}}
 [hidden]{display:none!important}
 main{padding-bottom:92px}
+.asgtop{display:inline-flex;align-items:center;gap:6px;background:var(--acc);color:var(--onacc);border-radius:99px;padding:5px 14px;font-size:14.5px;font-weight:700}
 .notetop{background:var(--nbg);color:var(--nfg);border:1.5px solid var(--nbd);border-left:7px solid var(--nbd);padding:9px 12px;border-radius:11px;font-size:15px;font-weight:700;word-break:break-word;white-space:pre-wrap;box-shadow:0 2px 8px rgba(224,138,0,.25)}
 .hs{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .hs::-webkit-scrollbar{display:none}
@@ -223,7 +224,7 @@ const KIND = { shop: 'দোকান খরচ', personal: 'ব্যক্ত�
 const DEFCASH = () => [{ id: 'c1', name: 'কাউন্টার ১', owner: 'Rajan' }, { id: 'c2', name: 'কাউন্টার ২', owner: 'Rabbi' }];
 const DEF = () => ({
   settings: { payDay: 2, payRule: 2, payTime: '18:00', defaultIp: 1200, gmails: [], refs: ['মামা', 'Rajan', 'Omey'],
-    docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: ['Rajan', 'Rabbi', 'Anik'], cash: DEFCASH(), pin: '',
+    docCats: ['NID কার্ড', 'জন্ম নিবন্ধন', 'পুলিশ ক্লিয়ারেন্স', 'অন্যান্য'], staff: ['Rajan', 'Rabbi', 'Omey', 'Anik', 'Mitul'], workers: ['Emu', 'Najrul', 'Amn'], cash: DEFCASH(), pin: '',
     services: [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }],
     cats: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন', 'অন্যান্য'], personal: ['বাসা খরচ', 'টুকটাক', 'অন্যান্য'], income: ['অন্য সার্ভিসের লাভ', 'অন্যান্য'] },
     fixed: { shop: ['দোকান ভাড়া', 'বিদ্যুৎ বিল', 'স্টাফ বেতন'], personal: ['বাসা ভাড়া', 'বিদ্যুৎ বিল'] } },
@@ -238,13 +239,15 @@ let AUTH = lsGet(K.auth, null);        // {email, refresh}
 let MODE = (function () { try { return localStorage.getItem(K.mode) || ''; } catch (e) { return ''; } })();   // 'cloud' | 'local' | ''
 let idTok = '', idExp = 0, syncSt = 'idle', VISA = lsGet(K.visa, { at: 0, rows: [], err: '' });
 let tab = 'home', fm = null;
-const UI = { period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day', dcd: '' };
+const UIP = lsGet('rtc_hisab_ui', {});
+const UI = { ord: UIP.ord === 'desc' ? 'desc' : 'asc', lv: UIP.lv === 'table' ? 'table' : 'card', dv: UIP.dv === 'table' ? 'table' : 'card', dw: 'all', period: 'month', from: '', to: '', pf: 'all', pq: '', ek: 'shop', ym: '', loanQ: '', ps: 'client', pv: 'card', dq: '', dc: 'all', df: 'all', dm: 'all', cd: '', cDue: false, prf: 'all', cm: 'day', dcd: '' };
 
+function uiSet(k, v) { UI[k] = v; const p = lsGet('rtc_hisab_ui', {}); p[k] = v; lsSet('rtc_hisab_ui', p); render(); }
 function norm(d) {
   const base = DEF(); if (!d || typeof d !== 'object') return base;
   const s = Object.assign({}, base.settings, d.settings || {});
   s.cats = Object.assign({}, base.settings.cats, (d.settings && d.settings.cats) || {});
-  ['gmails', 'refs', 'docCats', 'staff'].forEach(k => { s[k] = arr(s[k]); });
+  ['gmails', 'refs', 'docCats', 'staff', 'workers'].forEach(k => { s[k] = arr(s[k]); });
   if (s.payRule !== 2) { s.payDay = 2; s.payRule = 2; }   // নতুন নিয়ম: সপ্তাহ সোম–রবি, পেমেন্ট ডিফল্ট মঙ্গলবার
   s.services = arr(s.services).filter(x => x && x.n).map(x => ({ n: String(x.n), r: parseFloat(x.r) || 0 })); s.pin = s.pin || '';
   ['shop', 'personal', 'income'].forEach(k => { s.cats[k] = arr(s.cats[k]); });
@@ -865,28 +868,56 @@ function delExp() { remove('expenses', fm.id); closeSheet(); toast('মুছে
 const LK = { lend: { dir: 'gave', t: 'সে নিল', pill: 'warn' }, lendback: { dir: 'got', t: 'সে ফেরত দিল', pill: 'good' }, borrow: { dir: 'got', t: 'আমি নিলাম', pill: 'bad' }, payback: { dir: 'gave', t: 'আমি ফেরত দিলাম', pill: 'good' } };
 const entryKind = e => (e && LK[e.kind]) ? e.kind : (e && e.dir === 'got' ? 'lendback' : 'lend');
 const lastEntry = l => (l.entries || []).slice().sort((a, b) => (b.date || '').localeCompare(a.date || '') || String(b.id).localeCompare(String(a.id)))[0];
+const ordCmp = (a, b) => ((a.createdAt || 0) - (b.createdAt || 0)) || String(a.id).localeCompare(String(b.id));
+const ordSgn = () => UI.ord === 'desc' ? -1 : 1;
+const viewBar = vk => '<div class="row wrapr" style="gap:8px"><div class="seg" style="flex:1;min-width:150px;max-width:230px"><button class="' + (UI[vk] === 'card' ? 'on' : '') + '" onclick="uiSet(\'' + vk + '\',\'card\')">▦ কার্ড</button><button class="' + (UI[vk] === 'table' ? 'on' : '') + '" onclick="uiSet(\'' + vk + '\',\'table\')">☰ টেবিল</button></div>'
+  + '<div class="seg" style="flex:1;min-width:150px;max-width:230px"><button class="' + (UI.ord === 'asc' ? 'on' : '') + '" onclick="uiSet(\'ord\',\'asc\')">#১,২,৩…</button><button class="' + (UI.ord === 'desc' ? 'on' : '') + '" onclick="uiSet(\'ord\',\'desc\')">নতুন আগে</button></div></div>';
+const phTop = p => {
+  p = String(p || '').trim(); if (!p) return '<div class="sm mut">📞 ফোন নম্বর নেই</div>';
+  const t = p.replace(/[^\d+]/g, '');
+  return '<div class="row" style="gap:10px;flex-wrap:wrap;align-items:center"><span style="font-size:16px;font-weight:700">📞 ' + waPhone(p) + '</span><a class="pill" href="tel:' + esc(t) + '" onclick="event.stopPropagation()" style="text-decoration:none;color:var(--acc)">কল</a></div>';
+};
+function loanCards(ls) {
+  if (!ls.length) return '<div class="empty">' + (Object.keys(S.loans).length ? 'এই খোঁজে কেউ নেই' : 'কারো সাথে বাকি নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।') + '</div>';
+  return ls.map(l => {
+    const b = loanBal(l), le = lastEntry(l);
+    return '<div class="card stack" style="gap:12px">' + phTop(l.phone) + (l.note ? notePill(l.note, 1) : '') + '<div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('loans', l.id) + ' ' + esc(l.person) + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) + (le.note ? ' · 📝 ' + esc(le.note) : '') : 'এখনও কিছু নেই') + '</div></div>'
+      + '<div style="text-align:right"><b class="num ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '" style="font-size:17px">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></div></div>'
+      + '<div class="grid2"><button class="btn sm warnb" onclick="quickLoan(\'' + l.id + '\',\'lend\')">' + ic('up') + ' সে নিল</button><button class="btn sm good" onclick="quickLoan(\'' + l.id + '\',\'lendback\')">' + ic('down') + ' সে ফেরত দিল</button></div><div class="grid2"><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'borrow\')">আমি নিলাম</button><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'payback\')">আমি ফেরত দিলাম</button></div></div>';
+  }).join('');
+}
+function loanTable(ls) {
+  if (!ls.length) return '<div class="empty">' + (Object.keys(S.loans).length ? 'এই খোঁজে কেউ নেই' : 'কারো সাথে বাকি নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।') + '</div>';
+  let g = 0, d = 0; ls.forEach(l => { const b = loanBal(l); if (b > 0) g += b; else d -= b; });
+  return '<div class="card" style="padding:6px 12px"><div class="kv sm" style="font-weight:700;color:var(--mut)"><span style="flex:1">নাম ও ফোন</span><span style="width:96px;text-align:right">বাকি</span></div>'
+    + ls.map(l => {
+      const b = loanBal(l);
+      return '<div class="kv" style="align-items:center;cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + serNo('loans', l.id) + ' ' + esc(l.person) + '</b><div class="sm" style="color:var(--mut)">' + (l.phone ? '📞 ' + waPhone(l.phone) : 'ফোন নেই') + (l.note ? ' · 📝 ' + esc(l.note) : '') + '</div></span>'
+        + '<span style="width:96px;text-align:right"><b class="num sm ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></span></div>';
+    }).join('')
+    + '<div class="kv" style="font-weight:700"><span style="flex:1">মোট</span><span style="text-align:right"><span class="num sm good">পাব ' + money(g) + '</span><br><span class="num sm bad">দেব ' + money(d) + '</span></span></div></div>';
+}
 function vLoan() {
-  const ls = Object.values(S.loans).sort((a, b) => Math.abs(loanBal(b)) - Math.abs(loanBal(a)));
-  const get = ls.reduce((s, l) => s + Math.max(0, loanBal(l)), 0), give = ls.reduce((s, l) => s + Math.max(0, -loanBal(l)), 0);
+  const all = Object.values(S.loans), q = (UI.loanQ || '').trim().toLowerCase();
+  const get = all.reduce((s, l) => s + Math.max(0, loanBal(l)), 0), give = all.reduce((s, l) => s + Math.max(0, -loanBal(l)), 0);
+  const ls = all.filter(l => !q || ((l.person || '') + ' ' + (l.phone || '') + ' ' + (l.note || '')).toLowerCase().includes(q)).sort((a, b) => ordSgn() * ordCmp(a, b));
   return '<div class="grid2"><div class="card"><div class="mut sm">আমি পাব</div><div class="num b good" style="font-size:22px">' + money(get) + '</div></div><div class="card"><div class="mut sm">আমি দেব</div><div class="num b bad" style="font-size:22px">' + money(give) + '</div></div></div>'
-    + (ls.length ? ls.map(l => {
-      const b = loanBal(l), le = lastEntry(l);
-      return '<div class="card stack" style="gap:12px">' + (l.note ? notePill(l.note, 1) : '') + '<div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('loans', l.id) + ' ' + esc(l.person) + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) + (le.note ? ' · 📝 ' + esc(le.note) : '') : 'এখনও কিছু নেই') + '</div></div>'
-        + '<div style="text-align:right"><b class="num ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '" style="font-size:17px">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></div></div>'
-        + '<div class="grid2"><button class="btn sm warnb" onclick="quickLoan(\'' + l.id + '\',\'lend\')">' + ic('up') + ' সে নিল</button><button class="btn sm good" onclick="quickLoan(\'' + l.id + '\',\'lendback\')">' + ic('down') + ' সে ফেরত দিল</button></div><div class="grid2"><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'borrow\')">আমি নিলাম</button><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'payback\')">আমি ফেরত দিলাম</button></div></div>';
-    }).join('') : '<div class="empty">কারো সাথে বাকি নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।</div>')
+    + '<div class="stack" style="gap:8px"><input id="l_q" type="search" placeholder="নাম, ফোন বা নোট খুঁজুন" value="' + esc(UI.loanQ || '') + '" oninput="UI.loanQ=this.value;reFocus(\'l_q\')">' + viewBar('lv') + '</div>'
+    + (UI.lv === 'table' ? loanTable(ls) : loanCards(ls))
     + '<button class="btn fab" onclick="personForm()">' + ic('plus') + ' নতুন ব্যক্তি</button>';
 }
 const dirSeg = (cur) => '<div class="grid2">' + Object.keys(LK).map(k => '<button type="button" id="d_' + k + '" class="chip' + (cur === k ? ' on' : '') + '" style="text-align:center" onclick="setDir(\'' + k + '\')">' + LK[k].t + '</button>').join('') + '</div>';
 function setDir(k) { window._dir = k; Object.keys(LK).forEach(x => { const e = $('d_' + x); if (e) e.className = 'chip' + (x === k ? ' on' : ''); }); }
 function personForm() {
-  window._dir = 'lend';
-  sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name" placeholder="কার সাথে লেনদেন"></div><div class="field"><label for="n_phone">ফোন (ঐচ্ছিক)</label><input id="n_phone" type="tel"></div><div class="field"><label for="n_pnote">📝 নোট (ঐচ্ছিক)</label><input id="n_pnote" placeholder="যেমন: কিসের বাকি, কবে দেবে"></div>'
+  window._dir = 'lend'; window._phAck = false;
+  sheet('নতুন ব্যক্তি', '<div class="field"><label for="n_name">নাম</label><input id="n_name" placeholder="কার সাথে লেনদেন"></div><div class="field"><label for="n_phone">📞 ফোন নম্বর (কার্ডের উপরে দেখাবে)</label><input id="n_phone" type="tel" inputmode="tel" placeholder="01XXXXXXXXX"></div><div class="field"><label for="n_pnote">📝 নোট (ঐচ্ছিক)</label><input id="n_pnote" placeholder="যেমন: কিসের বাকি, কবে দেবে"></div>'
     + '<div class="card stack" style="box-shadow:none;background:var(--bg);gap:10px"><b class="sm">প্রথম লেনদেন (ঐচ্ছিক)</b>' + dirSeg('lend') + '<div class="grid2"><div class="field"><label for="n_date">তারিখ</label><input id="n_date" type="date" value="' + today() + '"></div><div class="field"><label for="n_amt">টাকা (৳)</label><input id="n_amt" type="number" inputmode="decimal"></div></div></div>'
     + '<button class="btn block" onclick="savePerson()">যোগ করুন</button>');
 }
 function savePerson() {
-  const nm = val('n_name').trim(); if (!nm) { toast('নাম লিখুন'); return; } const id = uid();
+  const nm = val('n_name').trim(); if (!nm) { toast('নাম লিখুন'); return; }
+  const ph = val('n_phone').trim(); if ((!ph || phoneBad(ph)) && !window._phAck) { window._phAck = true; toast(!ph ? 'ফোন নম্বর দেননি — ঠিক থাকলে আবার চাপুন' : 'ফোন নম্বর ১১ ডিজিটের (01…) মনে হচ্ছে না — ঠিক থাকলে আবার চাপুন'); return; }
+  const id = uid();
   S.loans[id] = { id, person: nm, phone: val('n_phone').trim(), note: val('n_pnote').trim(), entries: [], createdAt: Date.now() };
   const a = n(val('n_amt')); if (a > 0) { const k = LK[window._dir] ? window._dir : 'lend'; S.loans[id].entries.push({ id: uid(), date: val('n_date') || today(), amt: a, dir: LK[k].dir, kind: k, note: '' }); }
   save('loans', id); closeSheet(); toast('যোগ হয়েছে');
@@ -908,6 +939,7 @@ function loanSheet(id) {
   sheet(esc(l.person) + (l.phone ? ' <span class="sm">' + waPhone(l.phone) + '</span>' : ''),
     '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে নিয়েছে</div><b class="num">' + money(took) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে ফেরত দিয়েছে</div><b class="num good">' + money(back) + '</b></div></div>' + ((bor || pay) ? '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি নিয়েছি</div><b class="num">' + money(bor) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি ফেরত দিয়েছি</div><b class="num good">' + money(pay) + '</b></div></div>' : '') + ''
     + '<div class="card" style="box-shadow:none;background:' + (b > 0 ? 'var(--goodbg)' : (b < 0 ? 'var(--badbg)' : 'var(--soft)')) + ';text-align:center"><div class="sm ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + (b > 0 ? 'এখনও বাকি, আমি পাব' : (b < 0 ? 'আমি দেব' : 'হিসাব মিটে গেছে')) + '</div><div class="num b ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : '')) + '" style="font-size:30px">' + money(Math.abs(b)) + '</div></div>'
+    + '<div class="field"><label for="ln_phone">📞 ফোন নম্বর (কার্ডের উপরে দেখাবে)</label><div class="row"><input id="ln_phone" type="tel" inputmode="tel" value="' + esc(l.phone || '') + '" placeholder="01XXXXXXXXX"><button type="button" class="btn sm ghost" onclick="saveLoanPhone(\'' + id + '\')">সেভ</button></div></div>'
     + '<div class="field"><label for="ln_note">📝 নোট (এই ব্যক্তির কার্ডে দেখাবে)</label><div class="row"><input id="ln_note" value="' + esc(l.note || '') + '" placeholder="যেমন: কিসের বাকি, কবে দেবে"><button type="button" class="btn sm ghost" onclick="saveLoanNote(\'' + id + '\')">সেভ</button></div></div>'
     + dirSeg(window._dir)
     + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal"></div></div>'
@@ -999,7 +1031,7 @@ function vSet() {
   return ''
     + '<div class="card stack"><b>IP পেমেন্টের সময়</b><span class="mut sm">হিসাবের সপ্তাহ সোমবার–রবিবার। সেই সপ্তাহের IP পরের সপ্তাহে এই দিনে দিতে হয় (ডিফল্ট মঙ্গলবার, দরকারে অন্যদিন বেছে নিন)।</span><div class="grid2"><div class="field"><label for="s_day">পেমেন্টের দিন</label><select id="s_day" onchange="setSt()">' + [1, 2, 3, 4, 5, 6, 0].map(i => '<option value="' + i + '"' + (i === +st.payDay ? ' selected' : '') + '>' + DAYS[i] + '</option>').join('') + '</select></div><div class="field"><label for="s_time">সময়</label><input id="s_time" type="time" value="' + st.payTime + '" onchange="setSt()"></div></div>'
     + '<div class="field"><label for="s_ip">সাধারণ IP (প্রতি ফাইল ৳)</label><input id="s_ip" type="number" value="' + n(st.defaultIp) + '" onchange="setSt()"></div><span class="mut sm">নতুন ফাইলে এই টাকা বসবে। ফাইলে আলাদা করে বদলানো যায়।</span></div>'
-    + lst('স্টাফের নাম (এন্ট্রিতে "কে করেছে" তে আসবে)', 'staff', st.staff) + lst('ডকুমেন্ট কাজের ধরন (NID, জন্ম নিবন্ধন…)', 'docCats', st.docCats) + svcCard() + cashSetCard() + lockCard()
+    + lst('স্টাফের নাম — দোকানের লোক (এন্ট্রিতে "কে করেছে" তে আসবে)', 'staff', st.staff) + lst('কাজ যাদের দেওয়া হয় (Emu, Najrul, Amn…) — ডকুমেন্ট কার্ডের উপরে নাম দেখাবে', 'workers', arr(st.workers)) + lst('ডকুমেন্ট কাজের ধরন (NID, জন্ম নিবন্ধন…)', 'docCats', st.docCats) + svcCard() + cashSetCard() + lockCard()
     + lst('Gmail লিস্ট', 'gmails', st.gmails) + lst('রেফারেন্স লিস্ট', 'refs', st.refs)
     + lst('দোকান খরচের ক্যাটেগরি', 'cats.shop', st.cats.shop) + lst('ব্যক্তিগত খরচের ক্যাটেগরি', 'cats.personal', st.cats.personal) + lst('অন্য আয়ের ক্যাটেগরি', 'cats.income', st.cats.income)
     + '<div class="card stack"><b>অ্যাকাউন্ট ও ডাটা</b><span class="mut sm">' + (MODE === 'cloud' ? 'লগইন: ' + esc(AUTH ? AUTH.email : '') + ' · ডাটা ক্লাউডে সেভ হচ্ছে' : 'লোকাল মোড: ডাটা শুধু এই ফোনে') + '</span>'
@@ -1051,8 +1083,8 @@ function cntCalc(c) { const paid = sumAmt(c.payments), total = n(c.total), cost 
 const rateOf = s => { const x = S.settings.services.find(v => v.n === s); return x ? n(x.r) : 0; };
 
 /* ---------- কমিট: সেভ + পরিবর্তনের ইতিহাস + একসাথে দুজন বদলালে জমা মিলিয়ে নেওয়া ---------- */
-const DLAB = { cat: 'ধরন', name: 'নাম', phone: 'ফোন', refNo: 'নম্বর', recvDate: 'নেওয়ার তারিখ', promiseDate: 'কথার তারিখ', total: 'বিল', cost: 'খরচ', costDone: 'খরচ হয়েছে', status: 'অবস্থা', doneDate: 'ডেলিভারির তারিখ', retDate: 'ফেরতের তারিখ', kept: 'রাখা চার্জ', by: 'স্টাফ', svc: 'সার্ভিস', qty: 'পরিমাণ', date: 'তারিখ', note: 'নোট' };
-const DKEYS = ['cat', 'name', 'phone', 'refNo', 'recvDate', 'promiseDate', 'total', 'cost', 'costDone', 'status', 'doneDate', 'retDate', 'kept', 'by', 'note'];
+const DLAB = { cat: 'ধরন', worker: 'কাজ দেওয়া হয়েছে', name: 'নাম', phone: 'ফোন', refNo: 'নম্বর', recvDate: 'নেওয়ার তারিখ', promiseDate: 'কথার তারিখ', total: 'বিল', cost: 'খরচ', costDone: 'খরচ হয়েছে', status: 'অবস্থা', doneDate: 'ডেলিভারির তারিখ', retDate: 'ফেরতের তারিখ', kept: 'রাখা চার্জ', by: 'স্টাফ', svc: 'সার্ভিস', qty: 'পরিমাণ', date: 'তারিখ', note: 'নোট' };
+const DKEYS = ['cat', 'worker', 'name', 'phone', 'refNo', 'recvDate', 'promiseDate', 'total', 'cost', 'costDone', 'status', 'doneDate', 'retDate', 'kept', 'by', 'note'];
 const CKEYS = ['date', 'svc', 'qty', 'total', 'cost', 'name', 'phone', 'by', 'note'];
 function logMsgs(old, nw, keys) {
   if (!old) return ['নতুন এন্ট্রি তৈরি'];
@@ -1098,20 +1130,20 @@ function histHtml(o) {
 }
 
 /* ---------- স্টাফ বাছাই (চিপ) ---------- */
-const PK = {}, PKREM = {};
+const PK = {}, PKREM = {}, PKL = {};
 function pkHtml(h) {
-  const l = S.settings.staff.slice(); if (PK[h] && !l.includes(PK[h])) l.unshift(PK[h]);
+  const key = PKL[h] || 'staff'; const l = arr(S.settings[key]).slice(); if (PK[h] && !l.includes(PK[h])) l.unshift(PK[h]);
   let x = l.map(v => chipB(v, v === PK[h], "pkSet('" + h + "',this.dataset.v)", v)).join('');
-  if (!isStaff()) x += '<button type="button" class="chip" onclick="pkAdd(\'' + h + '\')">＋ নতুন নাম</button>';
+  if (key !== 'staff' || !isStaff()) x += '<button type="button" class="chip" onclick="pkAdd(\'' + h + '\')">＋ নতুন নাম</button>';
   else if (!l.length) x = '<span class="sm mut">মালিক সেটিংসে স্টাফের নাম যোগ করলে এখানে আসবে</span>';
   return x;
 }
 function pkSet(h, v) { PK[h] = PK[h] === v ? '' : v; if (PK[h] && PKREM[h]) setMe(PK[h]); const e = $('pk_' + h); if (e) e.innerHTML = pkHtml(h); }
 function pkAdd(h) { const e = $('pk_' + h); e.insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="pk_in_' + h + '" placeholder="স্টাফের নাম"><button type="button" class="btn sm" onclick="pkCommit(\'' + h + '\')">যোগ</button></div>'); $('pk_in_' + h).focus(); }
-function pkCommit(h) { const v = val('pk_in_' + h).trim(); if (!v) return; if (!S.settings.staff.includes(v)) { S.settings.staff.push(v); saveSettings(); } PK[h] = v; if (PKREM[h]) setMe(v); $('pk_' + h).innerHTML = pkHtml(h); }
+function pkCommit(h) { const v = val('pk_in_' + h).trim(); if (!v) return; const key = PKL[h] || 'staff'; S.settings[key] = arr(S.settings[key]); if (!S.settings[key].includes(v)) { S.settings[key].push(v); saveSettings(); } PK[h] = v; if (PKREM[h]) setMe(v); $('pk_' + h).innerHTML = pkHtml(h); }
 const pkField = (h, label) => '<div class="field"><label>' + label + '</label><div class="chips" id="pk_' + h + '">' + pkHtml(h) + '</div></div>';
 const pkNeed = h => S.settings.staff.length > 0 && !PK[h];
-function pkInit(h, sel, rem) { PK[h] = sel; PKREM[h] = !!rem; }
+function pkInit(h, sel, rem, key) { PK[h] = sel; PKREM[h] = !!rem; PKL[h] = key || 'staff'; }
 
 /* ---------- জমা/ফেরত টাকার তালিকা (ডকুমেন্ট ও কাউন্টার দুটোতেই) ---------- */
 let DJ = null, CE = null;
@@ -1186,10 +1218,13 @@ function vDoc() {
   const base = Object.values(S.docs).map(d => ({ d, c: docCalc(d) })).filter(({ d }) => {
     if (UI.dc !== 'all' && d.cat !== UI.dc) return false;
     const m = (d.recvDate || '').slice(0, 7); if (UI.dm === 'month' && m !== mo) return false; if (UI.dm === 'last' && m !== lm) return false;
-    if (q && !((d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || '')).toLowerCase().includes(q)) return false;
+    if (q && !((d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || '') + ' ' + (d.worker || '')).toLowerCase().includes(q)) return false;
     return true;
   });
-  const list = base.filter(x => DF[UI.df][1](x, t0)).sort((a, b) => (b.d.recvDate || '').localeCompare(a.d.recvDate || '') || (b.d.createdAt || 0) - (a.d.createdAt || 0));
+  const wl = arr(S.settings.workers).slice(); Object.values(S.docs).forEach(d => { if (d.worker && !wl.includes(d.worker)) wl.push(d.worker); });
+  const wcnt = w => base.filter(x => w === 'all' ? true : (w === '__none' ? !x.d.worker : x.d.worker === w)).length;
+  const baseW = base.filter(x => UI.dw === 'all' || (UI.dw === '__none' ? !x.d.worker : x.d.worker === UI.dw));
+  const list = baseW.filter(x => DF[UI.df][1](x, t0)).sort((a, b) => ordSgn() * ordCmp(a.d, b.d));
   const T = list.reduce((t, x) => { t.bill += x.c.bill; t.paid += x.c.paid; t.due += x.c.due; t.cost += x.c.cost; if (x.c.real) t.profit += x.c.profit; return t; }, { bill: 0, paid: 0, due: 0, cost: 0, profit: 0 });
   const cnt = s => list.filter(x => x.d.status === s).length;
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div><div><small>লাভ হয়েছে</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></div></div>'
@@ -1198,10 +1233,20 @@ function vDoc() {
   return dcashCard() + sum + docCatCard(CC)
     + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
     + '<div class="hs">' + cats.map(c => chipB((c === 'all' ? 'সব ধরন' : c) + ' (' + ((CC[c] && CC[c].n) || 0) + ')', UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
-    + '<div class="hs">' + Object.keys(DF).map(k => { const cn = base.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
+    + (wl.length ? '<div class="hs">' + ['all'].concat(wl, ['__none']).map(w => chipB((w === 'all' ? '👤 সবার কাজ' : (w === '__none' ? 'কাউকে দেওয়া হয়নি' : w)) + ' (' + wcnt(w) + ')', UI.dw === w, "UI.dw=this.dataset.v;render()", w)).join('') + '</div>' : '')
+    + '<div class="hs">' + Object.keys(DF).map(k => { const cn = baseW.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
     + '<div class="seg" style="max-width:300px">' + [['all', 'সব সময়'], ['month', 'এই মাস'], ['last', 'গত মাস']].map(x => '<button class="' + (UI.dm === x[0] ? 'on' : '') + '" onclick="UI.dm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
-    + '<div class="stack">' + (list.length ? list.map(x => docCard(x.d, x.c, t0)).join('') : '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই। নিচের "নতুন কাজ" চেপে প্রথম এন্ট্রি দিন।') + '</div>') + '</div>'
+    + viewBar('dv')
+    + (UI.dv === 'table' ? docTable(list, t0) : '<div class="stack">' + (list.length ? list.map(x => docCard(x.d, x.c, t0)).join('') : '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই। নিচের "নতুন কাজ" চেপে প্রথম এন্ট্রি দিন।') + '</div>') + '</div>')
     + '<button class="btn fab" onclick="djForm()">' + ic('plus') + ' নতুন কাজ</button>';
+}
+function docTable(list, t0) {
+  if (!list.length) return '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই') + '</div>';
+  const W = 58, t = list.reduce((a, x) => { a.b += x.c.bill; a.p += x.c.paid; a.d += x.c.due; return a; }, { b: 0, p: 0, d: 0 });
+  return '<div class="card" style="padding:6px 12px"><div class="kv sm" style="font-weight:700;color:var(--mut)"><span style="flex:1">ক্লায়েন্ট · কে করছে</span><span style="width:' + W + 'px;text-align:right">বিল</span><span style="width:' + W + 'px;text-align:right">জমা</span><span style="width:' + W + 'px;text-align:right">বাকি</span></div>'
+    + list.map(x => { const d = x.d, c = x.c, st = DSTAT[d.status || 'run']; return '<div class="kv" style="align-items:center;cursor:pointer" onclick="djForm(\'' + d.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + serNo('docs', d.id) + ' ' + esc(d.name) + '</b><div class="sm" style="color:var(--mut)">' + (d.worker ? '<b style="color:var(--acc)">👤 ' + esc(d.worker) + '</b> · ' : '') + esc(d.cat) + ' · ' + fd(d.recvDate) + ' · <span class="' + st[1] + '">' + st[0] + '</span></div></span>'
+      + '<b class="num sm" style="width:' + W + 'px;text-align:right">' + Math.round(c.bill) + '</b><b class="num sm good" style="width:' + W + 'px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:' + W + 'px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
+    + '<div class="kv" style="font-weight:700"><span style="flex:1">মোট</span><span class="num sm" style="width:' + W + 'px;text-align:right">' + Math.round(t.b) + '</span><span class="num sm good" style="width:' + W + 'px;text-align:right">' + Math.round(t.p) + '</span><span class="num sm bad" style="width:' + W + 'px;text-align:right">' + Math.round(t.d) + '</span></div></div>';
 }
 function docCard(d, c, t0) {
   const st = DSTAT[d.status || 'run']; const cd = dCD(d); const late = d.status === 'run' && d.promiseDate && d.promiseDate < t0;
@@ -1216,7 +1261,7 @@ function docCard(d, c, t0) {
   ch += c.real ? pill(c.profit >= 0 ? 'good' : 'bad', (c.profit >= 0 ? '✓ লাভ হয়েছে ' : 'লোকসান ') + money(Math.abs(c.profit))) : pill('', 'লাভ ধরা হয়নি · সম্ভাব্য ' + money(c.profit));
   if (c.over > 0) ch += pill('warn', 'বিলের চেয়ে ' + money(c.over) + ' বেশি জমা');
   const pct = c.bill ? Math.min(100, c.paid / c.bill * 100) : 0;
-  return '<div class="card item" onclick="djForm(\'' + d.id + '\')">' + (d.note ? notePill(d.note) : '')
+  return '<div class="card item" onclick="djForm(\'' + d.id + '\')">' + (d.worker ? '<div><span class="asgtop">👤 কাজ: <b>' + esc(d.worker) + '</b></span></div>' : '') + (d.note ? notePill(d.note) : '')
     + '<div class="row"><span class="avatar ' + avatarCls(d.name) + '">' + initial(d.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('docs', d.id) + ' ' + esc(d.name) + '</div><div class="sm mut"><b style="color:var(--acc)">' + esc(d.cat) + '</b> · ' + fd(d.recvDate) + (d.phone ? ' · ' + waPhone(d.phone) : '') + (d.refNo ? ' · #' + esc(d.refNo) : '') + '</div></div><span class="pill ' + st[1] + '">' + st[0] + '</span></div>'
     + '<div class="prog"><i style="width:' + pct + '%"></i></div>'
     + '<div class="mini num"><div><small>' + (d.status === 'ret' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(c.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>' + (c.real ? 'লাভ' : 'সম্ভাব্য') + '</small><b class="' + (c.real ? (c.profit >= 0 ? 'good' : 'bad') : 'mut') + '">' + Math.round(c.profit) + '</b></div></div>'
@@ -1229,16 +1274,17 @@ function docCard(d, c, t0) {
 }
 
 /* ----- ফর্ম ----- */
-function djNew() { return { id: '', cat: '', name: '', phone: '', refNo: '', recvDate: today(), promiseDate: '', total: '', cost: '', costDone: false, status: 'run', doneDate: '', retDate: '', kept: '', note: '', by: '', payments: [], refunds: [], spends: [], log: [] }; }
+function djNew() { return { id: '', cat: '', worker: '', name: '', phone: '', refNo: '', recvDate: today(), promiseDate: '', total: '', cost: '', costDone: false, status: 'run', doneDate: '', retDate: '', kept: '', note: '', by: '', payments: [], refunds: [], spends: [], log: [] }; }
 function djForm(id) {
   const src = id ? S.docs[id] : null; DJ = src ? clone(src) : djNew();
   DJ.payments = arr(DJ.payments); DJ.refunds = arr(DJ.refunds); DJ.log = arr(DJ.log); DJ.spends = arr(DJ.spends); DJ._orig = src ? clone(src) : null; DJ._base = baseOf(src); DJ._ack = false;
   if (!DJ.cat) DJ.cat = '';
-  pkInit('dj', src ? (src.by || '') : ME, !src); pkInit('dj_payments', ME, true); pkInit('dj_spends', ME, true); pkInit('dj_refunds', ME, true);
+  pkInit('dj', src ? (src.by || '') : ME, !src); pkInit('dj_w', src ? (src.worker || '') : '', false, 'workers'); pkInit('dj_payments', ME, true); pkInit('dj_spends', ME, true); pkInit('dj_refunds', ME, true);
   const d = DJ;
   sheet(id ? 'ডকুমেন্ট কাজ এডিট' : 'নতুন ডকুমেন্ট কাজ',
     '<div class="field"><label for="dj_note">📝 নোট (কার্ডের একদম উপরে দেখাবে)</label><textarea id="dj_note" placeholder="যেমন: ছবি আনেনি, কাল আসবে / ভুল তথ্য ঠিক করতে হবে">' + esc(d.note) + '</textarea></div>'
     + '<div class="field"><label>কাজের ধরন</label><div class="chips" id="dj_cats">' + djCatChips() + '</div></div>'
+    + pkField('dj_w', '👤 কাজ কাকে দেওয়া হয়েছে (কার্ডের উপরে নাম দেখাবে)')
     + '<div class="field"><label for="dj_name">ক্লায়েন্টের নাম</label><input id="dj_name" value="' + esc(d.name) + '" placeholder="কার কাজ"></div>'
     + '<div class="field"><label for="dj_phone">ফোন নম্বর</label><input id="dj_phone" type="tel" inputmode="tel" value="' + esc(d.phone) + '" placeholder="01XXXXXXXXX"></div>'
     + '<div class="field"><label for="dj_refno">NID / ফর্ম / ট্র্যাকিং নম্বর (ঐচ্ছিক)</label><input id="dj_refno" value="' + esc(d.refNo) + '"></div>'
@@ -1292,7 +1338,7 @@ function djCalc() {
   $('dj_prev').innerHTML = h; $('dj_spends_l').innerHTML = spHtml(); $('dj_payments_l').innerHTML = mlHtml('dj', 'payments'); $('dj_refunds_l').innerHTML = mlHtml('dj', 'refunds');
 }
 function djSave() {
-  djGrab(); const d = DJ; const by = PK.dj || '';
+  djGrab(); const d = DJ; const by = PK.dj || ''; const worker = PK.dj_w || '';
   if (!d.name) { toast('ক্লায়েন্টের নাম লিখুন'); return; } if (!d.cat) { toast('কাজের ধরন বাছুন'); return; } if (pkNeed('dj')) { toast('কাজ কে করেছে — স্টাফ বাছুন'); return; }
   const c = docCalc(d); const w = [];
   if (phoneBad(d.phone)) w.push('ফোন নম্বরটা ১১ ডিজিটের (01…) মনে হচ্ছে না');
@@ -1306,7 +1352,7 @@ function djSave() {
   if (d.status === 'done' && d.doneDate && d.doneDate < d.recvDate) w.push('ডেলিভারির তারিখ নেওয়ার তারিখের আগে');
   if (w.length && !d._ack) { d._ack = true; $('dj_warn').innerHTML = '⚠ ' + w.map(esc).join('<br>⚠ ') + '<br><b>ঠিক থাকলে আবার "সেভ" চাপুন</b>'; $('dj_save').textContent = 'তবুও সেভ করুন'; $('dj_warn').scrollIntoView({ block: 'center' }); return; }
   const id = d.id || uid(); const old = d._orig;
-  const rec = { id, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
+  const rec = { id, cat: d.cat, worker, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
   commit('docs', rec, d._base, logMsgs(old, rec, DKEYS)); DJ = null; closeSheet(); toast('সেভ হয়েছে');
 }
 function spHtml() {
@@ -1518,8 +1564,8 @@ function csvDown(name, rows) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name + '-' + today() + '.csv'; a.click();
 }
 function exportDocs() {
-  const rows = [['কাজ নেওয়ার তারিখ', 'ধরন', 'নাম', 'ফোন', 'নম্বর', 'অবস্থা', 'ডেলিভারির তারিখ', 'ফেরতের তারিখ', 'মোট বিল', 'রাখা চার্জ (ফেরতে)', 'জমা', 'বাকি', 'ফেরত দেওয়া', 'ফেরত দিতে বাকি', 'খরচ', 'খরচ হয়েছে?', 'লাভ', 'লাভ ধরা হয়েছে?', 'স্টাফ', 'নোট']];
-  Object.values(S.docs).sort((a, b) => (a.recvDate || '').localeCompare(b.recvDate || '')).forEach(d => { const c = docCalc(d); rows.push([d.recvDate, d.cat, d.name, d.phone, d.refNo, DSTAT[d.status || 'run'][0], d.doneDate, d.retDate, n(d.total), c.kept, c.paid, c.due, c.refunded, c.refundDue, c.cost, d.costDone ? 'হ্যাঁ' : 'না', c.profit, c.real ? 'হ্যাঁ' : 'না', d.by, d.note]); });
+  const rows = [['কাজ নেওয়ার তারিখ', 'ধরন', 'নাম', 'ফোন', 'নম্বর', 'অবস্থা', 'ডেলিভারির তারিখ', 'ফেরতের তারিখ', 'মোট বিল', 'রাখা চার্জ (ফেরতে)', 'জমা', 'বাকি', 'ফেরত দেওয়া', 'ফেরত দিতে বাকি', 'খরচ', 'খরচ হয়েছে?', 'লাভ', 'লাভ ধরা হয়েছে?', 'কাজ কাকে দেওয়া', 'স্টাফ', 'নোট']];
+  Object.values(S.docs).sort((a, b) => (a.recvDate || '').localeCompare(b.recvDate || '')).forEach(d => { const c = docCalc(d); rows.push([d.recvDate, d.cat, d.name, d.phone, d.refNo, DSTAT[d.status || 'run'][0], d.doneDate, d.retDate, n(d.total), c.kept, c.paid, c.due, c.refunded, c.refundDue, c.cost, d.costDone ? 'হ্যাঁ' : 'না', c.profit, c.real ? 'হ্যাঁ' : 'না', d.worker || '', d.by, d.note]); });
   csvDown('rtc-document-kaj', rows);
 }
 function exportCnt() {
@@ -1799,6 +1845,7 @@ function docCatCard(CC) {
 }
 
 /* ---------- বাকি খাতা: নোট ---------- */
+function saveLoanPhone(id) { const l = S.loans[id]; if (!l) return; l.phone = val('ln_phone').trim(); save('loans', id); toast(phoneBad(l.phone) ? '⚠ সেভ হয়েছে, কিন্তু নম্বরটা ১১ ডিজিটের মনে হচ্ছে না' : 'ফোন সেভ হয়েছে'); loanSheet(id); }
 function saveLoanNote(id) { const l = S.loans[id]; if (!l) return; l.note = val('ln_note').trim(); save('loans', id); toast('নোট সেভ হয়েছে'); }
 
 /* ---------- CSV: ক্যাশ ও রেফারেন্স ---------- */
