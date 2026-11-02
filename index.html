@@ -201,6 +201,39 @@ details.fold[open]>summary::after{content:"▴"}
 .fxg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
 .fx{border:2px solid var(--line);border-radius:14px;padding:11px 10px;background:var(--card);cursor:pointer;display:flex;flex-direction:column;gap:3px;text-align:left;color:var(--ink);font:inherit}
 .fx.no{border-color:var(--warn);background:var(--warnbg)} .fx.ok{border-color:var(--good);background:var(--goodbg)} .fx span{font-size:12.5px}
+
+/* ===== DISTINCT DEPOSIT (জমা) VS EXPENSE (খরচ) BOXES ON CARDS ===== */
+.io-split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+@media(max-width:520px){.io-split{grid-template-columns:1fr}}
+.io-box{border-radius:12px;padding:10px 12px;border:2px solid transparent;display:flex;flex-direction:column;gap:5px}
+.io-box.in-box{background:#ecfdf5;border-color:#34d399;color:#064e3b}
+.io-box.out-box-pend{background:#fffbeb;border-color:#fbbf24;color:#78350f}
+.io-box.out-box-done{background:#fef2f2;border-color:#f87171;color:#7f1d1d}
+.io-box.ret-box{background:#f5f3ff;border-color:#a78bfa;color:#4c1d95;grid-column:1 / -1}
+[data-theme="dark"] .io-box.in-box{background:rgba(16,185,129,.14);border-color:#10b981;color:#d1fae5}
+[data-theme="dark"] .io-box.out-box-pend{background:rgba(245,158,11,.14);border-color:#f59e0b;color:#fef3c7}
+[data-theme="dark"] .io-box.out-box-done{background:rgba(239,68,68,.15);border-color:#ef4444;color:#fee2e2}
+[data-theme="dark"] .io-box.ret-box{background:rgba(139,92,246,.15);border-color:#8b5cf6;color:#ede9fe}
+.io-hd{display:flex;align-items:center;justify-content:space-between;gap:6px;border-bottom:1px dashed rgba(0,0,0,.15);padding-bottom:5px}
+[data-theme="dark"] .io-hd{border-bottom-color:rgba(255,255,255,.15)}
+.io-title{font-size:13px;font-weight:800;display:flex;align-items:center;gap:5px}
+.io-amt{font-size:17px;font-weight:900;font-variant-numeric:tabular-nums}
+.io-body{font-size:12.5px;line-height:1.5;font-weight:600}
+.io-body b{font-weight:800}
+.io-actions{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;margin-top:3px}
+.acct-box-grid{display:flex;flex-direction:column;gap:8px}
+.acct-row{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:8px;align-items:center;background:var(--bg);padding:9px 11px;border-radius:11px;border:1.5px solid var(--line)}
+@media(max-width:500px){.acct-row{grid-template-columns:1fr;gap:6px}}
+.acct-row.tot{background:var(--soft);border:2px solid var(--acc);font-weight:800}
+.acct-inp-wrap{display:flex;flex-direction:column;gap:2px}
+.acct-inp-wrap small{font-size:11px;color:var(--mut);font-weight:700}
+.acct-inp-wrap input{font-size:15px;font-weight:800;text-align:right;padding:7px 9px;border-radius:9px;border:1.5px solid var(--line);background:var(--card)}
+.acct-inp-wrap input.end-f{border-color:var(--good)}
+.gormil-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:560px){.gormil-grid{grid-template-columns:1fr}}
+.gormil-card{border-radius:12px;padding:11px 12px;border:2px solid var(--line);display:flex;flex-direction:column;gap:8px;background:var(--card)}
+.gormil-item{background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+
 </style>
 </head>
 <body>
@@ -375,13 +408,24 @@ async function loadVisa(force) {
 }
 // ভিসা অ্যাপের "হিসাব" ট্যাবের একই নিয়ম
 function visaRow(f) {
-  const ret = !!f.isReturned, del = !ret && !!f.isDelivered, appt = !!(f.isAppointed || f.appointmentDate);
+  const vm = (S && S.vmeta && S.vmeta[f.id]) ? S.vmeta[f.id] : {};
+  const ret = !!(vm.forceMode === 'RETURNED' || f.isReturned);
+  const del = !ret && !!(vm.forceMode === 'DELIVERED' || f.isDelivered);
+  const appt = !ret && !!(vm.forceMode === 'APPOINTED' || del || f.isAppointed || f.appointmentDate || vm.feePaid);
   const paid = n(f.billAdvance); let bill, due, profit, kept = 0;
-  const baseFee = n(f.baseVisaFee), softFee = n(f.softwareCharge), totalFee = baseFee + softFee;
-  if (ret) { kept = n(f.keptCharge); bill = 0; due = 0; profit = kept; }   // ফেরত ফাইলের বিল ধরা হয় না, শুধু রাখা চার্জ আয়
+  const baseFee = vm.baseFee !== undefined && vm.baseFee !== '' ? n(vm.baseFee) : n(f.baseVisaFee !== undefined ? f.baseVisaFee : 1500);
+  const softFee = vm.softFee !== undefined && vm.softFee !== '' ? n(vm.softFee) : n(f.softwareCharge);
+  const totalFee = baseFee + softFee;
+  // Safe Return Math: kept + refund can NEVER exceed paid!
+  const rawKept = vm.keptOverride !== undefined && vm.keptOverride !== '' ? n(vm.keptOverride) : n(f.keptCharge);
+  const rawRefund = vm.refOverride !== undefined && vm.refOverride !== '' ? n(vm.refOverride) : n(f.refundAmount);
+  const safeKept = ret ? (paid > 0 ? Math.min(paid, Math.max(0, rawKept)) : Math.max(0, rawKept)) : 0;
+  const refShould = ret ? Math.max(0, paid - safeKept) : 0;
+  const safeRefund = ret ? Math.min(refShould, Math.max(0, rawRefund)) : 0;
+  if (ret) { kept = safeKept; bill = 0; due = 0; profit = kept; }   // ফেরত ফাইলের বিল ধরা হয় না, শুধু রাখা চার্জ আয়
   else { bill = n(f.billTotal); due = Math.max(0, bill - paid); profit = (del || appt) ? bill - totalFee : 0; }
   const ts = /^SET_(\d+)$/.test(f.id) ? +f.id.slice(4) : 0;
-  const cDate = ts ? ymd(new Date(ts)) : '';
+  const cDate = ts ? ymd(new Date(ts)) : (f.createdDate || '');
   const ds = [], payList = [];
   const tk = (a, src) => arr(a).forEach((p, idx) => {
     if (!p || n(p.amt) <= 0) return;
@@ -394,7 +438,7 @@ function visaRow(f) {
   arr(f.subAccts).forEach((sb, i) => tk(sb && sb.pays, 'S' + i));
   if (!payList.length && paid > 0) payList.push({ key: f.id + '_ADV', d: cDate, amt: paid, by: '', w: '' });
   ds.sort();
-  return { id: f.id, last: ds.length ? ds[ds.length - 1] : '', refund: n(f.refundAmount), serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, kept, baseFee, softFee, totalFee, feeStatus: f.feeStatus || 'UNPAID', apptDate: f.appointmentDate || '', delDate: f.deliveredDate || '', payList, refShould: ret ? Math.max(0, paid - kept) : 0, refDue: ret ? Math.max(0, paid - kept - n(f.refundAmount)) : 0, date: cDate };
+  return { id: f.id, last: ds.length ? ds[ds.length - 1] : '', refund: safeRefund, rawRefund, serial: f.serial || '', name: (f.applicants && f.applicants[0] && f.applicants[0].name) || f.applicantName || 'Unnamed', more: Math.max(0, (f.applicants || []).length - 1), mode: ret ? 'RETURNED' : (del ? 'DELIVERED' : (appt ? 'APPOINTED' : 'RUNNING')), bill, paid, due, profit, kept, baseFee, softFee, totalFee, feeStatus: f.feeStatus || 'UNPAID', apptDate: vm.apptDate || f.appointmentDate || '', delDate: vm.delDate || f.deliveredDate || '', payList, refShould, refDue: ret ? Math.max(0, refShould - safeRefund) : 0, date: cDate };
 }
 
 /* ---------- 📲 ফোন → WhatsApp (wa.me/88 + নম্বর) ---------- */
@@ -704,14 +748,35 @@ function passCards(list, E) {
   E = E || ipEngine();
   return list.map(f => {
     const c = fileCalc(f); const pct = c.bill ? Math.min(100, c.paid / c.bill * 100) : 0;
+    const s = ipSt(f, E);
     const st = c.ret ? '<span class="pill bad">↩ ফেরত</span>' : !n(f.total) ? '' : (c.due ? '<span class="pill bad">বাকি ' + money(c.due) + '</span>' : '<span class="pill good">পুরো জমা</span>');
+    const chalDone = !!f.challan;
+    const ioBoxes = '<div class="io-split">'
+      + '<div class="io-box in-box">'
+      + '<div class="io-hd"><span class="io-title">📥 কাস্টমার জমার রেকর্ড (+)</span><span class="io-amt">+' + money(c.paid) + '</span></div>'
+      + '<div class="io-body">মোট বিল: <b>' + money(c.bill) + '</b> · ' + (c.due > 0 ? '<span class="bad">বাকি: <b>' + money(c.due) + '</b></span>' : '<span class="good">✓ পুরো বিল জমা</span>') + ' · লাভ: <b>' + money(c.profit) + '</b></div>'
+      + (c.due > 0 && !c.ret ? '<div class="io-actions"><button type="button" class="btn sm good" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">＋ কাস্টমার জমা নিলাম</button></div>' : '')
+      + '</div>'
+      + '<div class="io-box ' + (chalDone ? 'out-box-done' : 'out-box-pend') + '">'
+      + '<div class="io-hd"><span class="io-title">📤 খরচের রেকর্ড (চালান ও IP)</span><span class="io-amt">' + (chalDone ? '−' + money(f.passFee) : '৳০ (চালান বাকি)') + '</span></div>'
+      + '<div class="io-body">১. পাসপোর্ট ফি: <b>' + money(f.passFee) + '</b> (' + (chalDone ? '<span class="bad">✓ চালান হয়েছে ' + fd(f.challanDate) + ' — টাকা গেছে</span>' : '⏳ চালান এখনো হয়নি') + ')<br>'
+      + '২. IP খরচ: <b>' + (f.ipOn ? money(f.ipAmt) + ' (' + (s === 'paid' ? '✓ দেওয়া হয়েছে' : (f.jomaDate ? 'joma ' + fd(f.jomaDate) : 'joma বাকি')) + ')' : 'নেই') + '</b></div>'
+      + '<div class="io-actions">'
+      + '<button type="button" class="btn sm ' + (chalDone ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();toggleChallan(\'' + f.id + '\')">' + (chalDone ? '✓ চালান সম্পন্ন (বদলান)' : '💸 চালান সম্পন্ন মার্ক করুন') + '</button>'
+      + (f.ipOn && !f.jomaDate ? '<button type="button" class="btn sm ghost" onclick="event.stopPropagation();jomaOne(\'' + f.id + '\')">joma তারিখ দিন</button>' : '')
+      + '</div></div>'
+      + (c.ret ? '<div class="io-box ret-box">'
+        + '<div class="io-hd"><span class="io-title">↩️ রিটার্ন / ফেরত ও রাখা চার্জ হিসাব</span><span class="io-amt">ফেরত দেওয়া: −' + money(c.refunded) + '</span></div>'
+        + '<div class="io-body">জমা ছিল: <b>' + money(c.paid) + '</b> − রাখা চার্জ (আয়): <b>' + money(c.kept) + '</b> = ফেরত দিতে হবে: <b>' + money(c.toRefund) + '</b> · '
+        + (c.refundDue > 0.001 ? '<span class="bad">⚠ ফেরত দিতে বাকি: <b>' + money(c.refundDue) + '</b></span>' : '<span class="good">✓ সম্পূর্ণ ফেরত দেওয়া হয়েছে</span>') + '</div>'
+        + (c.refundDue > 0.001 ? '<div class="io-actions"><button type="button" class="btn sm danger" onclick="event.stopPropagation();refSheetP(\'' + f.id + '\')">↩ বাকি ' + money(c.refundDue) + ' ফেরত দিলাম</button></div>' : '')
+        + '</div>' : '')
+      + '</div>';
     return '<div class="card item"' + refStripe(f) + ' onclick="fileForm(\'' + f.id + '\')">' + (f.note ? notePill(f.note) : '') + '<div class="row"><span class="avatar ' + avatarCls(f.name) + '">' + initial(f.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('files', f.id) + ' ' + esc(f.name) + '</div><div class="sm mut">' + fd(f.appDate) + (f.phone ? ' · ' + waPhone(f.phone) : '')  + '</div></div>' + st + '</div>'
       + refLine(f)
       + (f.gmail ? '<div class="sm mut" style="word-break:break-all">✉ ' + esc(f.gmail) + '</div>' : '')
       + '<div class="prog" title="জমা ' + Math.round(pct) + '%"><i style="width:' + pct + '%"></i></div>'
-      + '<div class="mini num"><div><small>' + (c.ret ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(c.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>লাভ</small><b class="' + (c.profit >= 0 ? 'good' : 'bad') + '">' + Math.round(c.profit) + '</b></div></div>'
-      + checklist(f, E)
-      + (c.due || c.refundDue > 0.001 ? '<div class="row" style="justify-content:flex-end">' + (c.due ? '<button class="btn sm ghost" onclick="event.stopPropagation();quickPay(\'' + f.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '') + (c.refundDue > 0.001 ? '<button class="btn sm danger" onclick="event.stopPropagation();refSheetP(\'' + f.id + '\')">ফেরত দিলাম</button>' : '') + '</div>' : '')
+      + ioBoxes
       + '</div>';
   }).join('');
 }
@@ -734,11 +799,12 @@ function fileForm(id, keep) {
     + '<div class="grid2"><div class="field"><label for="f_ipamt">IP এর টাকা (৳)</label><input id="f_ipamt" type="number" inputmode="decimal" value="' + n(f.ipAmt) + '" oninput="fmCalc()"></div></div>'
     + '<div class="sm mut" id="f_ipnote"></div></div>'
     + '<div class="ipbox stack" style="gap:8px"><label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_ret" type="checkbox" style="width:auto" ' + (f.ret ? 'checked' : '') + ' onchange="$(\'f_retblk\').hidden=!this.checked;fmCalc()"> ↩ ফাইল ফেরত গেছে (ক্লায়েন্ট ফেরত নিয়েছে)</label>'
-    + '<div id="f_retblk"' + (f.ret ? '' : ' hidden') + '><div class="stack" style="gap:8px"><div class="sm mut">কত টাকা চার্জ রেখে বাকিটা ক্লায়েন্টকে ফেরত দেবেন তা লিখুন। রাখা চার্জই আপনার আয়, বিল আর বাকি পাওনায় ধরা হবে না।</div>'
-    + '<div class="grid2"><div class="field"><label for="f_retdate">ফেরতের তারিখ</label><input id="f_retdate" type="date" value="' + (f.retDate || '') + '"></div><div class="field"><label for="f_kept">কত টাকা রাখলাম (৳)</label><input id="f_kept" type="number" inputmode="decimal" value="' + (f.kept === '' || f.kept == null ? '' : n(f.kept)) + '" oninput="fmCalc()"></div></div>'
+    + '<div id="f_retblk"' + (f.ret ? '' : ' hidden') + '><div class="stack" style="gap:8px"><div class="sm" style="background:var(--warnbg);color:var(--ink);padding:8px 10px;border-radius:8px;border:1px solid var(--warn)"><b>🛡️ ভুল রোধী অটো-হিসাব:</b> উদাহরণস্বরূপ ক্লায়েন্ট ২০০০ টাকা জমা দিলে এবং আপনি ৫০০ টাকা চার্জ রাখলে, ফেরত হবে <b>২০০০ − ৫০০ = ১৫০০ টাকা</b>। নিচে "কত টাকা রাখলাম" লিখলেই ফেরত ঘরের টাকা অটো বসে যাবে (কখনোই জমার চেয়ে বেশি ফেরত যাবে না এবং দৈনিক ক্যাশ থেকেও অটো বাদ যাবে)।</div>'
+    + '<div class="grid2"><div class="field"><label for="f_retdate">ফেরতের তারিখ</label><input id="f_retdate" type="date" value="' + (f.retDate || today()) + '"></div><div class="field"><label for="f_kept">১. কত টাকা চার্জ রাখলাম — আমার আয় (৳)</label><input id="f_kept" type="number" inputmode="decimal" value="' + (f.kept === '' || f.kept == null ? '' : n(f.kept)) + '" oninput="onPassKeptInput()"></div></div>'
+    + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_auto_ref" type="checkbox" style="width:auto" checked> ✓ ফেরতযোগ্য বাকি টাকা (জমা − রাখা চার্জ) ফেরতের তারিখে ক্লায়েন্টকে ক্যাশ থেকে ফেরত দেওয়া হয়েছে (দৈনিক হিসাবে অটো আসবে)</label>'
     + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="f_rsp" type="checkbox" style="width:auto" ' + (f.retSpent ? 'checked' : '') + ' onchange="rspToggle()"> খরচ হয়ে গেছে (পাসপোর্ট ফি / IP আগেই দেওয়া হয়েছে)</label>'
     + '<div class="field"><label for="f_rcost">কত খরচ হয়ে গেছে (৳)</label><input id="f_rcost" type="number" inputmode="decimal" value="' + (f.retCost === '' || f.retCost == null ? '' : n(f.retCost)) + '" oninput="fmCalc()"></div>'
-    + '<div class="field"><label>ক্লায়েন্টকে কত ফেরত দিয়েছি</label><div id="f_refs"></div><div class="row" style="margin-top:8px"><input id="r_date" type="date" value="' + today() + '"><input id="r_amt" type="number" inputmode="decimal" placeholder="৳">' + wSelectHtml('r_w', lastW('r_w','w_passdoc')) + '<button type="button" class="btn sm" onclick="addRef()" style="white-space:nowrap">＋ যোগ</button></div></div></div></div></div>'
+    + '<div class="field"><label>২. ক্লায়েন্টকে কত ফেরত দিয়েছি (জমা − রাখা চার্জ)</label><div id="f_refs"></div><div class="row" style="margin-top:8px"><input id="r_date" type="date" value="' + today() + '"><input id="r_amt" type="number" inputmode="decimal" placeholder="৳" oninput="onPassRefInput()">' + wSelectHtml('r_w', lastW('r_w','w_passdoc')) + '<button type="button" class="btn sm" onclick="addRef()" style="white-space:nowrap">＋ যোগ</button></div></div></div></div></div>'
     + '<div class="card" style="box-shadow:none;background:var(--bg)" id="f_prev"></div>'
     + '<div class="field"><label>ক্লায়েন্ট কত জমা দিয়েছে</label><div id="f_pays"></div>'
     + '<div class="row" style="margin-top:8px"><input id="p_date" type="date" value="' + today() + '"><input id="p_amt" type="number" inputmode="decimal" placeholder="৳">' + wSelectHtml('p_w', lastW('p_w','w_passdoc')) + '<button type="button" class="btn sm" onclick="addPay()" style="white-space:nowrap">＋ যোগ</button></div></div>'
@@ -785,22 +851,77 @@ function fmCalc() {
   const jn = $('f_jnote'); if (jn) { jn.className = 'sm ' + (j ? 'good' : 'warnc'); jn.textContent = !$('f_ipon').checked ? 'IP নেই, joma তারিখ শুধু রেকর্ডের জন্য।' : (j ? '✓ IP হিসাবে ধরা হবে: ' + fd(wkStart(j)) + ' – ' + fd(wkEnd(j)) + ' সপ্তাহে' : '⏸ joma তারিখ দিলে তবেই IP হিসাবে যাবে'); }
 }
 function rspToggle() { if ($('f_rsp').checked && !val('f_rcost')) { const c = fileCalc({ total: 0, passFee: val('f_fee'), ipOn: $('f_ipon').checked, ipAmt: val('f_ipamt'), payments: [] }); $('f_rcost').value = c.cost || ''; } fmCalc(); }
-function addRef() { const a = n(val('r_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } const d = val('r_date') || today(); grab(); fm.refunds.push({ id: uid(), date: d, amt: a, w: val('r_w') || 'w_passdoc' }); fileForm(fm.id, true); }
+function onPassKeptInput() {
+  const paid = arr(fm.payments).reduce((s, p) => s + n(p && p.amt), 0);
+  let kept = Math.max(0, n(val('f_kept')));
+  if (paid > 0 && kept > paid) {
+    kept = paid;
+    $('f_kept').value = kept;
+    toast('⚠ রাখা চার্জ কাস্টমারের মোট জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!');
+  }
+  const alreadyRef = arr(fm.refunds).reduce((s, p) => s + n(p && p.amt), 0);
+  const rem = Math.max(0, paid - kept - alreadyRef);
+  if ($('r_amt')) $('r_amt').value = rem > 0 ? rem : '';
+  fmCalc();
+}
+function onPassRefInput() {
+  const paid = arr(fm.payments).reduce((s, p) => s + n(p && p.amt), 0);
+  const alreadyRef = arr(fm.refunds).reduce((s, p) => s + n(p && p.amt), 0);
+  let rAmt = Math.max(0, n(val('r_amt')));
+  if (paid > 0 && alreadyRef === 0) {
+    if (rAmt > paid) {
+      rAmt = paid;
+      $('r_amt').value = rAmt;
+      toast('⚠ ফেরত টাকা কাস্টমারের জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!');
+    }
+    if ($('f_kept')) $('f_kept').value = Math.max(0, paid - rAmt);
+  }
+  fmCalc();
+}
+function addRef() {
+  const a = n(val('r_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
+  const d = val('r_date') || today(); grab();
+  const c = fileCalc(fm);
+  if (a > c.refundDue + 0.001) {
+    toast('❌ ভুল রোধ: কাস্টমার জমা দিয়েছিল ' + money(c.paid) + ' এবং চার্জ রেখেছেন ' + money(c.kept) + '। তাই সর্বোচ্চ ' + money(c.refundDue) + ' ফেরত দেওয়া যাবে!');
+    $('r_amt').value = Math.max(0, c.refundDue);
+    return;
+  }
+  fm.refunds.push({ id: uid(), date: d, amt: a, w: val('r_w') || 'w_passdoc' }); fileForm(fm.id, true);
+}
 function rmRef(i) { grab(); fm.refunds.splice(i, 1); fileForm(fm.id, true); }
 function refSheetP(id) {
   const f = S.files[id], c = fileCalc(f); ACK = {};
-  sheet('ফেরত দিলাম — ' + esc(f.name), '<div class="mut sm">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(c.refundDue) + '</div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + '<button class="btn block" onclick="refDoP(\'' + id + '\')">ফেরত সেভ করুন</button>');
+  sheet('ফেরত দিলাম — ' + esc(f.name), '<div class="mut sm">জমা ছিল ' + money(c.paid) + ' − রাখা চার্জ ' + money(c.kept) + ' = ফেরত দিতে বাকি <b>' + money(c.refundDue) + '</b></div><div class="grid2"><div class="field"><label for="q_date">তারিখ</label><input id="q_date" type="date" value="' + today() + '"></div><div class="field"><label for="q_amt">টাকা (৳)</label><input id="q_amt" type="number" inputmode="decimal" value="' + c.refundDue + '"></div></div>' + wFieldHtml('q_w', lastW('q_w','w_passdoc'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন') + '<button class="btn block" onclick="refDoP(\'' + id + '\')">ফেরত সেভ করুন</button>');
 }
 function refDoP(id) {
   const a = n(val('q_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
-  const f = S.files[id], c = fileCalc(f); if (a > c.refundDue + 0.001 && !ACK.q) { ACK.q = 1; toast('ফেরতযোগ্য টাকার (' + money(c.refundDue) + ') চেয়ে বেশি — ঠিক থাকলে আবার চাপুন'); return; }
-  f.refunds = arr(f.refunds).concat([{ id: uid(), date: val('q_date') || today(), amt: a, w: val('q_w') || 'w_passdoc' }]); f.updatedAt = Date.now(); save('files', id); closeSheet(); toast('ফেরত লেখা হয়েছে');
+  const f = S.files[id], c = fileCalc(f);
+  if (a > c.refundDue + 0.001) {
+    toast('❌ ভুল রোধ: ফেরতযোগ্য টাকার (' + money(c.refundDue) + ') চেয়ে বেশি ফেরত দেওয়া যাবে না!');
+    $('q_amt').value = c.refundDue;
+    return;
+  }
+  f.refunds = arr(f.refunds).concat([{ id: uid(), date: val('q_date') || today(), amt: a, w: val('q_w') || 'w_passdoc' }]); f.updatedAt = Date.now(); save('files', id); closeSheet(); toast('ফেরত লেখা হয়েছে ও দৈনিক হিসাব থেকে কমেছে');
 }
 function addPay() { const a = n(val('p_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; } grab(); fm.payments.push({ id: uid(), date: val('p_date') || today(), amt: a, w: val('p_w') || 'w_passdoc' }); fileForm(fm.id, true); }
 function rmPay(i) { grab(); fm.payments.splice(i, 1); fileForm(fm.id, true); }
 function saveFile() {
   grab(); if (!fm.name) { toast('নাম লিখুন'); return; }
-  { const c = fileCalc(fm); if (c.ret && c.refunded > c.toRefund + 0.001 && !ACK.pf) { ACK.pf = 1; toast('ফেরত দেওয়া টাকা ফেরতযোগ্য (' + money(c.toRefund) + ') এর চেয়ে বেশি — ঠিক থাকলে আবার সেভ চাপুন'); return; } }
+  const c0 = fileCalc(fm);
+  if (c0.ret) {
+    if (c0.paid > 0 && n(fm.kept) > c0.paid) {
+      toast('❌ রাখা চার্জ কাস্টমারের মোট জমার (' + money(c0.paid) + ') চেয়ে বেশি হতে পারবে না!');
+      return;
+    }
+    if (c0.refunded > c0.toRefund + 0.001) {
+      toast('❌ ভুল রোধ: কাস্টমার জমা দিয়েছিল ' + money(c0.paid) + ' এবং চার্জ রেখেছেন ' + money(c0.kept) + '। তাই ফেরত সর্বোচ্চ ' + money(c0.toRefund) + ' হতে পারবে!');
+      return;
+    }
+    if ($('f_auto_ref') && $('f_auto_ref').checked && c0.refundDue > 0.001) {
+      fm.refunds = arr(fm.refunds).concat([{ id: uid(), date: fm.retDate || today(), amt: c0.refundDue, w: (val('r_w') || 'w_passdoc') }]);
+    }
+  }
   const id = fm.id || uid(); const rec = Object.assign({}, fm, { id, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), kept: n(fm.kept), retCost: n(fm.retCost), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
   S.files[id] = rec; save('files', id); fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('সেভ হয়েছে');
 }
@@ -977,7 +1098,7 @@ function vVisa() {
     + '<div class="card hero"><div class="mut sm">ভিসা থেকে মোট লাভ</div><div class="big num">' + money(t.profit) + '</div><div class="mut sm">বিল ' + money(t.bill) + ' · জমা ' + money(t.paid) + ' · বাকি ' + money(t.due) + '</div></div>'
     + vSt(r) + '<div class="chips">' + [['all', 'সব (' + r.length + ')'], ['RUNNING', 'চলমান'], ['APPOINTED', 'অ্যাপয়েন্টেড'], ['DELIVERED', 'ডেলিভারড'], ['RETURNED', 'ফেরত'], ['REFDUE', '🔴 ফেরত বাকি (' + r.filter(x => x.mode === 'RETURNED' && x.refDue > 0.001).length + ')']].map(x => '<button type="button" class="chip' + ((UI.vm || 'all') === x[0] ? ' on' : '') + '" onclick="UI.vm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
     + '<button class="btn ghost" onclick="loadVisa(true).then(render)">🔄 আবার আনুন</button>'
-    + (rl.length ? rl.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div><div class="mini num" style="margin-top:8px;grid-template-columns:repeat(4,1fr)"><div><small>' + (x.mode === 'RETURNED' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(x.mode === 'RETURNED' ? x.kept : x.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(x.paid) + '</b></div><div><small>' + (x.mode === 'RUNNING' ? 'পেতে পারি' : 'বাকি') + '</small><b class="' + (x.due && x.mode !== 'RUNNING' ? 'bad' : 'mut') + '">' + Math.round(x.due) + '</b></div><div><small>লাভ</small><b>' + Math.round(x.profit) + '</b></div></div>' + visaFeeCtrlHtml(x) + (x.mode === 'RETURNED' ? '<div style="margin-top:8px">' + visaRefBanner(x) + '</div>' : '') + '</div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
+    + (rl.length ? rl.slice().sort((a, b) => (Number(b.serial) || 0) - (Number(a.serial) || 0)).map(x => '<div class="card"><div class="row between"><span class="nm" style="font-weight:700;font-size:16px">' + (x.serial ? '#' + esc(x.serial) + ' ' : '') + esc(x.name) + (x.more ? ' +' + x.more : '') + '</span><span class="pill ' + mc[x.mode][1] + '">' + mc[x.mode][0] + '</span></div>' + visaCardSplitHtml(x) + '</div>').join('') : '<div class="empty">ভিসা ফাইল পাওয়া যায়নি</div>')
     + '<p class="mut sm" style="text-align:center">লাভ ধরা হয় ডেলিভারড বা অ্যাপয়েন্টেড ফাইলে (বিল − ভিসা ফি − সফটওয়্যার চার্জ), ফেরত ফাইলে রাখা চার্জ।</p>';
 }
 
@@ -1252,27 +1373,40 @@ function vDoc() {
 }
 function docCard(d, c, t0) {
   const st = DSTAT[d.status || 'run']; const cd = dCD(d); const late = d.status === 'run' && d.promiseDate && d.promiseDate < t0;
-  const pill = (cls, t, js) => '<button type="button" class="pill ' + cls + '" style="border:0;cursor:' + (js ? 'pointer' : 'default') + '"' + (js ? ' onclick="event.stopPropagation();' + js + '"' : '') + '>' + t + '</button>';
-  let ch = '';
-  if (d.status === 'run') ch += pill('warn', '⏳ ডেলিভারি বাকি' + (d.promiseDate ? ' · কথা ' + fd(d.promiseDate) : ''), "djDeliver('" + d.id + "')") + (late ? pill('bad', 'দেরি ' + dayDiff(d.promiseDate, t0) + ' দিন') : '');
-  else if (d.status === 'done') ch += pill('good', '✓ ডেলিভারড ' + fd(d.doneDate));
-  else ch += pill('bad', '↩ ফেরত ' + fd(d.retDate)) + pill('', 'রাখা ' + money(c.kept)) + (c.refundDue > 0 ? pill('bad', 'ফেরত দিতে বাকি ' + money(c.refundDue), "refSheet('" + d.id + "')") : (c.refunded > 0 ? pill('good', '✓ ফেরত দেওয়া ' + money(c.refunded)) : ''));
-  if (d.status !== 'ret' && (n(d.cost) > 0 || cd)) ch += pill(cd ? 'good' : 'warn', (cd ? '✓ খরচ হয়েছে ' : '✗ খরচ বাকি ') + money(d.cost), "djToggleCost('" + d.id + "')");
-  if (d.status === 'ret' && n(d.cost) > 0) ch += pill(cd ? 'warn' : '', cd ? 'খরচ গেছে ' + money(d.cost) : 'খরচ হয়নি', "djToggleCost('" + d.id + "')");
-  if (c.spent > 0) ch += pill('', '💸 খরচ করা ' + money(c.spent) + (c.est > 0 ? (c.est >= c.spent ? ' · বাকি ' + money(c.est - c.spent) : ' · ধরার চেয়ে ' + money(c.spent - c.est) + ' বেশি') : ''));
-  ch += c.real ? pill(c.profit >= 0 ? 'good' : 'bad', (c.profit >= 0 ? '✓ লাভ হয়েছে ' : 'লোকসান ') + money(Math.abs(c.profit))) : pill('', 'লাভ ধরা হয়নি · সম্ভাব্য ' + money(c.profit));
-  if (c.over > 0) ch += pill('warn', 'বিলের চেয়ে ' + money(c.over) + ' বেশি জমা');
   const pct = c.bill ? Math.min(100, c.paid / c.bill * 100) : 0;
+  const actualSpent = c.spent > 0 ? c.spent : (cd ? c.cost : 0);
+  const ioBoxes = '<div class="io-split">'
+    + '<div class="io-box in-box">'
+    + '<div class="io-hd"><span class="io-title">📥 কাস্টমার জমার রেকর্ড (+)</span><span class="io-amt">+' + money(c.paid) + '</span></div>'
+    + '<div class="io-body">মোট বিল: <b>' + money(c.bill) + '</b> · ' + (c.due > 0 ? '<span class="bad">বাকি: <b>' + money(c.due) + '</b></span>' : '<span class="good">✓ পুরো বিল জমা</span>')
+    + (c.over > 0 ? ' · <span class="warnc">বেশি জমা: ' + money(c.over) + '</span>' : '')
+    + '<br>' + (c.real ? 'নিট লাভ: <b>' + money(c.profit) + '</b>' : 'সম্ভাব্য লাভ: <b>' + money(c.profit) + '</b>') + '</div>'
+    + (c.due > 0 && d.status !== 'ret' ? '<div class="io-actions"><button type="button" class="btn sm good" onclick="event.stopPropagation();qpSheet(\'docs\',\'' + d.id + '\')">＋ জমা নিলাম</button></div>' : '')
+    + '</div>'
+    + '<div class="io-box ' + (cd ? 'out-box-done' : 'out-box-pend') + '">'
+    + '<div class="io-hd"><span class="io-title">📤 খরচের রেকর্ড (কতটুকু খরচ হয়েছে)</span><span class="io-amt">' + (actualSpent > 0 ? '−' + money(actualSpent) : '৳০ (খরচ বাকি)') + '</span></div>'
+    + '<div class="io-body">ধরা খরচ: <b>' + money(c.est) + '</b> · খরচ করা হয়েছে: <b>' + money(actualSpent) + '</b><br>'
+    + (cd ? '<span class="bad">✓ খরচ সম্পন্ন (দৈনিক হিসাব থেকে কমেছে)</span>' : (c.est > 0 ? '⏳ খরচ এখনো বাকি (টাকা যায়নি)' : 'কোনো খরচ ধরা হয়নি')) + '</div>'
+    + '<div class="io-actions">'
+    + (n(d.cost) > 0 || cd ? '<button type="button" class="btn sm ' + (cd ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();djToggleCost(\'' + d.id + '\')">' + (cd ? '✓ খরচ সম্পন্ন (বদলান)' : '✓ খরচ হয়েছে মার্ক করুন') + '</button>' : '')
+    + '<button type="button" class="btn sm ghost" onclick="event.stopPropagation();spSheet(\'' + d.id + '\')">💸 খরচ এন্ট্রি দিন</button>'
+    + '</div></div>'
+    + (d.status === 'ret' ? '<div class="io-box ret-box">'
+      + '<div class="io-hd"><span class="io-title">↩️ রিটার্ন / ফেরত ও রাখা চার্জ হিসাব</span><span class="io-amt">ফেরত দেওয়া: −' + money(c.refunded) + '</span></div>'
+      + '<div class="io-body">জমা ছিল: <b>' + money(c.paid) + '</b> − রাখা চার্জ (আয়): <b>' + money(c.kept) + '</b> = ফেরত দিতে হবে: <b>' + money(Math.max(0, c.paid - c.kept)) + '</b> · '
+      + (c.refundDue > 0.001 ? '<span class="bad">⚠ ফেরত দিতে বাকি: <b>' + money(c.refundDue) + '</b></span>' : '<span class="good">✓ সম্পূর্ণ ফেরত দেওয়া হয়েছে</span>') + '</div>'
+      + (c.refundDue > 0.001 ? '<div class="io-actions"><button type="button" class="btn sm danger" onclick="event.stopPropagation();refSheet(\'' + d.id + '\')">↩ বাকি ' + money(c.refundDue) + ' ফেরত দিলাম</button></div>' : '')
+      + '</div>' : '')
+    + '</div>';
   return '<div class="card item" onclick="djForm(\'' + d.id + '\')">' + (d.note ? notePill(d.note) : '')
     + '<div class="row"><span class="avatar ' + avatarCls(d.name) + '">' + initial(d.name) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('docs', d.id) + ' ' + esc(d.name) + '</div><div class="sm mut"><b style="color:var(--acc)">' + esc(d.cat) + '</b> · ' + fd(d.recvDate) + (d.phone ? ' · ' + waPhone(d.phone) : '') + (d.refNo ? ' · #' + esc(d.refNo) : '') + '</div></div><span class="pill ' + st[1] + '">' + st[0] + '</span></div>'
     + '<div class="prog"><i style="width:' + pct + '%"></i></div>'
-    + '<div class="mini num"><div><small>' + (d.status === 'ret' ? 'রাখা চার্জ' : 'বিল') + '</small><b>' + Math.round(c.bill) + '</b></div><div><small>জমা</small><b class="good">' + Math.round(c.paid) + '</b></div><div><small>বাকি</small><b class="' + (c.due ? 'bad' : '') + '">' + Math.round(c.due) + '</b></div><div><small>' + (c.real ? 'লাভ' : 'সম্ভাব্য') + '</small><b class="' + (c.real ? (c.profit >= 0 ? 'good' : 'bad') : 'mut') + '">' + Math.round(c.profit) + '</b></div></div>'
-    + '<div class="row wrapr" style="gap:6px">' + ch + '</div>'
-    + (d.by ? '<div class="sm mut">স্টাফ: ' + esc(d.by) + (d.updatedAt ? ' · শেষ বদল ' + dtS(d.updatedAt) : '') + '</div>' : '')
-    + '<div class="row wrapr" style="justify-content:flex-end;gap:8px">'
-    + '<button class="btn sm ghost" onclick="event.stopPropagation();spSheet(\'' + d.id + '\')">💸 খরচ করলাম</button>'
-    + (c.due > 0 ? '<button class="btn sm ghost" onclick="event.stopPropagation();qpSheet(\'docs\',\'' + d.id + '\')">' + ic('plus') + ' জমা নিলাম</button>' : '')
-    + (d.status === 'run' ? '<button class="btn sm good" onclick="event.stopPropagation();djDeliver(\'' + d.id + '\')">ডেলিভারি দিলাম</button>' : '') + '</div></div>';
+    + ioBoxes
+    + (d.by ? '<div class="sm mut" style="margin-top:6px">স্টাফ: ' + esc(d.by) + (d.updatedAt ? ' · শেষ বদল ' + dtS(d.updatedAt) : '') + '</div>' : '')
+    + (d.status === 'run' ? '<div class="row wrapr" style="justify-content:flex-end;gap:8px;margin-top:6px">'
+      + (late ? '<span class="pill bad">দেরি ' + dayDiff(d.promiseDate, t0) + ' দিন</span>' : (d.promiseDate ? '<span class="pill warn">কথা: ' + fd(d.promiseDate) + '</span>' : ''))
+      + '<button class="btn sm good" onclick="event.stopPropagation();djDeliver(\'' + d.id + '\')">✓ ডেলিভারি দিলাম</button></div>' : '')
+    + '</div>';
 }
 
 /* ----- ফর্ম ----- */
@@ -1297,9 +1431,10 @@ function djForm(id) {
     + spBlock()
     + '<div class="field"><label>কাজের অবস্থা</label><div class="seg" id="dj_seg">' + ['run', 'done', 'ret'].map(s => '<button type="button" id="dj_s_' + s + '" class="' + (d.status === s ? 'on' : '') + '" onclick="djStatus(\'' + s + '\')">' + DSTAT[s][0] + '</button>').join('') + '</div></div>'
     + '<div class="ipbox stack" id="dj_blk_done" style="gap:8px"' + (d.status === 'done' ? '' : ' hidden') + '><div class="field"><label for="dj_donedate">কবে ডেলিভারি দিয়েছি</label><input id="dj_donedate" type="date" value="' + (d.doneDate || '') + '"></div></div>'
-    + '<div class="ipbox stack" id="dj_blk_ret" style="gap:8px"' + (d.status === 'ret' ? '' : ' hidden') + '><div class="sm mut">কাজ ফেরত গেলে: কত টাকা রেখে বাকিটা ক্লায়েন্টকে ফেরত দেবেন তা লিখুন। খরচ আগেই হয়ে গেলে উপরে "খরচ হয়ে গেছে" টিক দিন, তাহলে লাভ থেকে কাটা যাবে।</div>'
-    + '<div class="grid2"><div class="field"><label for="dj_retdate">ফেরতের তারিখ</label><input id="dj_retdate" type="date" value="' + (d.retDate || '') + '"></div><div class="field"><label for="dj_kept">কত টাকা রাখলাম (৳)</label><input id="dj_kept" type="number" inputmode="decimal" value="' + (d.kept === '' ? '' : n(d.kept)) + '" oninput="djCalc()"></div></div>'
-    + mlBlock('dj', 'refunds', 'ক্লায়েন্টকে কত ফেরত দিয়েছি', 'টাকা কে দিল') + '</div>'
+    + '<div class="ipbox stack" id="dj_blk_ret" style="gap:8px"' + (d.status === 'ret' ? '' : ' hidden') + '><div class="sm" style="background:var(--warnbg);color:var(--ink);padding:8px 10px;border-radius:8px;border:1px solid var(--warn)"><b>🛡️ ভুল রোধী অটো-হিসাব:</b> ক্লায়েন্ট যত জমা দিয়েছিল তার থেকে আপনার রাখা চার্জ বাদ দিয়ে বাকি টাকা অটোমেটিক ফেরত ঘরে বসবে (যেমন: ২০০০ জমা − ৫০০ চার্জ = ১৫০০ ফেরত)।</div>'
+    + '<div class="grid2"><div class="field"><label for="dj_retdate">ফেরতের তারিখ</label><input id="dj_retdate" type="date" value="' + (d.retDate || today()) + '"></div><div class="field"><label for="dj_kept">১. কত টাকা চার্জ রাখলাম — আমার আয় (৳)</label><input id="dj_kept" type="number" inputmode="decimal" value="' + (d.kept === '' ? '' : n(d.kept)) + '" oninput="onDocKeptInput()"></div></div>'
+    + '<label class="row" style="margin:0;color:var(--ink);font-size:14px"><input id="dj_auto_ref" type="checkbox" style="width:auto" checked> ✓ ফেরতযোগ্য বাকি টাকা (জমা − রাখা চার্জ) ফেরতের তারিখে ক্লায়েন্টকে ফেরত দেওয়া হয়েছে (দৈনিক হিসাবে অটো আসবে)</label>'
+    + mlBlock('dj', 'refunds', '২. ক্লায়েন্টকে কত ফেরত দিয়েছি (জমা − রাখা চার্জ)', 'টাকা কে দিল') + '</div>'
     + pkField('dj', 'কাজ কে করেছে (স্টাফ)')
     + '<div class="sm bad" id="dj_warn"></div>'
     + '<button class="btn block" id="dj_save" onclick="djSave()">সেভ করুন</button>'
@@ -1326,6 +1461,20 @@ function djStatus(s) {
   ['run', 'done', 'ret'].forEach(x => { $('dj_s_' + x).className = x === s ? 'on' : ''; });
   $('dj_blk_done').hidden = s !== 'done'; $('dj_blk_ret').hidden = s !== 'ret'; djCalc();
 }
+function onDocKeptInput() {
+  if (!DJ) return;
+  const paid = sumAmt(DJ.payments);
+  let kept = Math.max(0, n(val('dj_kept')));
+  if (paid > 0 && kept > paid) {
+    kept = paid;
+    $('dj_kept').value = kept;
+    toast('⚠ রাখা চার্জ কাস্টমারের জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!');
+  }
+  const alreadyRef = sumAmt(DJ.refunds);
+  const rem = Math.max(0, paid - kept - alreadyRef);
+  if ($('dj_refunds_amt')) $('dj_refunds_amt').value = rem > 0 ? rem : '';
+  djCalc();
+}
 function djCalc() {
   djGrab(); const d = DJ; const c = docCalc(d); let h;
   if (d.status === 'ret') {
@@ -1346,8 +1495,11 @@ function djSave() {
   if (!d.phone) w.push('ফোন নম্বর দেওয়া হয়নি');
   if (d.status !== 'ret' && n(d.total) <= 0) w.push('মোট বিল বসেনি');
   if (c.over > 0) w.push('জমা বিলের চেয়ে ' + money(c.over) + ' বেশি');
-  if (d.status === 'ret' && n(d.kept) > n(d.total)) w.push('রাখা চার্জ মোট বিলের চেয়ে বেশি');
-  if (d.status === 'ret' && c.refunded > Math.max(0, c.paid - c.kept) + 0.001) w.push('ফেরত দেওয়া টাকা ফেরতযোগ্য টাকার চেয়ে বেশি');
+  if (d.status === 'ret' && c.paid > 0 && n(d.kept) > c.paid) { toast('❌ ভুল রোধ: রাখা চার্জ কাস্টমারের মোট জমার (' + money(c.paid) + ') চেয়ে বেশি হতে পারবে না!'); return; }
+  if (d.status === 'ret' && c.refunded > Math.max(0, c.paid - c.kept) + 0.001) { toast('❌ ভুল রোধ: কাস্টমার জমা দিয়েছিল ' + money(c.paid) + ' এবং চার্জ রেখেছেন ' + money(c.kept) + '। তাই ফেরত সর্বোচ্চ ' + money(Math.max(0, c.paid - c.kept)) + ' হতে পারবে!'); return; }
+  if (d.status === 'ret' && $('dj_auto_ref') && $('dj_auto_ref').checked && c.refundDue > 0.001) {
+    d.refunds = arr(d.refunds).concat([{ id: uid(), date: d.retDate || today(), amt: c.refundDue, w: (val('dj_refunds_w') || 'w_passdoc'), by: PK.dj_refunds || by || actor() }]);
+  }
   if (d.status === 'done' && c.due > 0) w.push('ডেলিভারড, কিন্তু ' + money(c.due) + ' বাকি আছে');
   if (d.status === 'done' && n(d.cost) > 0 && !dCD(d)) w.push('ডেলিভারড, কিন্তু খরচ "হয়নি" দেখাচ্ছে');
   if (d.status === 'done' && d.doneDate && d.doneDate < d.recvDate) w.push('ডেলিভারির তারিখ নেওয়ার তারিখের আগে');
@@ -2053,50 +2205,178 @@ function wFieldHtml(elId, selId, label, forceShow) {
 
 /* ভিসা অ্যাপয়েন্টমেন্ট খরচ ও ভিসা জমা/ফেরতের ড্রয়ার/ব্যাংক ম্যাপিং (S.vmeta) */
 function vMetaOf(vid) {
-  return S.vmeta[vid] || { id: vid, feePaid: false, feeDate: '', feeAmt: 0, feeW: 'w_visacash', refDate: '', refW: 'w_visacash', payW: {} };
+  return S.vmeta[vid] || { id: vid, feePaid: undefined, feeDate: '', baseFee: '', softFee: '', feeAmt: 0, feeW: 'w_visacash', refDate: '', refW: 'w_visacash', payW: {} };
 }
 function visaFeeInfo(v) {
   const m = S.vmeta[v.id] || {};
-  const fee = m.feeAmt > 0 ? n(m.feeAmt) : n(v.totalFee);
-  const paid = m.feePaid !== undefined ? !!m.feePaid : (v.feeStatus === 'PAID');
-  const date = m.feeDate || (paid ? (v.apptDate || v.date || '') : '');
+  const baseFee = m.baseFee !== undefined && m.baseFee !== '' ? n(m.baseFee) : n(v.baseFee !== undefined ? v.baseFee : 1500);
+  const softFee = m.softFee !== undefined && m.softFee !== '' ? n(m.softFee) : n(v.softFee);
+  const fee = m.feeAmt > 0 && m.baseFee === undefined ? n(m.feeAmt) : (baseFee + softFee);
+  // In Visa App, expense happens when Appointed or Delivered, or when manually marked paid
+  const autoPaid = (v.feeStatus === 'PAID') || (v.mode === 'APPOINTED' || v.mode === 'DELIVERED');
+  const paid = m.feePaid !== undefined ? !!m.feePaid : autoPaid;
+  const stage = m.stage || (v.mode === 'DELIVERED' ? 'DELIVERED' : 'APPOINTED');
+  // IMPORTANT: Never fallback to today() if unedited, so old Visa files without dates never pollute today/tomorrow's daily hisab!
+  const date = m.feeDate || (paid ? (v.apptDate || v.delDate || v.date || '') : '');
   const w = m.feeW || 'w_visacash';
-  return { fee, paid, date, w, note: m.note || '' };
+  return { baseFee, softFee, fee, paid, stage, date, w, note: m.note || '' };
+}
+function visaCardSplitHtml(x) {
+  const fi = visaFeeInfo(x);
+  const inBox = '<div class="io-box in-box">'
+    + '<div class="io-hd"><span class="io-title">📥 কাস্টমার জমার রেকর্ড (+)</span><span class="io-amt">+' + money(x.paid) + '</span></div>'
+    + '<div class="io-body">'
+    + (x.mode === 'RETURNED'
+      ? 'রাখা চার্জ (রেভিনিউ): <b>' + money(x.kept) + '</b> · ফেরতযোগ্য: <b>' + money(x.refShould) + '</b>'
+      : 'মোট চুক্তি (Bill): <b>' + money(x.bill) + '</b> · ' + (x.due > 0 ? '<span class="bad">' + (x.mode === 'RUNNING' ? 'পেতে পারি: ' : 'বাকি: ') + '<b>' + money(x.due) + '</b></span>' : '<span class="good">✓ পুরো বিল জমা</span>'))
+    + '<br>নিট লাভ: <b class="' + (x.profit >= 0 ? 'good' : 'bad') + '">' + money(x.profit) + '</b>'
+    + (x.last ? ' · শেষ জমা: <b>' + fd(x.last) + '</b>' : '')
+    + '</div></div>';
+
+  const outBox = x.mode === 'RETURNED' ? '' : ('<div class="io-box ' + (fi.paid ? 'out-box-done' : 'out-box-pend') + '">'
+    + '<div class="io-hd"><span class="io-title">📤 খরচের রেকর্ড (ভিসা অ্যাপের ২টি খরচ)</span><span class="io-amt">' + (fi.paid ? '−' + money(fi.fee) : '৳০ (খরচ বাকি)') + '</span></div>'
+    + '<div class="io-body">'
+    + '১. ভিসা ফি (Base Fee): <b>' + money(fi.baseFee) + '</b><br>'
+    + '২. সফটওয়্যার চার্জ (Software): <b>' + money(fi.softFee) + '</b><br>'
+    + 'মোট খরচ: <b>' + money(fi.fee) + '</b> · '
+    + (fi.paid
+      ? '<span class="bad">✓ খরচ হয়েছে [' + (fi.stage === 'DELIVERED' ? 'Delivered' : 'Appointed') + (fi.date ? ' · ' + fd(fi.date) : '') + '] — টাকা চলে গেছে</span>'
+      : '<span class="warnc">⏳ এখনো খরচ হয়নি (Appointed/Delivered হলে খরচ হবে)</span>')
+    + '</div>'
+    + '<div class="io-actions">'
+    + '<button type="button" class="btn sm ' + (fi.paid ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();toggleVisaFeeQuick(\'' + x.id + '\')">'
+    + (fi.paid ? '✓ খরচ হয়েছে (আনমার্ক করুন)' : '✓ খরচ হয়েছে মার্ক করুন (Appointed/Delivered)') + '</button>'
+    + '<button type="button" class="btn sm ghost" onclick="event.stopPropagation();visaFeeSheet(\'' + x.id + '\')">✎ ২টি খরচ এডিট</button>'
+    + '</div></div>');
+
+  const retBox = x.mode === 'RETURNED' ? ('<div class="io-box ret-box">'
+    + '<div class="io-hd"><span class="io-title">↩️ ভিসা রিটার্ন / ফেরত ও রাখা চার্জ হিসাব</span><span class="io-amt">ফেরত গেছে: −' + money(x.refund) + '</span></div>'
+    + '<div class="io-body">' + visaRefBanner(x) + '</div>'
+    + '<div class="io-actions" style="margin-top:4px">'
+    + '<button type="button" class="btn sm ' + (x.refDue > 0.001 ? 'danger' : 'ghost') + '" onclick="event.stopPropagation();visaReturnSheet(\'' + x.id + '\')">'
+    + (x.refDue > 0.001 ? '↩ বাকি ' + money(x.refDue) + ' ফেরত দিন / রাখা চার্জ ঠিক করুন' : '✎ ফেরত ও রাখা চার্জ এডিট করুন')
+    + '</button></div></div>') : '';
+
+  return '<div class="io-split">' + inBox + outBox + retBox + '</div>';
 }
 function visaFeeCtrlHtml(x) {
-  if (x.mode === 'RETURNED') return '';
-  const fi = visaFeeInfo(x);
-  if (fi.fee <= 0 && x.mode === 'RUNNING') return '';
-  return '<div class="row between wrapr" style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);gap:6px">'
-    + '<span class="sm">ভিসা ও সফটওয়্যার খরচ: <b class="num">' + money(fi.fee) + '</b> '
-    + (fi.paid ? '<span class="pill good">✓ পরিশোধিত' + (fi.date ? ' (' + fd(fi.date) + (isMultiW() ? ' · ' + esc(wName(fi.w)) : '') + ')' : '') + '</span>' : '<span class="pill warn">⏳ বাকি (পরে দেবেন)</span>') + '</span>'
-    + '<button type="button" class="btn sm ' + (fi.paid ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();visaFeeSheet(\'' + x.id + '\')">' + (fi.paid ? 'খরচ এডিট' : '💸 ভিসা খরচ দিন / বাকি রাখুন') + '</button></div>';
+  return visaCardSplitHtml(x);
+}
+function toggleVisaFeeQuick(vid) {
+  const v = VISA.rows.find(x => x.id === vid); if (!v) return;
+  const fi = visaFeeInfo(v);
+  const cur = vMetaOf(vid);
+  cur.id = vid;
+  cur.feePaid = !fi.paid;
+  if (cur.feePaid) {
+    cur.feeDate = cur.feeDate || (UI.dhd || today());
+    cur.baseFee = fi.baseFee;
+    cur.softFee = fi.softFee;
+    cur.feeAmt = fi.baseFee + fi.softFee;
+    cur.stage = v.mode === 'DELIVERED' ? 'DELIVERED' : 'APPOINTED';
+  }
+  cur.updatedAt = Date.now();
+  S.vmeta[vid] = cur;
+  save('vmeta', vid);
+  render();
+  toast(cur.feePaid ? '✓ ভিসা খরচ (১. ভিসা ফি + ২. সফটওয়্যার চার্জ) সম্পন্ন মার্ক হয়েছে ও দৈনিক হিসাব থেকে কমেছে!' : '⏳ ভিসা খরচ বাকি (Pending) হিসেবে রাখা হয়েছে');
+}
+function vfCalcTotal() {
+  const b = n(val('vf_base')), s = n(val('vf_soft'));
+  if ($('vf_amt')) $('vf_amt').value = b + s;
 }
 function visaFeeSheet(vid) {
   const v = VISA.rows.find(x => x.id === vid); if (!v) return;
   const fi = visaFeeInfo(v);
-  sheet('ভিসা অ্যাপয়েন্টমেন্ট খরচ — ' + esc(v.name),
-    '<div class="mut sm">ভিসা অ্যাপয়েন্টমেন্ট হলে ভিসা ফি ও সফটওয়্যার চার্জ যদি আজ দিয়ে থাকেন তবে "পরিশোধিত" সিলেক্ট করে কোন ড্রয়ার/ব্যাংক থেকে গেছে দিন। আর যদি পরে দিতে হয় তবে "বাকি (পরে দেব)" রাখুন।</div>'
-    + '<div class="seg"><button type="button" id="vf_p1" class="' + (fi.paid ? 'on' : '') + '" onclick="$(\'vf_p1\').className=\'on\';$(\'vf_p0\').className=\'\';$(\'vf_paid_v\').value=\'1\'">✓ খরচ দিয়েছি (Paid)</button><button type="button" id="vf_p0" class="' + (!fi.paid ? 'on' : '') + '" onclick="$(\'vf_p0\').className=\'on\';$(\'vf_p1\').className=\'\';$(\'vf_paid_v\').value=\'0\'">⏳ বাকি আছে (পরে দেব)</button></div>'
+  sheet('ভিসা খরচ (Appointed / Delivered) — ' + esc(v.name),
+    '<div class="mut sm">ভিসা অ্যাপের নিয়ম অনুযায়ী ফাইল <b>Appointed</b> বা <b>Delivered</b> হলে ২টি খরচ হয়: <b>(১) ভিসা ফি</b> এবং <b>(২) সফটওয়্যার চার্জ</b>। খরচ হয়ে গেলে নিচে "✓ খরচ হয়েছে" সিলেক্ট করুন—তাহলে এই টাকা আপনার দৈনিক হিসাব থেকে অটোমেটিক চলে যাবে (−)।</div>'
+    + '<div class="seg"><button type="button" id="vf_p1" class="' + (fi.paid ? 'on' : '') + '" onclick="$(\'vf_p1\').className=\'on\';$(\'vf_p0\').className=\'\';$(\'vf_paid_v\').value=\'1\'">✓ খরচ হয়েছে (Appointed/Delivered — টাকা চলে গেছে)</button><button type="button" id="vf_p0" class="' + (!fi.paid ? 'on' : '') + '" onclick="$(\'vf_p0\').className=\'on\';$(\'vf_p1\').className=\'\';$(\'vf_paid_v\').value=\'0\'">⏳ খরচ বাকি আছে (এখনো টাকা যায়নি)</button></div>'
     + '<input type="hidden" id="vf_paid_v" value="' + (fi.paid ? '1' : '0') + '">'
-    + '<div class="grid2"><div class="field"><label for="vf_date">খরচ দেওয়ার তারিখ</label><input id="vf_date" type="date" value="' + (fi.date || today()) + '"></div><div class="field"><label for="vf_amt">মোট ভিসা খরচ (৳)</label><input id="vf_amt" type="number" inputmode="decimal" value="' + (fi.fee || '') + '"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="vf_stage">কখন খরচ হয়েছে?</label><select id="vf_stage"><option value="APPOINTED"' + (fi.stage !== 'DELIVERED' ? ' selected' : '') + '>📅 Appointed (অ্যাপয়েন্টমেন্ট হয়েছে)</option><option value="DELIVERED"' + (fi.stage === 'DELIVERED' ? ' selected' : '') + '>📦 Delivered (ডেলিভারি হয়েছে)</option></select></div><div class="field"><label for="vf_date">খরচ হওয়ার তারিখ</label><input id="vf_date" type="date" value="' + (fi.date || UI.dhd || today()) + '"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="vf_base">১. ভিসা ফি / Base Visa Fee (৳)</label><input id="vf_base" type="number" inputmode="decimal" value="' + fi.baseFee + '" oninput="vfCalcTotal()"></div><div class="field"><label for="vf_soft">২. সফটওয়্যার চার্জ / Software Charge (৳)</label><input id="vf_soft" type="number" inputmode="decimal" value="' + fi.softFee + '" oninput="vfCalcTotal()"></div></div>'
+    + '<div class="field"><label for="vf_amt">মোট ভিসা খরচ (১ + ২ একত্রে ৳)</label><input id="vf_amt" type="number" inputmode="decimal" value="' + fi.fee + '" readonly style="background:var(--bg);font-weight:800"></div>'
     + wFieldHtml('vf_w', fi.w || 'w_visacash', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেছে')
-    + '<div class="field"><label for="vf_note">📝 নোট (ঐচ্ছিক)</label><input id="vf_note" value="' + esc(fi.note) + '" placeholder="যেমন: এজেন্টকে বিকাশ করলাম / পরে দেব"></div>'
+    + '<div class="field"><label for="vf_note">📝 নোট (ঐচ্ছিক)</label><input id="vf_note" value="' + esc(fi.note) + '" placeholder="যেমন: অ্যাপয়েন্টমেন্ট ফি ও সফটওয়্যার চার্জ পরিশোধ"></div>'
     + '<button class="btn block" onclick="saveVisaFeeMeta(\'' + vid + '\')">সেভ করুন</button>');
 }
 function saveVisaFeeMeta(vid) {
   const cur = vMetaOf(vid);
   cur.id = vid;
   cur.feePaid = val('vf_paid_v') === '1';
+  cur.stage = val('vf_stage') || 'APPOINTED';
   cur.feeDate = val('vf_date') || today();
-  cur.feeAmt = n(val('vf_amt'));
+  cur.baseFee = n(val('vf_base'));
+  cur.softFee = n(val('vf_soft'));
+  cur.feeAmt = cur.baseFee + cur.softFee;
   cur.feeW = val('vf_w') || 'w_visacash';
   cur.note = val('vf_note').trim();
   cur.updatedAt = Date.now();
   S.vmeta[vid] = cur;
   save('vmeta', vid);
   closeSheet();
-  toast(cur.feePaid ? 'ভিসা খরচ পরিশোধিত ধরা হয়েছে' : 'ভিসা খরচ বাকি (পরে দেবেন) রাখা হয়েছে');
+  toast(cur.feePaid ? '✓ ভিসা ফি ও সফটওয়্যার চার্জ পরিশোধিত ধরা হয়েছে (দৈনিক হিসাব থেকে কমেছে)' : '⏳ ভিসা খরচ বাকি (Pending) রাখা হয়েছে');
+}
+function visaReturnSheet(vid) {
+  const v = VISA.rows.find(x => x.id === vid); if (!v) return;
+  const cur = vMetaOf(vid);
+  sheet('↩️ ভিসা রিটার্ন / ফেরত ও রাখা চার্জ — ' + esc(v.name),
+    '<div class="sm" style="background:var(--warnbg);color:var(--ink);padding:9px 11px;border-radius:9px;border:1px solid var(--warn)"><b>🛡️ ভুল রোধী অটো-হিসাব:</b> কাস্টমার জমা দিয়েছিল <b>' + money(v.paid) + '</b>। আপনি যদি কিছু টাকা চার্জ রাখেন (যেমন ৫০০ টাকা), তবে কাস্টমারকে ফেরত দেবেন <b>' + money(v.paid) + ' − চার্জ</b> (যেমন ১৫০০ টাকা)। ভুলে যেন ২০০০ ফেরত + ৫০০ চার্জ না হয়, তাই নিচে চার্জ লিখলেই ফেরত টাকা অটো বসে যাবে!</div>'
+    + '<div class="grid2"><div class="field"><label for="vrm_paid">কাস্টমার মোট জমা দিয়েছিল (৳)</label><input id="vrm_paid" type="number" value="' + v.paid + '" readonly style="background:var(--bg);font-weight:800"></div><div class="field"><label for="vrm_date">ফেরত দেওয়ার তারিখ (দৈনিক হিসাবের জন্য)</label><input id="vrm_date" type="date" value="' + (cur.refDate || v.last || UI.dhd || today()) + '"></div></div>'
+    + '<div class="grid2"><div class="field"><label for="vrm_kept">১. আমাদের রাখা চার্জ — রেভিনিউ (৳)</label><input id="vrm_kept" type="number" inputmode="decimal" value="' + v.kept + '" oninput="onVrmMath(\'kept\')"></div><div class="field"><label for="vrm_ref">২. কাস্টমারকে ফেরত দিলাম — ক্যাশ থেকে যাবে (৳)</label><input id="vrm_ref" type="number" inputmode="decimal" value="' + (v.refund > 0 ? v.refund : Math.max(0, v.paid - v.kept)) + '" oninput="onVrmMath(\'ref\')"></div></div>'
+    + '<div class="card sm" style="box-shadow:none;background:var(--bg)" id="vrm_preview"></div>'
+    + wFieldHtml('vrm_w', cur.refW || 'w_visacash', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন')
+    + '<button class="btn block" onclick="saveVisaReturnMeta(\'' + vid + '\')">✅ ফেরত ও রাখা চার্জ সেভ করুন (দৈনিক হিসাবে তুলুন)</button>');
+  onVrmMath('init');
+}
+function onVrmMath(mode) {
+  const paid = Math.max(0, n(val('vrm_paid')));
+  let kept = Math.max(0, n(val('vrm_kept')));
+  let ref = Math.max(0, n(val('vrm_ref')));
+  if (mode === 'kept') {
+    if (kept > paid) { kept = paid; $('vrm_kept').value = kept; toast('⚠ রাখা চার্জ জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!'); }
+    ref = Math.max(0, paid - kept);
+    $('vrm_ref').value = ref;
+  } else if (mode === 'ref') {
+    if (ref > paid) { ref = paid; $('vrm_ref').value = ref; toast('⚠ ফেরত টাকা জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!'); }
+    kept = Math.max(0, paid - ref);
+    $('vrm_kept').value = kept;
+  } else {
+    if (kept + ref > paid) { kept = Math.min(paid, kept); ref = Math.max(0, paid - kept); $('vrm_kept').value = kept; $('vrm_ref').value = ref; }
+  }
+  const el = $('vrm_preview');
+  if (el) el.innerHTML = 'জমা ছিল: <b>' + money(paid) + '</b> − রাখা চার্জ (আপনার রেভিনিউ): <b class="good">' + money(kept) + '</b> = কাস্টমারকে ফেরত (দৈনিক ক্যাশ থেকে কমবে): <b class="bad">−' + money(ref) + '</b>';
+}
+function saveVisaReturnMeta(vid) {
+  const paid = Math.max(0, n(val('vrm_paid')));
+  let kept = Math.max(0, n(val('vrm_kept')));
+  let ref = Math.max(0, n(val('vrm_ref')));
+  if (kept + ref > paid + 0.001) {
+    toast('❌ ভুল রোধ: রাখা চার্জ (' + money(kept) + ') ও ফেরত (' + money(ref) + ') এর যোগফল জমার (' + money(paid) + ') চেয়ে বেশি হতে পারবে না!');
+    return;
+  }
+  const cur = vMetaOf(vid);
+  cur.id = vid;
+  cur.forceMode = 'RETURNED';
+  cur.keptOverride = kept;
+  cur.refOverride = ref;
+  cur.refDate = val('vrm_date') || today();
+  cur.refW = val('vrm_w') || 'w_visacash';
+  cur.updatedAt = Date.now();
+  S.vmeta[vid] = cur;
+  const idx = VISA.rows.findIndex(x => x.id === vid);
+  if (idx !== -1 && VISA.raw && VISA.raw[vid]) {
+    VISA.rows[idx] = visaRow(VISA.raw[vid]);
+  } else if (idx !== -1) {
+    VISA.rows[idx].mode = 'RETURNED';
+    VISA.rows[idx].kept = kept;
+    VISA.rows[idx].profit = kept;
+    VISA.rows[idx].refund = ref;
+    VISA.rows[idx].refShould = Math.max(0, paid - kept);
+    VISA.rows[idx].refDue = Math.max(0, paid - kept - ref);
+  }
+  save('vmeta', vid);
+  closeSheet();
+  toast('✅ ভিসা ফেরত (' + money(ref) + ') ও রাখা চার্জ (' + money(kept) + ') সেভ হয়েছে এবং দৈনিক হিসাবে যুক্ত হয়েছে!');
 }
 function visaPayWSheet(vid, pkey, curW, label, amt) {
   sheet('ভিসা জমার ড্রয়ার/ব্যাংক — ' + esc(label),
@@ -2184,12 +2464,13 @@ function allTxForDate(D) {
     if (v.mode === 'RETURNED' && v.refund > 0) {
       const rDate = vm.refDate || v.last || v.date;
       if (rDate === D) {
-        push(vm.refW || 'w_visacash', 'out', v.refund, 'ভিসা ফাইল ফেরত', (v.serial ? '#' + v.serial + ' ' : '') + v.name, 'রাখা চার্জ (আমার রেভিনিউ): ' + money(v.kept), false, "go('visa')");
+        push(vm.refW || 'w_visacash', 'out', v.refund, 'ভিসা ফাইল ফেরত', (v.serial ? '#' + v.serial + ' ' : '') + v.name, 'জমা ছিল ' + money(v.paid) + ' − রাখা চার্জ (আমার রেভিনিউ) ' + money(v.kept) + ' = ফেরত ' + money(v.refund), false, "visaReturnSheet('" + v.id + "')");
       }
     }
     const fi = visaFeeInfo(v);
     if (fi.paid && fi.date === D && fi.fee > 0) {
-      push(fi.w || 'w_visacash', 'out', fi.fee, 'ভিসা অ্যাপয়েন্টমেন্ট খরচ', (v.serial ? '#' + v.serial + ' ' : '') + v.name, fi.note || 'ভিসা ফি + সফটওয়্যার খরচ', false, "visaFeeSheet('" + v.id + "')");
+      const subTxt = '১. ভিসা ফি: ' + money(fi.baseFee) + ' + ২. সফটওয়্যার চার্জ: ' + money(fi.softFee) + ' [' + (fi.stage === 'DELIVERED' ? 'Delivered' : 'Appointed') + ']' + (fi.note ? ' · ' + fi.note : '');
+      push(fi.w || 'w_visacash', 'out', fi.fee, 'ভিসা ও সফটওয়্যার খরচ (Appointed/Delivered)', (v.serial ? '#' + v.serial + ' ' : '') + v.name, subTxt, false, "visaFeeSheet('" + v.id + "')");
     }
   });
 
@@ -2435,19 +2716,7 @@ function freshStartSheet(defDate) {
   const dc = S.dclose[D] || {};
   const curTot = dc.totCustomOpen !== undefined && dc.totCustomOpen !== '' ? n(dc.totCustomOpen) : (S.settings.totOpenBal !== undefined ? n(S.settings.totOpenBal) : R.tOpen);
 
-  if (!isMultiW()) {
-    sheet('🚀 নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু করুন',
-      '<div class="mut sm">আপনি যেদিন থেকে (যেমন: আগামীকাল বা আজ) হিসাব শুরু করতে চান সেই তারিখটি বাছুন এবং আপনার দোকানের সব ক্যাশ ড্রয়ার + বিকাশ/নগদ + ব্যাংক মিলিয়ে শুরুর দিন সকালে মোট যত টাকা আছে তা নিচে এক ঘরে বসিয়ে দিন।<br><br><b>নিশ্চিন্ত থাকুন:</b> আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না! এরপর থেকে খরচ করলে কমবে, কাস্টমার বিল বা ভিসা জমা দিলে বাড়বে, আর কেউ বাকি নিলে কমবে।</div>'
-      + '<div class="field"><label for="fs_date">কবে থেকে হিসাব শুরু করবেন?</label>'
-      + '<div class="row" style="gap:6px"><input id="fs_date" type="date" value="' + D + '">'
-      + '<button type="button" class="btn sm ghost" onclick="$(\x27fs_date\x27).value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
-      + '<button type="button" class="btn sm" onclick="$(\x27fs_date\x27).value=\'' + tmr + '\'">আগামীকাল (' + fd(tmr) + ')</button></div></div>'
-      + '<div class="field"><label for="fs_tot_open">শুরুর মোট ব্যালেন্স — Opening Balance (৳)</label>'
-      + '<input id="fs_tot_open" type="number" inputmode="decimal" style="font-size:20px;font-weight:700" placeholder="যেমন: 50000" value="' + (curTot || '') + '"></div>'
-      + '<div class="field"><label for="fs_tot_note">📝 নোট (ঐচ্ছিক)</label><input id="fs_tot_note" value="' + esc(dc.totOpenNote || '') + '" placeholder="যেমন: সব ক্যাশ + বিকাশ + ব্যাংক মিলিয়ে শুরুর ব্যালেন্স"></div>'
-      + '<button class="btn block" onclick="saveFreshStartSimple()">✅ এই ওপেনিং ব্যালেন্স দিয়ে শুরু করুন</button>');
-    return;
-  }
+// Always show all 3 drawers + all added accounts in Fresh Start so per-account opening balances feed Total Method
 
   const ws = wallets();
   sheet('🚀 নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করুন',
@@ -2656,25 +2925,126 @@ function walletMathSheet(D, wid) {
 function dailyGuideHtml() {
   const open = !!UI.showGuide;
   const toggleBtn = '<div class="card row between wrapr" style="padding:12px 15px;border:1.5px solid var(--acc);background:var(--soft);gap:10px">'
-    + '<div style="min-width:0"><b>📖 কীভাবে সহজ টোটাল মেথডে দিন শেষে হিসাব মেলাবেন?</b><div class="sm mut">কোনো ড্রয়ার বাছাইয়ের ঝামেলা ছাড়াই ১ বক্সে সব হিসাব মেলানোর নিয়ম</div></div>'
-    + '<button type="button" class="btn sm ' + (open ? 'danger' : '') + '" onclick="toggleDhGuide()">' + (open ? '✕ গাইড লুকান' : '👁️ নিয়ম দেখুন') + '</button>'
+    + '<div style="min-width:0"><b>📖 কীভাবে কাজ করবেন ও গরমিল হলে কী করবেন? (সম্পূর্ণ নির্দেশিকা)</b><div class="sm mut">আগামীকাল থেকে নতুন ওপেনিং দিয়ে শুরু, বিকাশ/নগদ কমিশন-চার্জ সমন্বয় ও গরমিল সমাধানের নিয়ম</div></div>'
+    + '<button type="button" class="btn sm ' + (open ? 'danger' : '') + '" onclick="toggleDhGuide()">' + (open ? '✕ গাইড লুকান' : '👁️ নিয়ম ও নির্দেশিকা দেখুন') + '</button>'
     + '</div>';
   if (!open) return toggleBtn;
   return toggleBtn
     + '<div class="card stack" style="gap:10px;border:1.5px solid var(--acc);background:var(--soft);font-size:13.5px;line-height:1.55">'
-    + '<div class="ipbox" style="background:var(--card)"><b>১. কাল বা আজ থেকে কীভাবে শুরু করবেন?</b><br>'
-    + '• উপরে <b>«🚀 নতুন শুরুর ব্যালেন্স সেট করুন»</b> বাটনে চাপ দিন।<br>'
-    + '• তারিখ বাছুন (যেমন: আগামীকাল বা আজ) এবং আপনার কাছে থাকা সব নগদ ক্যাশ + বিকাশ/নগদ + ব্যাংক মিলিয়ে মোট যত টাকা আছে তা এক ঘরে বসিয়ে সেভ করুন। আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
-    + '<div class="ipbox" style="background:var(--card)"><b>২. সারাদিন কীভাবে কাজ করবেন? (ড্রয়ার সিলেক্ট করতে হবে না!)</b><br>'
-    + '• <b>কাস্টমার বিল দিলে (+):</b> পাসপোর্ট, ডকুমেন্ট বা ভিসা ফাইলে কাস্টমার টাকা জমা দিলে শুধু টাকাটা লিখুন। সফটওয়্যার নিজে থেকেই <b>«আজ মোট এসেছে (+)»</b>-এ যোগ করে নেবে।<br>'
-    + '• <b>কাউন্টারের কাজ (+):</b> ফটোকপি, প্রিন্ট, অনলাইনের খুচরা কাজের টাকা দিন শেষে কাউন্টার ট্যাবে বা এখানে <b>«কাউন্টার এক্সট্রা আয়»</b> বাটনে একবারে লিখে দিন।<br>'
-    + '• <b>খরচ করলে (−):</b> দোকান খরচ, ব্যক্তিগত খরচ, ডকুমেন্টের খরচ, পাসপোর্টের চালান বা IP পরিশোধ এবং ভিসার অ্যাপয়েন্টমেন্ট খরচ লিখলেই <b>«আজ মোট গেছে (−)»</b> থেকে অটোমেটিক বাদ যাবে।<br>'
-    + '• <b>বাকি খাতা (+/−):</b> কেউ বাকি নিলে বা ধার নিলে আজকের ব্যালেন্স থেকে কমবে (−), আর কেউ বাকি শোধ করলে বা ফেরত দিলে আজকের ব্যালেন্সে যোগ হবে (+)।</div>'
-    + '<div class="ipbox" style="background:var(--card)"><b>৩. দিন শেষে কীভাবে মেলাবেন?</b><br>'
-    + '• রাতের বেলা আপনার সব ক্যাশ + বিকাশ/নগদ + ব্যাংকের টাকা যোগ করে <b>«দিন শেষে হাতে/অ্যাকাউন্টে মোট কত আছে»</b> বক্সে বসিয়ে সেভ করুন।<br>'
-    + '• আজকের এই ক্লোজিং ব্যালেন্সই আগামীকাল সকালে অটোমেটিক আপনার <b>«শুরুতে ছিল (Opening Balance)»</b> হয়ে যাবে!</div>'
-    + '<button type="button" class="btn sm ghost block" onclick="toggleDhGuide(false)">🔼 গাইড বন্ধ করুন</button>'
+    + '<div class="ipbox" style="background:var(--card)"><b>১. আগামীকাল থেকে নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু (আগের সব ডাটা অক্ষত থাকবে!):</b><br>'
+    + '• আপনার আগের পাসপোর্ট, ডকুমেন্ট, ভিসা, বাকি খাতা বা খরচের সব ডাটা যেমন আছে ঠিক তেমনই থাকবে—কিছুই মুছবে না।<br>'
+    + '• আগামীকাল সকালে নিচে আপনার <b>৩টি ক্যাশ ড্রয়ার (Counter, Passport/Docs, Visa)</b> এবং সেটিংস থেকে যোগ করা <b>বিকাশ/নগদ ও ব্যাংক অ্যাকাউন্টের</b> <b>«১. শুরুতে ছিল (Opening)»</b> বক্সগুলোতে টাকা বসিয়ে <b>«🌅 শুধু শুরুর ব্যালেন্স (Opening) সেভ করুন»</b> বাটনে চাপ দিন (অথবা উপরে <b>«🚀 নতুন শুরুর ব্যালেন্স সেট করুন»</b> চাপুন)। আগের কোনো পুরনো হিসাব এর সাথে মিশবে না!</div>'
+    + '<div class="ipbox" style="background:var(--card)"><b>২. সারাদিন কাজের নিয়ম (প্রতি এন্ট্রিতে ড্রয়ার সিলেক্ট করার ঝামেলা নেই!):</b><br>'
+    + '• <b>টাকা আসবে (+):</b> কাস্টমার পাসপোর্ট/ডকুমেন্টের বিল জমা দিলে (+), ভিসা অ্যাপে টাকা জমা দিলে (+), কাউন্টারের কাজ করলে (+), বা কেউ বাকি টাকা ফেরত দিলে (+) অটোমেটিক আজকের হিসাবে যোগ হবে।<br>'
+    + '• <b>টাকা চলে যাবে (−):</b> পাসপোর্ট চালান করলে (−), ভিসা ফাইল Appointed/Delivered হয়ে খরচ মার্ক করলে (−), ডকুমেন্টের খরচ করলে (−), দোকান বা ব্যক্তিগত খরচ করলে (−), কেউ বাকি নিলে (−) এবং কাস্টমারকে রিটার্ন/ফেরত দিলে (−) অটোমেটিক আজকের হিসাব থেকে বিয়োগ হবে।</div>'
+    + '<div class="ipbox" style="background:var(--card)"><b>৩. বিকাশ/নগদ এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি গরমিল হলে করণীয়:</b><br>'
+    + '• বিকাশ/নগদে ক্যাশ-ইন/আউট করলে কিছু কমিশন আসে আবার পেমেন্ট দিলে কিছু চার্জ কাটে—তাই দিন শেষে ৩০-১০০ টাকা একটু কম বা বেশি (গরমিল) থাকাটাই স্বাভাবিক!<br>'
+    + '• এর জন্য সারাদিন প্রতিবার চার্জ/কমিশন লেখার দরকার নেই। রাতে <b>«২. দিন শেষে আছে (Ending)»</b> বক্সগুলোতে আসল ব্যালেন্স বসানোর পর:<br>'
+    + '  — আপনি চাইলে সরাসরি <b>«💾 দিন শেষের হিসাব সেভ করুন»</b> বাটনে চাপ দিতে পারেন (আপনার আসল Ending ব্যালেন্সই কালকের Opening হয়ে যাবে, গরমিলের টাকা পরের দিনে কোনো ঝামেলা করবে না!)।<br>'
+    + '  — অথবা ১-ক্লিকে <b>«⚡ বিকাশ/নগদ কমিশন বা চার্জ হিসেবে এই গরমিলটুকু মিলিয়ে দিন»</b> বাটনে চাপ দিলে ওই পার্থক্যটুকু আজকের চার্জ/কমিশন হিসেবে যোগ হয়ে আজকের হিসাবও ১০০% (৳০ পার্থক্য) মিলে যাবে!</div>'
+    + '<button type="button" class="btn sm ghost block" onclick="toggleDhGuide(false)">🔼 নির্দেশিকা বন্ধ করুন</button>'
     + '</div>';
+}
+
+function autoAdjustMfsDiff(D) {
+  const openVal = $('dc_tot_open') ? n(val('dc_tot_open')) : 0;
+  const extIn = $('dh_ext_in_v') ? n(val('dh_ext_in_v')) : 0;
+  const extOut = $('dh_ext_out_v') ? n(val('dh_ext_out_v')) : 0;
+  const exp = openVal + extIn - extOut;
+  const rawAct = val('dc_tot_act').trim();
+  if (rawAct === '') { toast('আগে দিন শেষে কত টাকা আছে তা বক্সে লিখুন'); return; }
+  const act = n(rawAct);
+  const diff = Math.round(act - exp);
+  if (Math.abs(diff) < 1) { toast('হিসাব ইতিমধ্যেই মিলে আছে!'); return; }
+  // Save current box values first so user doesn't lose typed numbers
+  saveDayClosingSimple(D, true);
+  const id = uid();
+  const isExtra = diff > 0;
+  const mfsW = (wallets().find(w => w.kind === 'mfs') || { id: 'w_bkash' }).id;
+  S.wtx[id] = {
+    id, type: 'mfs_io', subType: 'mfs_extra_adj',
+    date: D, mfsW, cashW: 'w_counter',
+    amt: Math.abs(diff), fee: 0, mfsExtra: 0, cashGiven: 0, cashGot: 0,
+    dir: isExtra ? 'in' : 'out',
+    client: isExtra ? 'বিকাশ/নগদ ক্যাশ-ইন/আউট কমিশন ও এক্সট্রা সমন্বয় (+)' : 'বিকাশ/নগদ পেমেন্ট ও ক্যাশ-আউট চার্জ সমন্বয় (−)',
+    note: 'দিন শেষের স্বাভাবিক বিকাশ/নগদ চার্জ ও কমিশন অটো-সমন্বয়',
+    by: actor(),
+    createdAt: Date.now()
+  };
+  save('wtx', id);
+  render();
+  toast(isExtra ? ('✅ +' + money(Math.abs(diff)) + ' বিকাশ/নগদ কমিশন (আয়) হিসেবে যোগ হয়ে হিসাব ১০০% মিলে গেছে!') : ('✅ −' + money(Math.abs(diff)) + ' বিকাশ/নগদ চার্জ (খরচ) হিসেবে ধরা হয়ে হিসাব ১০০% মিলে গেছে!'));
+}
+
+function saveOpeningOnlySimple(D) {
+  const prev = S.dclose[D] || {};
+  const customOpen = Object.assign({}, prev.customOpen || {});
+  const ws = wallets().slice();
+  let sumO = 0, anyO = false;
+  ws.forEach(w => {
+    const oInp = $('tot_open_w_' + w.id);
+    if (oInp && oInp.value.trim() !== '') {
+      const v = n(oInp.value);
+      customOpen[w.id] = v;
+      w.openBal = v;
+      sumO += v;
+      anyO = true;
+    }
+  });
+  const rawTotOpen = $('dc_tot_open') ? val('dc_tot_open').trim() : '';
+  const totOpenVal = rawTotOpen !== '' ? n(rawTotOpen) : sumO;
+  // If user is setting opening balance for today or tomorrow and dhStartDate isn't set (or is after D), set dhStartDate = D so old data never pollutes daily hisab!
+  if (!S.settings.dhStartDate || S.settings.dhStartDate > D) {
+    S.settings.dhStartDate = D;
+  }
+  S.settings.totOpenBal = totOpenVal;
+  S.settings.wallets = ws;
+  saveSettings();
+  S.dclose[D] = Object.assign({}, prev, {
+    id: D, date: D,
+    customOpen,
+    totCustomOpen: totOpenVal,
+    by: actor(),
+    updatedAt: Date.now()
+  });
+  save('dclose', D);
+  render();
+  toast('🌅 ' + fd(D) + ' তারিখের শুরুর ব্যালেন্স (' + money(totOpenVal) + ') সেভ হয়েছে! আগের সব ডাটা অক্ষত রেখে এখান থেকেই হিসাব চলবে।');
+}
+
+function gormilActionGuideHtml(R) {
+  const isShort = R.tHasAct && R.tDiff <= -0.5;
+  const isExtra = R.tHasAct && R.tDiff >= 0.5;
+  const absD = Math.round(Math.abs(R.tDiff || 0));
+  return '<div class="card stack" style="gap:10px;border:2px solid ' + (isShort ? 'var(--bad)' : (isExtra ? 'var(--warn)' : 'var(--line)')) + '">'
+    + '<div class="row between wrapr" style="gap:6px">'
+    + '<div><b style="font-size:15.5px">🛠️ গরমিল হলে কী করবেন? (বিকাশ/নগদ কমিশন-চার্জ ও বাদ পড়া এন্ট্রি গাইড)</b>'
+    + '<div class="sm mut">বিকাশ/নগদে ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকা স্বাভাবিক — সেটি ১-ক্লিকে মেলাতে পারেন অথবা নিচের তালিকা দেখে কোনো বড় এন্ট্রি বাদ পড়েছে কিনা চেক করতে পারেন:</div></div>'
+    + (isShort ? '<span class="pill bad">এখন কম (Short): ' + money(absD) + '</span>' : (isExtra ? '<span class="pill warn">এখন বেশি (Extra): +' + money(absD) + '</span>' : '<span class="pill good">সমাধান গাইড</span>'))
+    + '</div>'
+    + '<div class="ipbox row between wrapr" style="background:var(--soft);border-color:var(--acc);gap:8px">'
+    + '<div style="flex:1;min-width:220px"><b>📱 বিকাশ/নগদ এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে গরমিল হচ্ছে?</b>'
+    + '<div class="sm mut">সারাদিন বিকাশ/নগদে লেনদেন করলে কিছু কমিশন যোগ হয় বা চার্জ কাটে। আপনি চাইলে <b>"💾 দিন শেষের হিসাব সেভ করুন"</b> চেপে সরাসরি সেভ করে দিতে পারেন (দিন শেষে যা আছে সেটাই কালকের ওপেনিং হবে), অথবা ডান পাশের বাটনে ১-ক্লিক করে এই পার্থক্যটুকু বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিতে পারেন:</div></div>'
+    + '<button type="button" class="btn sm ' + (isShort || isExtra ? 'good' : 'ghost') + '" onclick="autoAdjustMfsDiff(\'' + R.D + '\')">⚡ ১-ক্লিকে বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিন</button>'
+    + '</div>'
+    + '<div class="gormil-grid">'
+    + '<div class="gormil-card" style="border-color:' + (isShort ? 'var(--bad)' : 'var(--line)') + '">'
+    + '<b class="bad" style="font-size:14px">🔻 ১. যদি হাতে টাকা কম থাকে (Short হয়) — কী করবেন?</b>'
+    + '<div class="sm mut" style="margin-top:-4px">বিকাশ চার্জ ছাড়াও বেশি টাকা কম থাকলে দেখুন নিচের কোনো খরচ বা বাকি তোলা বাদ পড়েছে কিনা:</div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">ক) কোনো দোকান বা ব্যক্তিগত খরচ এন্ট্রি করেননি?</b><div class="row" style="gap:4px"><button type="button" class="btn sm danger" onclick="quickDhEntry(\'shop_exp\')">+ দোকান খরচ</button><button type="button" class="btn sm danger" onclick="quickDhEntry(\'per_exp\')">+ ব্যক্তিগত</button></div></div><div class="sm mut">করণীয়: চা-নাস্তা, যাতায়াত, বিল বা পকেটে টাকা নিলে উপরের বাটনে চেপে এন্ট্রি দিন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">খ) কেউ বাকি নিয়েছে কিন্তু বাকি খাতায় তোলেননি?</b><button type="button" class="btn sm warnb" onclick="go(\'loan\')">+ বাকি এন্ট্রি দিন</button></div><div class="sm mut">করণীয়: কেউ টাকা ধার নিলে বা বাকি রাখলে বাকি খাতায় গিয়ে <b>"সে নিল"</b> এন্ট্রি দিন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">গ) পাসপোর্ট চালান বা ভিসা/ডকুমেন্ট খরচ মার্ক করেননি?</b><div class="row" style="gap:4px"><button type="button" class="btn sm ghost" onclick="go(\'visa\')">ভিসা</button><button type="button" class="btn sm ghost" onclick="go(\'pass\')">পাসপোর্ট</button><button type="button" class="btn sm ghost" onclick="go(\'doc\')">ডকুমেন্ট</button></div></div><div class="sm mut">করণীয়: পাসপোর্টে <b>"চালান সম্পন্ন"</b>, ভিসাতে <b>"✓ খরচ হয়েছে"</b> বা ডকুমেন্টে খরচ মার্ক করুন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">ঘ) কাস্টমারকে রিটার্ন/ফেরত টাকা দিয়েছেন কিন্তু লেখেননি?</b><button type="button" class="btn sm ghost" onclick="quickDhEntry(\'visa_ret\')">↩ ফেরত এন্ট্রি দিন</button></div><div class="sm mut">করণীয়: কাস্টমারকে টাকা ফেরত দিলে রাখা চার্জ বাদ দিয়ে ফেরত টাকাটা এন্ট্রি দিন।</div></div>'
+    + '</div>'
+    + '<div class="gormil-card" style="border-color:' + (isExtra ? 'var(--warn)' : 'var(--line)') + '">'
+    + '<b class="warnc" style="font-size:14px">🔺 ২. যদি হাতে টাকা বেশি থাকে (Extra হয়) — কী করবেন?</b>'
+    + '<div class="sm mut" style="margin-top:-4px">বিকাশ কমিশন ছাড়াও বেশি টাকা অতিরিক্ত থাকলে দেখুন নিচের কোনো জমা তোলা বাদ পড়েছে কিনা:</div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">ক) কাস্টমার বিল/জমা দিয়েছে কিন্তু ফাইলে তোলেননি?</b><div class="row" style="gap:4px"><button type="button" class="btn sm good" onclick="go(\'pass\')">+ পাসপোর্ট</button><button type="button" class="btn sm good" onclick="go(\'doc\')">+ ডকুমেন্ট</button></div></div><div class="sm mut">করণীয়: যে কাস্টমার টাকা দিয়েছে তার কার্ডে গিয়ে <b>"＋ জমা নিলাম"</b> বাটনে চাপ দিয়ে টাকা তুলুন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">খ) ফটোকপি / অনলাইন / কাউন্টারের খুচরা কাজের টাকা তোলেননি?</b><button type="button" class="btn sm good" onclick="quickDhEntry(\'counter_rev\')">+ কাউন্টার আয় তুলুন</button></div><div class="sm mut">করণীয়: সারাদিনের খুচরা কাজের টাকা কাউন্টার ট্যাবে বা এখানে এক ক্লিকে যোগ করুন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">গ) ভিসার কাস্টমার টাকা জমা দিয়েছে কিন্তু তোলেননি?</b><button type="button" class="btn sm good" onclick="quickDhEntry(\'visa_dep\')">+ ভিসা জমা তুলুন</button></div><div class="sm mut">করণীয়: ভিসা অ্যাপে অথবা এখানে <b>"+ ভিসা জমা তুলুন"</b> বাটনে চেপে জমা লিখুন।</div></div>'
+    + '<div class="gormil-item"><div class="row between"><b class="sm">ঘ) কেউ আগের বাকি টাকা ফেরত দিয়েছে কিন্তু তোলেননি?</b><button type="button" class="btn sm good" onclick="go(\'loan\')">+ বাকি আদায় তুলুন</button></div><div class="sm mut">করণীয়: বাকি খাতায় গিয়ে ওই ব্যক্তির নামের নিচে <b>"সে ফেরত দিল"</b> বাটনে চাপ দিন।</div></div>'
+    + '</div>'
+    + '</div></div>';
 }
 
 function dhShift(k) { UI.dhd = addD(UI.dhd || today(), k); if (UI.dhd === today()) UI.dhd = ''; render(); }
@@ -2775,25 +3145,59 @@ function vDhisab() {
       + '<div><small>৩. আজ মোট গেছে (−)</small><b class="num">−' + money(R.extOut) + '</b></div>'
       + '</div></div>';
 
-    // 1-Box End of Day Matching Card
+    // Per-Account Opening & Ending Boxes (3 Drawers + All Settings Accounts) + Total Method Card
+    const acctRowsHtml = R.ws.map((w, idx) => {
+      const c = R.byW[w.id];
+      const kBadge = WKIND[w.kind] ? WKIND[w.kind].short : 'অ্যাকাউন্ট';
+      const openVal = Math.round(c.open);
+      const endVal = c.hasActual ? Math.round(c.actual) : '';
+      return '<div class="acct-row">'
+        + '<div><b style="font-size:14px">' + (idx + 1) + '. ' + esc(w.name) + '</b> <span class="pill ' + (WKIND[w.kind] ? WKIND[w.kind].badge : '') + '" style="font-size:10px;padding:1px 6px">' + esc(kBadge) + '</span>'
+        + (w.owner ? '<div class="sm mut">' + esc(w.owner) + '</div>' : '') + '</div>'
+        + '<div class="acct-inp-wrap"><small>১. শুরুতে ছিল (Opening ৳)</small>'
+        + '<input class="tot_w_open" data-wid="' + esc(w.id) + '" id="tot_open_w_' + esc(w.id) + '" type="number" inputmode="decimal" placeholder="0" value="' + openVal + '" oninput="syncTotAcctBoxes(' + Math.round(R.extIn) + ',' + Math.round(R.extOut) + ')"></div>'
+        + '<div class="acct-inp-wrap"><small>২. দিন শেষে আছে (Ending ৳)</small>'
+        + '<input class="tot_w_end end-f" data-wid="' + esc(w.id) + '" id="tot_end_w_' + esc(w.id) + '" type="number" inputmode="decimal" placeholder="দিন শেষে কত আছে?" value="' + endVal + '" oninput="syncTotAcctBoxes(' + Math.round(R.extIn) + ',' + Math.round(R.extOut) + ')"></div>'
+        + '</div>';
+    }).join('');
+
     const matchCard = '<div class="card stack" style="gap:12px;border-left:5px solid ' + (!R.tHasAct ? 'var(--acc)' : (ok ? 'var(--good)' : 'var(--bad)')) + '">'
-      + '<div class="row between"><div><b style="font-size:17px">✅ দিন শেষে মোট টাকা মিলিয়ে নিন (১-বক্স টোটাল মেথড)</b><div class="sm mut">আপনার দোকানের ক্যাশ + বিকাশ/নগদ + ব্যাংকে এখন মোট কত টাকা আছে তা নিচে লিখুন</div></div></div>'
+      + '<div class="row between wrapr" style="gap:8px">'
+      + '<div><b style="font-size:17px">🏦 ৩টি ড্রয়ার ও সব অ্যাকাউন্টের বক্স + টোটাল মেথড (একসাথে)</b>'
+      + '<div class="sm mut">সকালে <b>১. শুরুতে ছিল</b> ঘরে ওপেনিং ব্যালেন্স বসিয়ে দিন (আগের সব ডাটা অক্ষত থাকবে, পুরনো হিসাব এর সাথে মিশবে না)। আর রাতে <b>২. দিন শেষে আছে</b> ঘরে ব্যালেন্স বসিয়ে সেভ করলেই সেটি কালকের ওপেনিং হয়ে যাবে!</div></div>'
+      + '<button type="button" class="btn sm ghost" onclick="walletManageSheet()">⚙️ নতুন বিকাশ/ব্যাংক যোগ করুন</button>'
+      + '</div>'
+      + '<div class="acct-box-grid">' + acctRowsHtml
+      + '<div class="acct-row tot">'
+      + '<div><b>মোট সব ড্রয়ার ও অ্যাকাউন্টের যোগফল (Total)</b><div class="sm mut">উপরের সব বক্স থেকে অটো যোগ হয়েছে</div></div>'
+      + '<div class="acct-inp-wrap"><small>মোট শুরুর ব্যালেন্স (Opening)</small><input id="dc_tot_open" type="number" inputmode="decimal" value="' + Math.round(R.tOpen) + '" oninput="dhTotLiveDiff()" style="border-color:var(--acc);color:var(--acc)"></div>'
+      + '<div class="acct-inp-wrap"><small>দিন শেষে মোট আছে (Ending)</small><input id="dc_tot_act" type="number" inputmode="decimal" placeholder="দিন শেষে মোট আছে (৳)" value="' + (R.tHasAct ? Math.round(R.tActual) : '') + '" oninput="dhTotLiveDiff()" class="end-f" style="color:var(--good)"></div>'
+      + '</div></div>'
       + '<div class="mini num" style="grid-template-columns:repeat(4,1fr)">'
-      + '<div style="cursor:pointer" onclick="totOpenBalSheet(\'' + D + '\')"><small>শুরুতে ছিল ✎</small><b>' + Math.round(R.tOpen) + '</b></div>'
-      + '<div><small>আজ এসেছে (+)</small><b class="good">+' + Math.round(R.extIn) + '</b></div>'
-      + '<div><small>আজ গেছে (−)</small><b class="bad">−' + Math.round(R.extOut) + '</b></div>'
-      + '<div><small>থাকার কথা</small><b style="color:var(--acc)">' + Math.round(R.tExpected) + '</b></div>'
+      + '<div><small>১. শুরুতে মোট ছিল</small><b id="lbl_tot_open">' + Math.round(R.tOpen) + '</b></div>'
+      + '<div><small>২. আজ মোট এসেছে (+)</small><b class="good">+' + Math.round(R.extIn) + '</b></div>'
+      + '<div><small>৩. আজ মোট গেছে (−)</small><b class="bad">−' + Math.round(R.extOut) + '</b></div>'
+      + '<div><small>৪. দিন শেষে থাকার কথা</small><b id="lbl_tot_exp" style="color:var(--acc)">' + Math.round(R.tExpected) + '</b></div>'
       + '</div>'
-      + '<div class="row" style="gap:8px">'
-      + '<div style="flex:1"><input id="dc_tot_act" type="number" inputmode="decimal" style="font-size:18px;font-weight:700" placeholder="দিন শেষে হাতে/অ্যাকাউন্টে মোট কত আছে লিখুন (৳)" value="' + (R.tHasAct ? R.tActual : '') + '" oninput="dhTotLiveDiff(' + R.tExpected + ')"></div>'
-      + '<button type="button" class="btn sm ghost" onclick="$(\'dc_tot_act\').value=' + Math.round(R.tExpected) + ';dhTotLiveDiff(' + R.tExpected + ')">✓ মিলেছে</button>'
+      + '<input type="hidden" id="dh_ext_in_v" value="' + Math.round(R.extIn) + '">'
+      + '<input type="hidden" id="dh_ext_out_v" value="' + Math.round(R.extOut) + '">'
+      + '<div class="stack" style="gap:6px;background:var(--bg);padding:10px 12px;border-radius:10px;border:1.5px solid var(--line)">'
+      + '<div class="row between wrapr" style="gap:8px">'
+      + '<span id="dc_tot_df" class="' + (!R.tHasAct ? 'mut' : (ok ? 'good b' : 'bad b')) + '" style="font-size:15px">'
+      + (!R.tHasAct ? 'উপরের বক্সগুলোতে দিন শেষের টাকা লিখলেই সাথে সাথে মিলেছে কিনা দেখাবে' : (ok ? '✅ আলহামদুলিল্লাহ! হিসাবের সাথে হুবহু মিলেছে (পার্থক্য ৳০)!' : (R.tDiff < 0 ? '⚠ হিসাবের চেয়ে ' + money(Math.abs(R.tDiff)) + ' কম আছে (Short)!' : '💡 হিসাবের চেয়ে ' + money(R.tDiff) + ' বেশি আছে (Extra)!')))
+      + '</span>'
+      + '<div class="row wrapr" style="gap:6px">'
+      + '<button type="button" class="btn sm ghost" onclick="autoAdjustMfsDiff(\'' + D + '\')">⚡ বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিন</button>'
+      + '<button type="button" class="btn sm ghost" onclick="$(\'dc_tot_act\').value=$(\'lbl_tot_exp\').textContent;dhTotLiveDiff()">✓ যা থাকার কথা তাই আছে</button>'
+      + '</div></div>'
+      + '<div class="sm mut">💡 <b>বিকাশ/নগদ নোট:</b> এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকলে কোনো সমস্যা নেই—আপনি সরাসরি নিচে <b>"💾 দিন শেষের হিসাব সেভ করুন"</b> চাপলেই আপনার <b>"দিন শেষে আছে"</b> ঘরের আসল ব্যালেন্সই কালকের ওপেনিং হয়ে যাবে!</div>'
       + '</div>'
-      + '<div class="row between sm"><span id="dc_tot_df" class="' + (!R.tHasAct ? 'mut' : (ok ? 'good b' : 'bad b')) + '" style="font-size:14px">'
-      + (!R.tHasAct ? 'মোট টাকা লিখলে সাথে সাথে কম বা বেশি দেখাবে' : (ok ? '✓ হিসাবের সাথে হুবহু মিলেছে!' : (R.tDiff < 0 ? '⚠ হিসাবের চেয়ে ' + money(Math.abs(R.tDiff)) + ' কম আছে (Short)!' : '⚠ হিসাবের চেয়ে ' + money(R.tDiff) + ' বেশি আছে (Extra)!')))
-      + '</span></div>'
       + smartHintsForTotal(R)
-      + '<div class="field"><label for="dh_close_note">📝 দিন শেষের নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: ক্যাশ ৩০,০০০ + বিকাশ ২০,০০০ = মোট ৫০,০০০ মিলেছে"></div>'
-      + '<button class="btn block" onclick="saveDayClosingSimple(\'' + D + '\')">💾 দিন শেষের ক্লোজিং সেভ করুন (কালকের ওপেনিং হয়ে যাবে)</button>'
+      + '<div class="field"><label for="dh_close_note">📝 দিন শেষের নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: বিকাশ কমিশনসহ সব ড্রয়ার ও ব্যাংক ক্লোজিং সেভ করা হলো"></div>'
+      + '<div class="grid2">'
+      + '<button type="button" class="btn ghost block" onclick="saveOpeningOnlySimple(\'' + D + '\')">🌅 সকালে শুধু শুরুর ব্যালেন্স (Opening) সেভ করুন</button>'
+      + '<button type="button" class="btn block" onclick="saveDayClosingSimple(\'' + D + '\')">💾 রাতে দিন শেষের হিসাব (Closing) সেভ করুন</button>'
+      + '</div>'
       + '</div>';
 
     // Clean Quick Action Buttons (No drawer confusion)
@@ -2835,7 +3239,7 @@ function vDhisab() {
       + '<button type="button" class="btn sm ghost" onclick="setDhMode(\'multi\')">আলাদা ড্রয়ার/ব্যাংক মোডে যান</button>'
       + '</div>';
 
-    return dateNav + dailyGuideHtml() + heroSimple + matchCard + quickSimple + totalMathDetailHtml(R) + visaPendHtml + histCard + modeSwitchCard;
+    return dateNav + dailyGuideHtml() + heroSimple + matchCard + gormilActionGuideHtml(R) + quickSimple + totalMathDetailHtml(R) + visaPendHtml + histCard + modeSwitchCard;
   }
 
   // ===== ঐচ্ছিক: মাল্টি-ড্রয়ার মোড (যদি কেউ আলাদা আলাদা ড্রয়ার মিলাতে চান) =====
@@ -2947,34 +3351,87 @@ function vDhisab() {
     + '</div>'
     + '<button class="btn ghost block" onclick="walletManageSheet()">⚙️ ড্রয়ার, বিকাশ/নগদ/রকেট/উপায় ও ব্যাংক যোগ বা পরিবর্তন করুন</button>';
 
-  return modeTopBanner + dateNav + dailyGuideHtml() + hero + unsetBox + quickBar + expandAllBar + drawerCards + saveCloseBox + visaPendHtml + txSec;
+  return modeTopBanner + dateNav + dailyGuideHtml() + hero + unsetBox + quickBar + expandAllBar + drawerCards + saveCloseBox + gormilActionGuideHtml(R) + visaPendHtml + txSec;
 }
 
-function dhTotLiveDiff(exp) {
+function syncTotAcctBoxes(extIn, extOut) {
+  let sumO = 0, sumE = 0, anyE = false;
+  document.querySelectorAll('.tot_w_open').forEach(inp => { sumO += n(inp.value); });
+  document.querySelectorAll('.tot_w_end').forEach(inp => {
+    if (inp.value.trim() !== '') { sumE += n(inp.value); anyE = true; }
+  });
+  if ($('dc_tot_open')) $('dc_tot_open').value = Math.round(sumO);
+  if ($('dc_tot_act')) $('dc_tot_act').value = anyE ? Math.round(sumE) : '';
+  dhTotLiveDiff();
+}
+
+function dhTotLiveDiff(expOverride) {
+  const openVal = $('dc_tot_open') ? n(val('dc_tot_open')) : 0;
+  const extIn = $('dh_ext_in_v') ? n(val('dh_ext_in_v')) : 0;
+  const extOut = $('dh_ext_out_v') ? n(val('dh_ext_out_v')) : 0;
+  const exp = ($('dc_tot_open') && $('dh_ext_in_v')) ? (openVal + extIn - extOut) : n(expOverride);
+  if ($('lbl_tot_open')) $('lbl_tot_open').textContent = Math.round(openVal);
+  if ($('lbl_tot_exp')) $('lbl_tot_exp').textContent = Math.round(exp);
+
   const raw = val('dc_tot_act').trim(), el = $('dc_tot_df');
   if (!el) return;
-  if (raw === '') { el.className = 'mut'; el.textContent = 'মোট টাকা লিখলে সাথে সাথে কম বা বেশি দেখাবে'; return; }
+  if (raw === '') { el.className = 'mut'; el.textContent = 'উপরের বক্সগুলোতে দিন শেষের টাকা লিখলেই সাথে সাথে মিলেছে কিনা দেখাবে'; return; }
   const act = n(raw), df = act - exp;
-  if (Math.abs(df) < 0.5) { el.className = 'good b'; el.textContent = '✓ হিসাবের সাথে হুবহু মিলেছে!'; }
-  else if (df < 0) { el.className = 'bad b'; el.textContent = '⚠ হিসাবের চেয়ে ' + money(Math.abs(df)) + ' কম আছে (Short)!'; }
-  else { el.className = 'bad b'; el.textContent = '⚠ হিসাবের চেয়ে ' + money(df) + ' বেশি আছে (Extra)!'; }
+  if (Math.abs(df) < 0.5) { el.className = 'good b'; el.textContent = '✅ আলহামদুলিল্লাহ! হিসাবের সাথে হুবহু মিলেছে (পার্থক্য ৳০)!'; }
+  else if (df < 0) { el.className = 'bad b'; el.textContent = '⚠ হিসাবের চেয়ে ' + money(Math.abs(df)) + ' কম আছে (Short)! (বিকাশ চার্জ হলে সরাসরি সেভ করতে পারেন অথবা ১-ক্লিকে মেলাতে পারেন)'; }
+  else { el.className = 'bad b'; el.textContent = '💡 হিসাবের চেয়ে ' + money(df) + ' বেশি আছে (Extra)! (বিকাশ কমিশন হলে সরাসরি সেভ করতে পারেন অথবা ১-ক্লিকে মেলাতে পারেন)'; }
 }
 
-function saveDayClosingSimple(D) {
+function saveDayClosingSimple(D, silent) {
   const prev = S.dclose[D] || {};
-  const raw = val('dc_tot_act').trim();
+  const counts = Object.assign({}, prev.counts || {});
+  const customOpen = Object.assign({}, prev.customOpen || {});
+  let sumO = 0, sumE = 0, anyO = false, anyE = false;
+
+  wallets().forEach(w => {
+    const oInp = $('tot_open_w_' + w.id);
+    const eInp = $('tot_end_w_' + w.id);
+    if (oInp && oInp.value.trim() !== '') {
+      customOpen[w.id] = n(oInp.value);
+      sumO += n(oInp.value);
+      anyO = true;
+    }
+    if (eInp && eInp.value.trim() !== '') {
+      counts[w.id] = n(eInp.value);
+      sumE += n(eInp.value);
+      anyE = true;
+    } else if (eInp) {
+      delete counts[w.id];
+    }
+  });
+
+  if (!S.settings.dhStartDate || S.settings.dhStartDate > D) {
+    S.settings.dhStartDate = D;
+    saveSettings();
+  }
+
   const R = dayReconcile(D);
-  const totAct = raw !== '' ? n(raw) : R.tExpected;
+  const rawTotOpen = $('dc_tot_open') ? val('dc_tot_open').trim() : '';
+  const rawTotAct = val('dc_tot_act') ? val('dc_tot_act').trim() : '';
+  const totOpenVal = rawTotOpen !== '' ? n(rawTotOpen) : (anyO ? sumO : R.tOpen);
+  const expNow = totOpenVal + R.extIn - R.extOut;
+  const totAct = rawTotAct !== '' ? n(rawTotAct) : (anyE ? sumE : expNow);
+
   S.dclose[D] = Object.assign({}, prev, {
     id: D, date: D,
+    counts,
+    customOpen,
+    totCustomOpen: totOpenVal,
     totActual: totAct,
-    note: val('dh_close_note').trim(),
+    note: $('dh_close_note') ? val('dh_close_note').trim() : (prev.note || ''),
     by: actor(),
     updatedAt: Date.now()
   });
   save('dclose', D);
-  render();
-  toast('✅ দিন শেষের মোট হিসাব (' + money(totAct) + ') সেভ হয়েছে! এটি কালকের ওপেনিং ব্যালেন্স হবে।');
+  if (!silent) {
+    render();
+    toast('✅ দিন শেষের হিসাব (' + money(totAct) + ') সেভ হয়েছে! প্রতিটি বক্সের Ending কালকের Opening ব্যালেন্স হয়ে যাবে।');
+  }
 }
 
 function dhLiveDiff(wid, exp) {
@@ -3126,11 +3583,12 @@ function quickDhEntry(mode) {
       + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="যেমন: ভারত ভিসা ফাইল জমা"></div>'
       + '<button class="btn block" onclick="saveQuickWtx(\'in\',\'ভিসা টাকা জমা\',false)">জমা সেভ করুন</button>');
   } else if (mode === 'visa_ret') {
-    sheet('ভিসা ফাইল ফেরত ও চার্জ রাখা (রেভিনিউ)',
-      '<div class="mut sm">ভিসা ফাইল ফেরত দিলে ক্লায়েন্টকে কত টাকা ফেরত দিলেন এবং কত টাকা সার্ভিস চার্জ রাখলেন (যা আপনার রেভিনিউ) তা লিখুন:</div>'
+    sheet('ভিসা ফাইল ফেরত ও চার্জ রাখা (ভুল রোধী অটো-হিসাব)',
+      '<div class="sm" style="background:var(--warnbg);color:var(--ink);padding:8px 10px;border-radius:8px;border:1px solid var(--warn)"><b>🛡️ ভুল রোধী নিয়ম:</b> কেউ ২০০০ টাকা জমা দিলে আপনি যদি ৫০০ টাকা চার্জ রেখে ১৫০০ টাকা ফেরত দেন, তবে নিচে জমা ২০০০ ও চার্জ ৫০০ লিখলেই ফেরত ঘরে <b>১৫০০</b> অটো বসে যাবে (ভুলে ২০০০ ফেরত + ৫০০ চার্জ হবে না!)।</div>'
       + '<div class="field"><label for="vr_client">ক্লায়েন্টের নাম / ফাইল</label><input id="vr_client" placeholder="ক্লায়েন্টের নাম"></div>'
-      + '<div class="grid2"><div class="field"><label for="vr_gross">জমা ছিল (৳)</label><input id="vr_gross" type="number" inputmode="decimal" placeholder="যেমন: 2000" oninput="vrCalc()"></div><div class="field"><label for="vr_kept">চার্জ রাখলাম — রেভিনিউ (৳)</label><input id="vr_kept" type="number" inputmode="decimal" placeholder="যেমন: 300" oninput="vrCalc()"></div></div>'
-      + '<div class="grid2"><div class="field"><label for="vr_ref">ক্লায়েন্টকে ফেরত দিলাম (৳)</label><input id="vr_ref" type="number" inputmode="decimal" placeholder="যেমন: 1700"></div><div class="field"><label for="vr_date">তারিখ</label><input id="vr_date" type="date" value="' + D + '"></div></div>'
+      + '<div class="grid2"><div class="field"><label for="vr_gross">কাস্টমারের মোট জমা ছিল (৳)</label><input id="vr_gross" type="number" inputmode="decimal" placeholder="যেমন: 2000" oninput="vrCalc(\'gross\')"></div><div class="field"><label for="vr_kept">১. চার্জ রাখলাম — আমার রেভিনিউ (৳)</label><input id="vr_kept" type="number" inputmode="decimal" placeholder="যেমন: 500" oninput="vrCalc(\'kept\')"></div></div>'
+      + '<div class="grid2"><div class="field"><label for="vr_ref">২. ক্লায়েন্টকে ফেরত দিলাম — ক্যাশ থেকে কমবে (৳)</label><input id="vr_ref" type="number" inputmode="decimal" placeholder="যেমন: 1500" oninput="vrCalc(\'ref\')"></div><div class="field"><label for="vr_date">তারিখ</label><input id="vr_date" type="date" value="' + D + '"></div></div>'
+      + '<div class="card sm" style="box-shadow:none;background:var(--bg)" id="vr_live_msg">জমা ও রাখা চার্জ লিখলে এখানে হিসাব দেখাবে</div>'
       + wFieldHtml('vr_w', lastW('vr_w','w_visacash'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে ফেরত দিলেন')
       + '<div class="field"><label for="vr_note">📝 নোট (ঐচ্ছিক)</label><input id="vr_note" placeholder="যেমন: স্লট না পাওয়ায় ফেরত"></div>'
       + '<button class="btn block" onclick="saveVisaReturnWtx()">সেভ করুন</button>');
@@ -3175,9 +3633,25 @@ function saveWalletIo() {
   S.wtx[id] = { id, type: 'simple', dir, cat: dir === 'in' ? 'অন্য জমা' : 'অন্য খরচ', isRev: false, date: val('qe_date') || today(), amt, w: val('qe_w') || 'w_counter', client: val('qe_client').trim(), note: val('qe_note').trim(), by: actor(), createdAt: Date.now() };
   save('wtx', id); closeSheet(); toast('সেভ হয়েছে');
 }
-function vrCalc() {
-  const g = n(val('vr_gross')), k = n(val('vr_kept'));
-  if (g > 0) $('vr_ref').value = Math.max(0, g - k);
+function vrCalc(changed) {
+  const g = Math.max(0, n(val('vr_gross')));
+  let k = Math.max(0, n(val('vr_kept')));
+  let r = Math.max(0, n(val('vr_ref')));
+  if (g > 0) {
+    if (changed === 'ref') {
+      if (r > g) { r = g; $('vr_ref').value = r; toast('⚠ ফেরত টাকা জমার (' + money(g) + ') চেয়ে বেশি হতে পারবে না!'); }
+      k = Math.max(0, g - r);
+      $('vr_kept').value = k;
+    } else {
+      if (k > g) { k = g; $('vr_kept').value = k; toast('⚠ রাখা চার্জ জমার (' + money(g) + ') চেয়ে বেশি হতে পারবে না!'); }
+      r = Math.max(0, g - k);
+      $('vr_ref').value = r;
+    }
+  }
+  const msg = $('vr_live_msg');
+  if (msg && g > 0) {
+    msg.innerHTML = 'জমা ছিল: <b>' + money(g) + '</b> − রাখা চার্জ (আপনার রেভিনিউ): <b class="good">' + money(k) + '</b> = কাস্টমারকে ফেরত (ক্যাশ থেকে কমবে): <b class="bad">−' + money(r) + '</b>';
+  }
 }
 
 function saveQuickWtx(dir, cat, isRev, editId) {
@@ -3199,8 +3673,13 @@ function saveQuickWtx(dir, cat, isRev, editId) {
 }
 
 function saveVisaReturnWtx(editId) {
-  const kept = n(val('vr_kept')), refAmt = n(val('vr_ref')), gross = n(val('vr_gross'));
+  let kept = Math.max(0, n(val('vr_kept'))), refAmt = Math.max(0, n(val('vr_ref'))), gross = Math.max(0, n(val('vr_gross')));
   if (kept <= 0 && refAmt <= 0) { toast('রাখা চার্জ বা ফেরত টাকার অংক দিন'); return; }
+  if (gross > 0 && (kept + refAmt > gross + 0.001)) {
+    toast('❌ ভুল রোধ: কাস্টমার জমা দিয়েছিল ' + money(gross) + '। তাই রাখা চার্জ (' + money(kept) + ') ও ফেরত (' + money(refAmt) + ') মিলে ' + money(gross) + '-এর বেশি হতে পারবে না!');
+    $('vr_ref').value = Math.max(0, gross - kept);
+    return;
+  }
   const id = editId || uid();
   S.wtx[id] = {
     id, type: 'visa_return', dir: 'out', cat: 'ভিসা ফাইল ফেরত',
