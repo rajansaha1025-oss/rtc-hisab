@@ -1978,15 +1978,25 @@ const WKIND = {
 };
 const isCombineMain = () => S.settings.combineMain !== false;
 const rawWallets = () => {
-  const l = arr(S.settings.wallets).filter(w => w && w.id);
-  return l.length ? l : DEFWALLETS();
+  const l = arr(S.settings && S.settings.wallets).filter(w => w && w.id);
+  if (!l.length) return DEFWALLETS();
+  const defs = DEFWALLETS();
+  ['w_counter', 'w_passdoc', 'w_visacash'].forEach(cid => {
+    if (!l.some(w => w.id === cid)) {
+      const dw = defs.find(d => d.id === cid);
+      if (dw) l.push(dw);
+    }
+  });
+  return l;
 };
 const wallets = () => {
   const l = rawWallets();
   if (!isCombineMain()) return l;
-  return l.filter(w => w.kind === 'drawer').map(w => {
-    if (w.id === 'w_visacash') return Object.assign({}, w, { name: 'Main Drawer (ভিসা + ব্যাংক + বিকাশ/নগদ সব একত্রে)' });
-    return w;
+  const dr = l.filter(w => w.kind === 'drawer' || w.id === 'w_counter' || w.id === 'w_passdoc' || w.id === 'w_visacash');
+  const out = dr.length ? dr : DEFWALLETS().filter(w => w.kind === 'drawer');
+  return out.map(w => {
+    if (w.id === 'w_visacash') return Object.assign({}, w, { kind: 'drawer', name: 'Main Drawer (ভিসা + ব্যাংক + বিকাশ/নগদ সব একত্রে)' });
+    return Object.assign({}, w, { kind: 'drawer' });
   });
 };
 const resolveWId = id => {
@@ -2041,10 +2051,11 @@ function wFieldHtml(elId, selId, label) {
 
 /* ভিসা অ্যাপয়েন্টমেন্ট খরচ ও ভিসা জমা/ফেরতের ড্রয়ার/ব্যাংক ম্যাপিং (S.vmeta) */
 function vMetaOf(vid) {
-  return S.vmeta[vid] || { id: vid, feePaid: false, feeDate: '', feeAmt: 0, feeW: 'w_visacash', refDate: '', refW: 'w_visacash', payW: {} };
+  return (S.vmeta && S.vmeta[vid]) || { id: vid, feePaid: false, feeDate: '', feeAmt: 0, feeW: 'w_visacash', refDate: '', refW: 'w_visacash', payW: {} };
 }
 function visaFeeInfo(v) {
-  const m = S.vmeta[v.id] || {};
+  if (!v) return { fee: 0, paid: false, date: '', w: 'w_visacash', note: '' };
+  const m = (S.vmeta && S.vmeta[v.id]) || {};
   const fee = m.feeAmt > 0 ? n(m.feeAmt) : n(v.totalFee);
   const paid = m.feePaid !== undefined ? !!m.feePaid : (v.feeStatus === 'PAID');
   const date = m.feeDate || (paid ? (v.apptDate || v.date || '') : '');
@@ -2100,17 +2111,18 @@ function saveVisaPayW(vid, pkey) {
 }
 
 /* ---------- দৈনিক হিসাব ইঞ্জিন: যেকোনো তারিখ D এর জন্য প্রতি ড্রয়ার/ব্যাংকের ওপেনিং, জমা (+), খরচ (−) এবং ক্লোজিং ---------- */
-function allTxForDate(D) {
+function allTxForDate(D, preCM) {
   const list = [];
   const push = (w, dir, amt, cat, title, sub, isRev, editJs) => {
     if (n(amt) <= 0) return;
     const rawW = w || 'w_counter';
     const effW = resolveWId(rawW);
-    list.push({ w: effW, rawW, dir, amt: n(amt), cat, title, sub: sub || '', isRev: !!isRev, editJs: editJs || '' });
+    list.push({ w: effW, rawW, dir, amt: n(amt), cat, title: String(title || ''), sub: String(sub || ''), isRev: !!isRev, editJs: editJs || '' });
   };
 
   // ১. পাসপোর্ট ফাইল: ক্লায়েন্ট জমা (+), ফেরত (−), এবং চালান যদি ওই দিনে হয়
-  Object.values(S.files).forEach(f => {
+  Object.values(S.files || {}).forEach(f => {
+    if (!f) return;
     const c = fileCalc(f);
     arr(f.payments).forEach(p => {
       if (p && p.date === D) push(p.w || 'w_passdoc', 'in', p.amt, 'পাসপোর্ট জমা', f.name || 'পাসপোর্ট ক্লায়েন্ট', 'মোট বিল ' + money(c.bill) + (c.due ? ' · বাকি ' + money(c.due) : ' · পুরো জমা'), false, "fileForm('" + f.id + "')");
@@ -2124,12 +2136,13 @@ function allTxForDate(D) {
   });
 
   // ২. পাসপোর্ট IP পেমেন্ট (−)
-  Object.values(S.ipPays).forEach(p => {
+  Object.values(S.ipPays || {}).forEach(p => {
     if (p && p.date === D) push(p.w || 'w_passdoc', 'out', p.amt, 'পাসপোর্ট IP পেমেন্ট', 'IP পরিশোধ', (p.wk ? fd(p.wk) + ' সপ্তাহের IP' : '') + (p.note ? ' · ' + p.note : ''), false, "ipPaySheet(null,'" + p.id + "')");
   });
 
   // ৩. ডকুমেন্ট কাজ: ক্লায়েন্ট জমা (+), ফেরত (−), কাজের খরচ (−)
-  Object.values(S.docs).forEach(d => {
+  Object.values(S.docs || {}).forEach(d => {
+    if (!d) return;
     const c = docCalc(d);
     arr(d.payments).forEach(p => {
       if (p && p.date === D) push(p.w || 'w_passdoc', 'in', p.amt, 'ডকুমেন্ট জমা', (d.name || 'ক্লায়েন্ট') + ' (' + (d.cat || 'ডকুমেন্ট') + ')', (p.by ? 'স্টাফ: ' + p.by + ' · ' : '') + (c.due ? 'বাকি ' + money(c.due) : 'পুরো জমা'), false, "djForm('" + d.id + "')");
@@ -2143,13 +2156,14 @@ function allTxForDate(D) {
   });
 
   // ৪. কাউন্টার এক্সট্রা সার্ভিস (রেভিনিউ): প্রতিটি এন্ট্রি ও দিন শেষের ক্যাশ
-  Object.values(S.cnt).forEach(c => {
+  Object.values(S.cnt || {}).forEach(c => {
+    if (!c) return;
     arr(c.payments).forEach(p => {
-      if (p && p.date === D) push(p.w || 'w_counter', 'in', p.amt, 'কাউন্টার এক্সট্রা সার্ভিস (আয়)', c.svc + (n(c.qty) > 1 ? ' × ' + n(c.qty) : ''), (c.name ? c.name + ' · ' : '') + (c.note || 'সরাসরি রেভিনিউ'), true, "cForm('" + c.id + "')");
+      if (p && p.date === D) push(p.w || 'w_counter', 'in', p.amt, 'কাউন্টার এক্সট্রা সার্ভিস (আয়)', (c.svc || 'সার্ভিস') + (n(c.qty) > 1 ? ' × ' + n(c.qty) : ''), (c.name ? c.name + ' · ' : '') + (c.note || 'সরাসরি রেভিনিউ'), true, "cForm('" + c.id + "')");
     });
   });
-  const CM = cashModel();
-  if (CM.day[D]) {
+  const CM = preCM || cashModel();
+  if (CM && CM.day && CM.day[D]) {
     Object.keys(CM.day[D]).forEach(cid => {
       const x = CM.day[D][cid];
       if (x && x.extra > 0) {
@@ -2160,7 +2174,8 @@ function allTxForDate(D) {
   }
 
   // ৫. ভিসা ফাইল (অটো সিঙ্ক + মেটা): ভিসা জমা (+), ভিসা ফেরত (−), ভিসা অ্যাপয়েন্টমেন্ট খরচ (−)
-  VISA.rows.forEach(v => {
+  arr(VISA && VISA.rows).forEach(v => {
+    if (!v) return;
     const vm = vMetaOf(v.id);
     arr(v.payList).forEach(p => {
       if (p.d === D && p.amt > 0) {
@@ -2181,24 +2196,25 @@ function allTxForDate(D) {
   });
 
   // ৬. দোকান খরচ (−), ব্যক্তিগত খরচ (−), অন্য আয় (+)
-  Object.values(S.expenses).forEach(e => {
+  Object.values(S.expenses || {}).forEach(e => {
     if (!e || e.date !== D) return;
     if (e.kind === 'income') push(e.w || 'w_counter', 'in', e.amt, 'অন্য সার্ভিস / আয়', e.cat || 'অন্য আয়', e.note || 'সরাসরি রেভিনিউ', true, "expForm('" + e.id + "')");
-    else push(e.w || 'w_counter', 'out', e.amt, e.kind === 'shop' ? 'দোকান খরচ' : 'ব্যক্তিগত খরচ', e.cat || KIND[e.kind], e.note || '', false, "expForm('" + e.id + "')");
+    else push(e.w || 'w_counter', 'out', e.amt, e.kind === 'shop' ? 'দোকান খরচ' : 'ব্যক্তিগত খরচ', e.cat || KIND[e.kind] || 'খরচ', e.note || '', false, "expForm('" + e.id + "')");
   });
 
   // ৭. বাকি খাতা (Loans): কেউ বাকি নিল / আমি ফেরত দিলাম (−) এবং কেউ ফেরত দিল / আমি নিলাম (+)
-  Object.values(S.loans).forEach(l => {
+  Object.values(S.loans || {}).forEach(l => {
+    if (!l) return;
     arr(l.entries).forEach(e => {
       if (!e || e.date !== D) return;
-      const k = entryKind(e), info = LK[k];
+      const k = entryKind(e), info = LK[k] || LK.lend;
       const isOut = (k === 'lend' || k === 'payback');
       push(e.w || 'w_counter', isOut ? 'out' : 'in', e.amt, 'বাকি খাতা (' + info.t + ')', l.person || 'বাকি খাতা', e.note || '', false, "loanSheet('" + l.id + "')");
     });
   });
 
   // ৮. সরাসরি দৈনিক ড্রয়ার/ব্যাংক কুইক এন্ট্রি, ক্যাশ-ইন/আউট (এক্সট্রা চার্জ সহ) ও ট্রান্সফার (S.wtx)
-  Object.values(S.wtx).forEach(t => {
+  Object.values(S.wtx || {}).forEach(t => {
     if (!t || t.date !== D) return;
     if (t.type === 'transfer') {
       push(t.w, 'out', t.amt, 'ট্রান্সফার (গেল)', wName(t.w) + ' ➔ ' + wName(t.toW), t.note || 'ড্রয়ার/ব্যাংক ট্রান্সফার', false, "wtxSheet('" + t.id + "')");
@@ -2254,16 +2270,19 @@ function allTxForDate(D) {
    ২) নাহলে আগের দিন যে ক্লোজিং (গোনা ব্যালেন্স) সেভ করা হয়েছে, সেটাই অটোমেটিক আজকের "শুরুতে ছিল" হবে। */
 function dayReconcile(D) {
   const ws = wallets();
-  const prevDates = Object.keys(S.dclose || {}).filter(d => d < D).sort();
-  const curClose = S.dclose[D] || { counts: {}, customOpen: {}, openNote: {}, note: '', closed: false };
-  const txs = allTxForDate(D);
+  const dcloseMap = S.dclose || {};
+  const prevDates = Object.keys(dcloseMap).filter(d => d < D).sort();
+  const curClose = dcloseMap[D] || { counts: {}, customOpen: {}, openNote: {}, note: '', closed: false };
+  const preCM = cashModel();
+  const txs = allTxForDate(D, preCM);
   const byW = {};
 
-  const startFloor = S.settings.dhStartDate || '';
+  const hasPrevClose = prevDates.some(pd0 => dcloseMap[pd0] && dcloseMap[pd0].counts && Object.keys(dcloseMap[pd0].counts).length > 0);
+  const startFloor = (S.settings && S.settings.dhStartDate) || (hasPrevClose ? '' : today());
   ws.forEach(w => {
     let autoOpen = n(w.openBal), anchorDate = '';
     for (let i = prevDates.length - 1; i >= 0; i--) {
-      const pd0 = prevDates[i], dc = S.dclose[pd0];
+      const pd0 = prevDates[i], dc = dcloseMap[pd0];
       if (startFloor && pd0 < startFloor) continue;
       if (dc && dc.counts && dc.counts[w.id] !== undefined && dc.counts[w.id] !== '') {
         autoOpen = n(dc.counts[w.id]);
@@ -2288,19 +2307,19 @@ function dayReconcile(D) {
 
   // Add movements between anchorDate (exclusive) and D (exclusive) to autoOpen
   const histDates = new Set();
-  const collectD = d => { if (d && d < D && (!startFloor || d >= startFloor)) histDates.add(d); };
-  Object.values(S.files).forEach(f => { arr(f.payments).forEach(p => collectD(p.date)); arr(f.refunds).forEach(p => collectD(p.date)); if (f.challanDate) collectD(f.challanDate); });
-  Object.values(S.ipPays).forEach(p => collectD(p.date));
-  Object.values(S.docs).forEach(d => { arr(d.payments).forEach(p => collectD(p.date)); arr(d.refunds).forEach(p => collectD(p.date)); arr(d.spends).forEach(p => collectD(sp.date)); });
-  Object.values(S.cnt).forEach(c => arr(c.payments).forEach(p => collectD(p.date)));
+  const collectD = d => { if (d && typeof d === 'string' && d < D && (!startFloor || d >= startFloor)) histDates.add(d); };
+  Object.values(S.files || {}).forEach(f => { if (!f) return; arr(f.payments).forEach(p => p && collectD(p.date)); arr(f.refunds).forEach(p => p && collectD(p.date)); if (f.challanDate) collectD(f.challanDate); });
+  Object.values(S.ipPays || {}).forEach(p => p && collectD(p.date));
+  Object.values(S.docs || {}).forEach(d => { if (!d) return; arr(d.payments).forEach(p => p && collectD(p.date)); arr(d.refunds).forEach(p => p && collectD(p.date)); arr(d.spends).forEach(sp => sp && collectD(sp.date)); });
+  Object.values(S.cnt || {}).forEach(c => { if (!c) return; arr(c.payments).forEach(p => p && collectD(p.date)); });
   Object.keys(S.cday || {}).forEach(k => collectD(S.cday[k] && S.cday[k].date));
-  Object.values(S.expenses).forEach(e => collectD(e.date));
-  Object.values(S.loans).forEach(l => arr(l.entries).forEach(e => collectD(e.date)));
-  Object.values(S.wtx).forEach(t => collectD(t.date));
-  VISA.rows.forEach(v => { arr(v.payList).forEach(p => collectD(p.d)); const fi = visaFeeInfo(v); if (fi.date) collectD(fi.date); });
+  Object.values(S.expenses || {}).forEach(e => e && collectD(e.date));
+  Object.values(S.loans || {}).forEach(l => { if (!l) return; arr(l.entries).forEach(e => e && collectD(e.date)); });
+  Object.values(S.wtx || {}).forEach(t => t && collectD(t.date));
+  arr(VISA && VISA.rows).forEach(v => { if (!v) return; arr(v.payList).forEach(p => p && collectD(p.d)); const fi = visaFeeInfo(v); if (fi.date) collectD(fi.date); });
 
   Array.from(histDates).sort().forEach(hd => {
-    const hlist = allTxForDate(hd);
+    const hlist = allTxForDate(hd, preCM);
     hlist.forEach(t => {
       const cell = byW[t.w];
       if (!cell) return;
@@ -2347,14 +2366,15 @@ function dayReconcile(D) {
     if (t.cat === 'ব্যক্তিগত খরচ' && t.dir === 'out') perExp += t.amt;
     if (t.cat === 'ভিসা টাকা জমা' && t.dir === 'in') visaDepositIn += t.amt;
   });
-  Object.values(S.wtx).forEach(t => {
+  Object.values(S.wtx || {}).forEach(t => {
     if (!t || t.date !== D) return;
     if (t.type === 'visa_return') revKept += n(t.kept);
     if (t.type === 'mfs_io' && n(t.fee) > 0 && t.subType === 'cash_in_client' && !t.mfsCutFee) revCounter += n(t.fee);
   });
-  Object.values(S.files).forEach(f => { const c = fileCalc(f); if (c.ret && f.retDate === D) revKept += c.kept; else if (!c.ret && f.appDate === D) revDocPass += c.profit; });
-  Object.values(S.docs).forEach(d => { const c = docCalc(d); if (c.real && docProfitDate(d) === D) { if (d.status === 'ret') revKept += c.kept; else revDocPass += c.profit; } });
-  VISA.rows.forEach(v => {
+  Object.values(S.files || {}).forEach(f => { if (!f) return; const c = fileCalc(f); if (c.ret && f.retDate === D) revKept += c.kept; else if (!c.ret && f.appDate === D) revDocPass += c.profit; });
+  Object.values(S.docs || {}).forEach(d => { if (!d) return; const c = docCalc(d); if (c.real && docProfitDate(d) === D) { if (d.status === 'ret') revKept += c.kept; else revDocPass += c.profit; } });
+  arr(VISA && VISA.rows).forEach(v => {
+    if (!v) return;
     const fi = visaFeeInfo(v);
     if ((v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !fi.paid && fi.fee > 0) visaFeePending += fi.fee;
   });
@@ -2492,8 +2512,8 @@ function setupBannerHtml(D, R) {
   if (!stDate && !hasPrevClose) {
     return '<div class="card stack" style="gap:10px;border:2px solid var(--warn);background:var(--warnbg)">'
       + '<div class="row between"><b style="color:var(--warn);font-size:15.5px">⚠️ আপনার অ্যাপে আগের অনেক ডাটা আছে — প্রথমবার ওপেনিং ব্যালেন্স সেট করুন!</b></div>'
-      + '<div class="sm" style="line-height:1.55">যেহেতু «দৈনিক হিসাব মেলানো» ফিচারটি নতুন যোগ করা হয়েছে এবং আগে কোনো ওপেনিং বা ক্লোজিং ব্যালেন্স ছিল না, তাই আগের পুরনো ফাইল/ডকুমেন্টের লেনদেন মিলে এখন ওপেনিং ব্যালেন্স <b>' + money(R.totOpen) + '</b> দেখাচ্ছে।<br>'
-      + '👉 আগের সব ডাটা অক্ষুণ্ণ রেখে <b>আজ থেকে ফ্রেশভাবে</b> ৩টি ড্রয়ারের হিসাব শুরু করতে নিচের বাটনে চাপ দিন:</div>'
+      + '<div class="sm" style="line-height:1.55">যেহেতু «দৈনিক হিসাব মেলানো» ফিচারটি নতুন যোগ করা হয়েছে, তাই আপনার পুরনো সব ফাইল ও হিসাব অক্ষুণ্ণ রেখে আজকের আগের লেনদেনগুলো ড্রয়ারের ওপেনিং ব্যালেন্স থেকে অটোমেটিক বাদ রাখা হয়েছে (বর্তমান শুরুর ব্যালেন্স: <b>' + money(R.totOpen) + '</b>)।<br>'
+      + '👉 আজ কাজ শুরু করার সময় আপনার ৩টি ড্রয়ারে বাস্তবে কত টাকা আছে তা বসাতে নিচের বাটনে চাপ দিন:</div>'
       + '<button type="button" class="btn block" onclick="firstTimeSetupSheet(\'' + D + '\')">🚀 প্রথমবার শুরুর ব্যালেন্স (Opening Balance) সেট করুন</button>'
       + '</div>';
   }
@@ -2554,9 +2574,10 @@ function dhShift(k) { UI.dhd = addD(UI.dhd || today(), k); if (UI.dhd === today(
 function dhJump(d) { UI.dhd = (!d || d === today()) ? '' : d; render(); }
 
 function vDhisab() {
+  try {
   const D = UI.dhd || today(), rel = relDay(D), R = dayReconcile(D);
   const wFilter = UI.dhw || 'all';
-  const pendVisaFees = VISA.rows.filter(v => (v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !visaFeeInfo(v).paid && visaFeeInfo(v).fee > 0);
+  const pendVisaFees = arr(VISA && VISA.rows).filter(v => v && (v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !visaFeeInfo(v).paid && visaFeeInfo(v).fee > 0);
 
   // Header Date Bar
   const dateNav = '<div class="card row between"><button class="ib" onclick="dhShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input id="dh_dsel" type="date" value="' + D + '" onchange="dhJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + ' · দিন শেষের হিসাব মেলানো</div></div><button class="ib" onclick="dhShift(1)" aria-label="পরের দিন">›</button></div>';
@@ -2668,6 +2689,10 @@ function vDhisab() {
     + '<button class="btn ghost block" onclick="walletManageSheet()">⚙️ ড্রয়ার, বিকাশ/নগদ/রকেট/উপায় ও ব্যাংক যোগ বা পরিবর্তন করুন</button>';
 
   return dateNav + setupBannerHtml(D, R) + dailyGuideHtml() + hero + quickBar + drawerCards + saveCloseBox + visaPendHtml + txSec;
+  } catch (err) {
+    console.error("vDhisab error:", err);
+    return '<div class="card stack"><b>⚠ দৈনিক হিসাব লোড করতে সমস্যা হয়েছে</b><div class="sm bad">' + esc(err && err.message ? err.message : String(err)) + '</div><button class="btn block" onclick="firstTimeSetupSheet(today())">🚀 প্রথমবার শুরুর ব্যালেন্স সেট করুন</button></div>';
+  }
 }
 
 function dhLiveDiff(wid, exp) {
