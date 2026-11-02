@@ -259,6 +259,7 @@ const DEFWALLETS = () => [
   { id: 'w_passdoc', name: 'Passport/Docs Drawer (পাসপোর্ট/ডকুমেন্ট)', kind: 'drawer', sub: 'Passport/Docs', owner: 'Rabbi', openBal: 0 },
   { id: 'w_visacash', name: 'Visa Cash Drawer (ভিসা ক্যাশ ড্রয়ার)', kind: 'drawer', sub: 'Visa', owner: 'মালিক', openBal: 0 },
   { id: 'w_ipres', name: 'IP Reserve Box (আইপি রিজার্ভ বক্স)', kind: 'drawer', sub: 'IP Reserve', owner: 'মালিক', openBal: 0 },
+  { id: 'w_bkash_per', name: 'Personal bKash (ব্যক্তিগত বিকাশ)', kind: 'mfs', sub: 'bKash', owner: 'Personal', openBal: 0 },
   { id: 'w_bkash', name: 'bKash (বিকাশ)', kind: 'mfs', sub: 'bKash', owner: 'Business', openBal: 0 },
   { id: 'w_nagad', name: 'Nagad (নগদ)', kind: 'mfs', sub: 'Nagad', owner: 'Business', openBal: 0 },
   { id: 'w_rocket', name: 'Rocket (রকেট)', kind: 'mfs', sub: 'Rocket', owner: 'Personal', openBal: 0 },
@@ -909,6 +910,20 @@ function addPay() { const a = n(val('p_amt')); if (a <= 0) { toast('টাকা
 function rmPay(i) { grab(); fm.payments.splice(i, 1); fileForm(fm.id, true); }
 function saveFile() {
   grab(); if (!fm.name) { toast('নাম লিখুন'); return; }
+  // Auto-add unclicked payment in #p_amt so user never loses typed deposit
+  const pendingPay = n(val('p_amt'));
+  if (pendingPay > 0) {
+    fm.payments = arr(fm.payments).concat([{ id: uid(), date: val('p_date') || today(), amt: pendingPay, w: val('p_w') || 'w_passdoc' }]);
+    $('p_amt').value = '';
+  }
+  // Auto-add unclicked refund in #r_amt if not using f_auto_ref
+  const pendingRef = n(val('r_amt'));
+  if (fm.ret && pendingRef > 0 && !($('f_auto_ref') && $('f_auto_ref').checked)) {
+    const cTmp = fileCalc(fm);
+    const safeR = Math.min(cTmp.refundDue, pendingRef);
+    if (safeR > 0) fm.refunds = arr(fm.refunds).concat([{ id: uid(), date: val('r_date') || fm.retDate || today(), amt: safeR, w: val('r_w') || 'w_passdoc' }]);
+    $('r_amt').value = '';
+  }
   const c0 = fileCalc(fm);
   if (c0.ret) {
     if (c0.paid > 0 && n(fm.kept) > c0.paid) {
@@ -1490,6 +1505,24 @@ function djCalc() {
 }
 function djSave() {
   djGrab(); const d = DJ; const by = PK.dj || '';
+  // Auto-add unclicked payment, spend, or refund so typed numbers are never lost when clicking Save directly
+  const pendDocPay = n(val('dj_payments_amt'));
+  if (pendDocPay > 0) {
+    d.payments = arr(d.payments).concat([{ id: uid(), date: val('dj_payments_date') || today(), amt: pendDocPay, w: val('dj_payments_w') || 'w_passdoc', by: PK.dj_payments || by || actor() }]);
+    $('dj_payments_amt').value = '';
+  }
+  const pendDocSp = n(val('sp_amt'));
+  if (pendDocSp > 0) {
+    d.spends = arr(d.spends).concat([{ id: uid(), date: val('sp_date') || today(), amt: pendDocSp, w: val('sp_w') || 'w_passdoc', note: val('sp_note') ? val('sp_note').trim() : '', by: PK.dj_spends || by || actor() }]);
+    $('sp_amt').value = '';
+  }
+  const pendDocRef = n(val('dj_refunds_amt'));
+  if (d.status === 'ret' && pendDocRef > 0 && !($('dj_auto_ref') && $('dj_auto_ref').checked)) {
+    const cTmp = docCalc(d);
+    const safeR = Math.min(cTmp.refundDue, pendDocRef);
+    if (safeR > 0) d.refunds = arr(d.refunds).concat([{ id: uid(), date: val('dj_refunds_date') || d.retDate || today(), amt: safeR, w: val('dj_refunds_w') || 'w_passdoc', by: PK.dj_refunds || by || actor() }]);
+    $('dj_refunds_amt').value = '';
+  }
   if (!d.name) { toast('ক্লায়েন্টের নাম লিখুন'); return; } if (!d.cat) { toast('কাজের ধরন বাছুন'); return; } if (pkNeed('dj')) { toast('কাজ কে করেছে — স্টাফ বাছুন'); return; }
   const c = docCalc(d); const w = [];
   if (phoneBad(d.phone)) w.push('ফোন নম্বরটা ১১ ডিজিটের (01…) মনে হচ্ছে না');
@@ -1690,7 +1723,12 @@ function ceCalc() {
   $('ce_payments_l').innerHTML = mlHtml('ce', 'payments');
 }
 function ceSave() {
-  ceGrab(); const s = CE; const by = PK.ce || ''; const c = cntCalc(s);
+  ceGrab(); const s = CE; const by = PK.ce || '';
+  const pendCePay = n(val('ce_payments_amt'));
+  if (pendCePay > 0) {
+    s.payments = arr(s.payments).concat([{ id: uid(), date: val('ce_payments_date') || today(), amt: pendCePay, w: val('ce_payments_w') || 'w_counter', by: PK.ce_payments || by || actor() }]);
+    $('ce_payments_amt').value = '';
+  } const c = cntCalc(s);
   if (!s.svc) { toast('সার্ভিস বাছুন'); return; } if (c.total <= 0) { toast('মোট টাকা দিন'); return; } if (pkNeed('ce')) { toast('কে করেছে — স্টাফ বাছুন'); return; }
   if (c.due > 0 && !s.name.trim() && !s.phone.trim()) { toast('বাকি থাকলে ক্লায়েন্টের নাম বা ফোন দিন'); return; }
   if (c.over > 0 && !s._ack) { s._ack = true; $('ce_warn').innerHTML = '⚠ জমা বিলের চেয়ে ' + money(c.over) + ' বেশি। ঠিক থাকলে আবার "সেভ" চাপুন'; $('ce_save').textContent = 'তবুও সেভ করুন'; return; }
@@ -2182,6 +2220,16 @@ const wallets = () => {
     if (idx !== -1) l.splice(idx + 1, 0, ipw);
     else l.push(ipw);
   }
+  if (!l.some(w => w.id === 'w_bkash_per') && !(S.settings.removedWallets || []).includes('w_bkash_per')) {
+    const idxB = l.findIndex(w => w.id === 'w_bkash');
+    const pbk = { id: 'w_bkash_per', name: 'Personal bKash (ব্যক্তিগত বিকাশ)', kind: 'mfs', sub: 'bKash', owner: 'Personal', openBal: 0 };
+    if (idxB !== -1) l.splice(idxB + 1, 0, pbk);
+    else l.push(pbk);
+  }
+  l.forEach(w => {
+    if (w.id === 'w_bank_per' && w.name === 'Personal Bank Account') w.name = 'Personal Bank (ব্যক্তিগত ব্যাংক অ্যাকাউন্ট)';
+    if (w.id === 'w_bank_biz' && w.name === 'Business Bank Account') w.name = 'Business Bank (বিজনেস ব্যাংক অ্যাকাউন্ট)';
+  });
   return l;
 };
 const walletById = id => wallets().find(w => w.id === id) || wallets()[0] || { id: 'w_counter', name: 'Counter Drawer', kind: 'drawer' };
@@ -2213,21 +2261,43 @@ function wFieldHtml(elId, selId, label, forceShow) {
 
 /* ভিসা অ্যাপয়েন্টমেন্ট খরচ ও ভিসা জমা/ফেরতের ড্রয়ার/ব্যাংক ম্যাপিং (S.vmeta) */
 function vMetaOf(vid) {
-  return S.vmeta[vid] || { id: vid, feePaid: undefined, feeDate: '', baseFee: '', softFee: '', feeAmt: 0, feeW: 'w_visacash', refDate: '', refW: 'w_visacash', payW: {} };
+  return S.vmeta[vid] || {
+    id: vid,
+    basePaid: undefined, baseDate: '', baseFee: '', baseW: 'w_visacash',
+    softPaid: undefined, softDate: '', softFee: '', softW: 'w_visacash',
+    feePaid: undefined, feeDate: '', feeAmt: 0, feeW: 'w_visacash',
+    refDate: '', refW: 'w_visacash', payW: {}
+  };
 }
 function visaFeeInfo(v) {
   const m = S.vmeta[v.id] || {};
   const baseFee = m.baseFee !== undefined && m.baseFee !== '' ? n(m.baseFee) : n(v.baseFee !== undefined ? v.baseFee : 1500);
   const softFee = m.softFee !== undefined && m.softFee !== '' ? n(m.softFee) : n(v.softFee);
-  const fee = m.feeAmt > 0 && m.baseFee === undefined ? n(m.feeAmt) : (baseFee + softFee);
-  // In Visa App, expense happens when Appointed or Delivered, or when manually marked paid
-  const autoPaid = (v.feeStatus === 'PAID') || (v.mode === 'APPOINTED' || v.mode === 'DELIVERED');
-  const paid = m.feePaid !== undefined ? !!m.feePaid : autoPaid;
+  const fee = baseFee + softFee;
+
+  // ১. ভিসা ফি (Base Fee): অ্যাপয়েন্টমেন্ট ডেট থাকলে অটো পরিশোধিত ধরা হবে (চাইলে ম্যানুয়ালিও অন/অফ করা যাবে)
+  const autoBasePaid = (v.feeStatus === 'PAID') || ((v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !!(v.apptDate || v.delDate));
+  const basePaid = m.basePaid !== undefined ? !!m.basePaid : (m.feePaid !== undefined ? !!m.feePaid : autoBasePaid);
+  const baseDate = m.baseDate || m.feeDate || (basePaid ? (v.apptDate || v.delDate || v.date || '') : '');
+  const baseW = m.baseW || m.feeW || 'w_visacash';
+
+  // ২. সফটওয়্যার চার্জ (Software Fee): কবে যাবে নিশ্চিত নয়, তাই ডিফল্টভাবে বাকি (false) থাকবে — ইউজার যেদিন দেবেন সেদিন ১-ক্লিকে মার্ক করবেন!
+  const softPaid = m.softPaid !== undefined ? !!m.softPaid : (m.feePaid === true && m.softPaid === undefined ? true : false);
+  const softDate = m.softDate || (softPaid ? (m.feeDate || v.apptDate || v.delDate || v.date || '') : '');
+  const softW = m.softW || m.feeW || 'w_visacash';
+
+  const paidAll = (baseFee <= 0 || basePaid) && (softFee <= 0 || softPaid);
+  const paidAny = (baseFee > 0 && basePaid) || (softFee > 0 && softPaid);
+  const paidAmt = (basePaid ? baseFee : 0) + (softPaid ? softFee : 0);
+  const pendAmt = (basePaid ? 0 : baseFee) + (softPaid ? 0 : softFee);
   const stage = m.stage || (v.mode === 'DELIVERED' ? 'DELIVERED' : 'APPOINTED');
-  // IMPORTANT: Never fallback to today() if unedited, so old Visa files without dates never pollute today/tomorrow's daily hisab!
-  const date = m.feeDate || (paid ? (v.apptDate || v.delDate || v.date || '') : '');
-  const w = m.feeW || 'w_visacash';
-  return { baseFee, softFee, fee, paid, stage, date, w, note: m.note || '' };
+
+  return {
+    baseFee, basePaid, baseDate, baseW,
+    softFee, softPaid, softDate, softW,
+    fee, paid: paidAll, paidAny, paidAmt, pendAmt,
+    stage, date: baseDate || softDate, w: baseW, note: m.note || ''
+  };
 }
 function visaCardSplitHtml(x) {
   const fi = visaFeeInfo(x);
@@ -2242,19 +2312,20 @@ function visaCardSplitHtml(x) {
     + '</div></div>';
 
   const outBox = x.mode === 'RETURNED' ? '' : ('<div class="io-box ' + (fi.paid ? 'out-box-done' : 'out-box-pend') + '">'
-    + '<div class="io-hd"><span class="io-title">📤 খরচের রেকর্ড (ভিসা অ্যাপের ২টি খরচ)</span><span class="io-amt">' + (fi.paid ? '−' + money(fi.fee) : '৳০ (খরচ বাকি)') + '</span></div>'
-    + '<div class="io-body">'
-    + '১. ভিসা ফি (Base Fee): <b>' + money(fi.baseFee) + '</b><br>'
-    + '২. সফটওয়্যার চার্জ (Software): <b>' + money(fi.softFee) + '</b><br>'
-    + 'মোট খরচ: <b>' + money(fi.fee) + '</b> · '
-    + (fi.paid
-      ? '<span class="bad">✓ খরচ হয়েছে [' + (fi.stage === 'DELIVERED' ? 'Delivered' : 'Appointed') + (fi.date ? ' · ' + fd(fi.date) : '') + '] — টাকা চলে গেছে</span>'
-      : '<span class="warnc">⏳ এখনো খরচ হয়নি (Appointed/Delivered হলে খরচ হবে)</span>')
+    + '<div class="io-hd"><span class="io-title">📤 খরচের রেকর্ড (২টি আলাদা খরচ)</span><span class="io-amt">' + (fi.paidAmt > 0 ? '−' + money(fi.paidAmt) : '৳০ (খরচ বাকি)') + '</span></div>'
+    + '<div class="io-body" style="display:flex;flex-direction:column;gap:5px">'
+    + '<div class="row between wrapr" style="background:rgba(255,255,255,.55);padding:5px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.08)">'
+    + '<span><b>১. ভিসা ফি: ' + money(fi.baseFee) + '</b> ' + (fi.basePaid ? '<span class="pill good" style="font-size:10px">✓ গেছে' + (fi.baseDate ? ' (' + fd(fi.baseDate) + ')' : '') + '</span>' : '<span class="pill warn" style="font-size:10px">⏳ বাকি</span>') + '</span>'
+    + '<button type="button" class="btn sm ' + (fi.basePaid ? 'ghost' : 'warnb') + '" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();toggleVisaPartQuick(\'' + x.id + '\',\'base\')">' + (fi.basePaid ? 'আনমার্ক' : '✓ ভিসা ফি গেছে') + '</button>'
     + '</div>'
-    + '<div class="io-actions">'
-    + '<button type="button" class="btn sm ' + (fi.paid ? 'ghost' : 'warnb') + '" onclick="event.stopPropagation();toggleVisaFeeQuick(\'' + x.id + '\')">'
-    + (fi.paid ? '✓ খরচ হয়েছে (আনমার্ক করুন)' : '✓ খরচ হয়েছে মার্ক করুন (Appointed/Delivered)') + '</button>'
-    + '<button type="button" class="btn sm ghost" onclick="event.stopPropagation();visaFeeSheet(\'' + x.id + '\')">✎ ২টি খরচ এডিট</button>'
+    + '<div class="row between wrapr" style="background:rgba(255,255,255,.55);padding:5px 8px;border-radius:7px;border:1px solid rgba(0,0,0,.08)">'
+    + '<span><b>২. সফটওয়্যার ফি: ' + money(fi.softFee) + '</b> ' + (fi.softPaid ? '<span class="pill good" style="font-size:10px">✓ গেছে' + (fi.softDate ? ' (' + fd(fi.softDate) + ')' : '') + '</span>' : '<span class="pill warn" style="font-size:10px">⏳ বাকি (যেদিন দেবেন)</span>') + '</span>'
+    + '<button type="button" class="btn sm ' + (fi.softPaid ? 'ghost' : 'warnb') + '" style="padding:2px 8px;font-size:11px" onclick="event.stopPropagation();toggleVisaPartQuick(\'' + x.id + '\',\'soft\')">' + (fi.softPaid ? 'আনমার্ক' : '✓ সফটওয়্যার ফি দিলাম') + '</button>'
+    + '</div>'
+    + '</div>'
+    + '<div class="io-actions" style="margin-top:4px">'
+    + '<span class="sm">মোট খরচ: <b>' + money(fi.fee) + '</b>' + (fi.pendAmt > 0 ? ' · <span class="bad">বাকি: ' + money(fi.pendAmt) + '</span>' : ' · <span class="good">✓ ২টিই পরিশোধিত</span>') + '</span>'
+    + '<button type="button" class="btn sm ghost" onclick="event.stopPropagation();visaFeeSheet(\'' + x.id + '\')">✎ তারিখ ও টাকা এডিট</button>'
     + '</div></div>');
 
   const retBox = x.mode === 'RETURNED' ? ('<div class="io-box ret-box">'
@@ -2270,59 +2341,95 @@ function visaCardSplitHtml(x) {
 function visaFeeCtrlHtml(x) {
   return visaCardSplitHtml(x);
 }
-function toggleVisaFeeQuick(vid) {
+function toggleVisaPartQuick(vid, part) {
   const v = VISA.rows.find(x => x.id === vid); if (!v) return;
   const fi = visaFeeInfo(v);
   const cur = vMetaOf(vid);
   cur.id = vid;
-  cur.feePaid = !fi.paid;
-  if (cur.feePaid) {
-    cur.feeDate = cur.feeDate || (UI.dhd || today());
+  const D = UI.dhd || today();
+  if (part === 'base') {
+    cur.basePaid = !fi.basePaid;
+    if (cur.basePaid) cur.baseDate = cur.baseDate || v.apptDate || D;
     cur.baseFee = fi.baseFee;
+  } else if (part === 'soft') {
+    cur.softPaid = !fi.softPaid;
+    if (cur.softPaid) cur.softDate = D;
     cur.softFee = fi.softFee;
-    cur.feeAmt = fi.baseFee + fi.softFee;
-    cur.stage = v.mode === 'DELIVERED' ? 'DELIVERED' : 'APPOINTED';
   }
   cur.updatedAt = Date.now();
   S.vmeta[vid] = cur;
   save('vmeta', vid);
   render();
-  toast(cur.feePaid ? '✓ ভিসা খরচ (১. ভিসা ফি + ২. সফটওয়্যার চার্জ) সম্পন্ন মার্ক হয়েছে ও দৈনিক হিসাব থেকে কমেছে!' : '⏳ ভিসা খরচ বাকি (Pending) হিসেবে রাখা হয়েছে');
+  if (part === 'base') {
+    toast(cur.basePaid ? ('✓ ১. ভিসা ফি (' + money(fi.baseFee) + ') ' + fd(cur.baseDate) + ' তারিখে খরচ হিসেবে ধরা হয়েছে!') : '⏳ ১. ভিসা ফি বাকি (Unpaid) রাখা হয়েছে');
+  } else {
+    toast(cur.softPaid ? ('✓ ২. সফটওয়্যার ফি (' + money(fi.softFee) + ') ' + fd(cur.softDate) + ' তারিখের দৈনিক হিসাব থেকে কমেছে!') : '⏳ ২. সফটওয়্যার ফি বাকি (Unpaid) রাখা হয়েছে');
+  }
+}
+function toggleVisaFeeQuick(vid) {
+  toggleVisaPartQuick(vid, 'soft');
 }
 function vfCalcTotal() {
   const b = n(val('vf_base')), s = n(val('vf_soft'));
   if ($('vf_amt')) $('vf_amt').value = b + s;
 }
+function setVfPart(part, valStr) {
+  if (part === 'base') {
+    $('vf_bp_v').value = valStr;
+    $('vf_bp1').className = valStr === '1' ? 'on' : '';
+    $('vf_bp0').className = valStr === '0' ? 'on' : '';
+  } else {
+    $('vf_sp_v').value = valStr;
+    $('vf_sp1').className = valStr === '1' ? 'on' : '';
+    $('vf_sp0').className = valStr === '0' ? 'on' : '';
+  }
+}
 function visaFeeSheet(vid) {
   const v = VISA.rows.find(x => x.id === vid); if (!v) return;
   const fi = visaFeeInfo(v);
-  sheet('ভিসা খরচ (Appointed / Delivered) — ' + esc(v.name),
-    '<div class="mut sm">ভিসা অ্যাপের নিয়ম অনুযায়ী ফাইল <b>Appointed</b> বা <b>Delivered</b> হলে ২টি খরচ হয়: <b>(১) ভিসা ফি</b> এবং <b>(২) সফটওয়্যার চার্জ</b>। খরচ হয়ে গেলে নিচে "✓ খরচ হয়েছে" সিলেক্ট করুন—তাহলে এই টাকা আপনার দৈনিক হিসাব থেকে অটোমেটিক চলে যাবে (−)।</div>'
-    + '<div class="seg"><button type="button" id="vf_p1" class="' + (fi.paid ? 'on' : '') + '" onclick="$(\'vf_p1\').className=\'on\';$(\'vf_p0\').className=\'\';$(\'vf_paid_v\').value=\'1\'">✓ খরচ হয়েছে (Appointed/Delivered — টাকা চলে গেছে)</button><button type="button" id="vf_p0" class="' + (!fi.paid ? 'on' : '') + '" onclick="$(\'vf_p0\').className=\'on\';$(\'vf_p1\').className=\'\';$(\'vf_paid_v\').value=\'0\'">⏳ খরচ বাকি আছে (এখনো টাকা যায়নি)</button></div>'
-    + '<input type="hidden" id="vf_paid_v" value="' + (fi.paid ? '1' : '0') + '">'
-    + '<div class="grid2"><div class="field"><label for="vf_stage">কখন খরচ হয়েছে?</label><select id="vf_stage"><option value="APPOINTED"' + (fi.stage !== 'DELIVERED' ? ' selected' : '') + '>📅 Appointed (অ্যাপয়েন্টমেন্ট হয়েছে)</option><option value="DELIVERED"' + (fi.stage === 'DELIVERED' ? ' selected' : '') + '>📦 Delivered (ডেলিভারি হয়েছে)</option></select></div><div class="field"><label for="vf_date">খরচ হওয়ার তারিখ</label><input id="vf_date" type="date" value="' + (fi.date || UI.dhd || today()) + '"></div></div>'
-    + '<div class="grid2"><div class="field"><label for="vf_base">১. ভিসা ফি / Base Visa Fee (৳)</label><input id="vf_base" type="number" inputmode="decimal" value="' + fi.baseFee + '" oninput="vfCalcTotal()"></div><div class="field"><label for="vf_soft">২. সফটওয়্যার চার্জ / Software Charge (৳)</label><input id="vf_soft" type="number" inputmode="decimal" value="' + fi.softFee + '" oninput="vfCalcTotal()"></div></div>'
+  const D = UI.dhd || today();
+  sheet('ভিসার ২টি আলাদা খরচ (ভিসা ফি ও সফটওয়্যার ফি) — ' + esc(v.name),
+    '<div class="mut sm"><b>নিয়ম:</b> ১. ভিসা ফি সাধারণত অ্যাপয়েন্টমেন্টের তারিখে যায়, কিন্তু ২. সফটওয়্যার চার্জ যেদিন খুশি সেদিন যেতে পারে। নিচে দুটি খরচের স্ট্যাটাস ও তারিখ আলাদাভাবে অথবা একসাথে সেট করতে পারবেন:</div>'
+    + '<div class="ipbox stack" style="gap:6px;background:var(--soft)"><div class="row between wrapr"><b class="sm">⚡ ২টি খরচ একসাথে সেট করতে চাইলে:</b><input id="vf_date" type="date" value="' + (fi.date || D) + '" style="max-width:155px;padding:4px 8px" onchange="$(\'vf_bdate\').value=this.value;$(\'vf_sdate\').value=this.value"></div>'
+    + '<div class="seg"><button type="button" id="vf_p1" class="' + (fi.paid ? 'on' : '') + '" onclick="$(\'vf_p1\').className=\'on\';$(\'vf_p0\').className=\'\';$(\'vf_paid_v\').value=\'1\';setVfPart(\'base\',\'1\');setVfPart(\'soft\',\'1\')">✓ ২টি খরচই দিয়েছি (Both Paid)</button><button type="button" id="vf_p0" class="' + (!fi.paid ? 'on' : '') + '" onclick="$(\'vf_p0\').className=\'on\';$(\'vf_p1\').className=\'\';$(\'vf_paid_v\').value=\'0\';setVfPart(\'base\',\'0\');setVfPart(\'soft\',\'0\')">⏳ ২টিই বাকি আছে (Both Unpaid)</button></div>'
+    + '<input type="hidden" id="vf_paid_v" value="' + (fi.paid ? '1' : '0') + '"></div>'
+    + '<div class="ipbox stack" style="gap:8px;border:1.5px solid var(--acc)">'
+    + '<b>১. ভিসা ফি (Base Visa Fee) — সাধারণত অ্যাপয়েন্টমেন্ট ডেটে যায়</b>'
+    + '<div class="seg"><button type="button" id="vf_bp1" class="' + (fi.basePaid ? 'on' : '') + '" onclick="setVfPart(\'base\',\'1\')">✓ ভিসা ফি গেছে (Paid)</button><button type="button" id="vf_bp0" class="' + (!fi.basePaid ? 'on' : '') + '" onclick="setVfPart(\'base\',\'0\')">⏳ ভিসা ফি বাকি (Unpaid)</button></div>'
+    + '<input type="hidden" id="vf_bp_v" value="' + (fi.basePaid ? '1' : '0') + '">'
+    + '<div class="grid2"><div class="field"><label for="vf_base">১. ভিসা ফি টাকার অংক (৳)</label><input id="vf_base" type="number" inputmode="decimal" value="' + fi.baseFee + '" oninput="vfCalcTotal()"></div><div class="field"><label for="vf_bdate">ভিসা ফি যাওয়ার তারিখ</label><input id="vf_bdate" type="date" value="' + (fi.baseDate || v.apptDate || D) + '"></div></div>'
+    + '</div>'
+    + '<div class="ipbox stack" style="gap:8px;border:1.5px solid var(--warn)">'
+    + '<b>২. সফটওয়্যার চার্জ (Software Fee) — যেদিন দেবেন সেদিন মার্ক করুন</b>'
+    + '<div class="seg"><button type="button" id="vf_sp1" class="' + (fi.softPaid ? 'on' : '') + '" onclick="setVfPart(\'soft\',\'1\')">✓ সফটওয়্যার ফি দিয়েছি (Paid)</button><button type="button" id="vf_sp0" class="' + (!fi.softPaid ? 'on' : '') + '" onclick="setVfPart(\'soft\',\'0\')">⏳ সফটওয়্যার ফি বাকি আছে (পরে দেব)</button></div>'
+    + '<input type="hidden" id="vf_sp_v" value="' + (fi.softPaid ? '1' : '0') + '">'
+    + '<div class="grid2"><div class="field"><label for="vf_soft">২. সফটওয়্যার চার্জ টাকার অংক (৳)</label><input id="vf_soft" type="number" inputmode="decimal" value="' + fi.softFee + '" oninput="vfCalcTotal()"></div><div class="field"><label for="vf_sdate">সফটওয়্যার ফি দেওয়ার তারিখ</label><input id="vf_sdate" type="date" value="' + (fi.softDate || D) + '"></div></div>'
+    + '</div>'
     + '<div class="field"><label for="vf_amt">মোট ভিসা খরচ (১ + ২ একত্রে ৳)</label><input id="vf_amt" type="number" inputmode="decimal" value="' + fi.fee + '" readonly style="background:var(--bg);font-weight:800"></div>'
     + wFieldHtml('vf_w', fi.w || 'w_visacash', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে খরচ গেছে')
-    + '<div class="field"><label for="vf_note">📝 নোট (ঐচ্ছিক)</label><input id="vf_note" value="' + esc(fi.note) + '" placeholder="যেমন: অ্যাপয়েন্টমেন্ট ফি ও সফটওয়্যার চার্জ পরিশোধ"></div>'
-    + '<button class="btn block" onclick="saveVisaFeeMeta(\'' + vid + '\')">সেভ করুন</button>');
+    + '<div class="field"><label for="vf_note">📝 নোট (ঐচ্ছিক)</label><input id="vf_note" value="' + esc(fi.note) + '" placeholder="যেমন: সফটওয়্যার চার্জ আজ এজেন্টকে দিলাম"></div>'
+    + '<button class="btn block" onclick="saveVisaFeeMeta(\'' + vid + '\')">✅ সেভ করুন</button>');
 }
 function saveVisaFeeMeta(vid) {
   const cur = vMetaOf(vid);
   cur.id = vid;
-  cur.feePaid = val('vf_paid_v') === '1';
-  cur.stage = val('vf_stage') || 'APPOINTED';
-  cur.feeDate = val('vf_date') || today();
+  cur.basePaid = val('vf_bp_v') === '1';
   cur.baseFee = n(val('vf_base'));
+  cur.baseDate = val('vf_bdate') || today();
+  cur.softPaid = val('vf_sp_v') === '1';
   cur.softFee = n(val('vf_soft'));
+  cur.softDate = val('vf_sdate') || today();
   cur.feeAmt = cur.baseFee + cur.softFee;
+  cur.feePaid = cur.basePaid && (cur.softFee <= 0 || cur.softPaid);
   cur.feeW = val('vf_w') || 'w_visacash';
+  cur.baseW = cur.feeW;
+  cur.softW = cur.feeW;
   cur.note = val('vf_note').trim();
   cur.updatedAt = Date.now();
   S.vmeta[vid] = cur;
   save('vmeta', vid);
   closeSheet();
-  toast(cur.feePaid ? '✓ ভিসা ফি ও সফটওয়্যার চার্জ পরিশোধিত ধরা হয়েছে (দৈনিক হিসাব থেকে কমেছে)' : '⏳ ভিসা খরচ বাকি (Pending) রাখা হয়েছে');
+  toast('✅ ভিসা ফি ও সফটওয়্যার চার্জের হিসাব আলাদাভাবে সেভ হয়েছে!');
 }
 function visaReturnSheet(vid) {
   const v = VISA.rows.find(x => x.id === vid); if (!v) return;
@@ -2418,6 +2525,8 @@ function allTxForDate(D) {
     });
     if (f.challan && f.challanDate === D && n(f.passFee) > 0 && (f.challanW || !isMultiW())) {
       push(f.challanW || 'w_passdoc', 'out', f.passFee, 'পাসপোর্ট চালান ফি', f.name || 'পাসপোর্ট', 'সরকারি চালান খরচ (ফাইল ফর্ম থেকে)', false, "fileForm('" + f.id + "')");
+    } else if (f.ret && f.retSpent && n(f.retCost) > 0 && (f.retDate || f.appDate) === D) {
+      push('w_passdoc', 'out', f.retCost, 'ফেরত পাসপোর্টের খরচ', f.name || 'পাসপোর্ট', 'ফেরত ফাইলে আগে হয়ে যাওয়া খরচ', false, "fileForm('" + f.id + "')");
     }
   });
 
@@ -2476,9 +2585,11 @@ function allTxForDate(D) {
       }
     }
     const fi = visaFeeInfo(v);
-    if (fi.paid && fi.date === D && fi.fee > 0) {
-      const subTxt = '১. ভিসা ফি: ' + money(fi.baseFee) + ' + ২. সফটওয়্যার চার্জ: ' + money(fi.softFee) + ' [' + (fi.stage === 'DELIVERED' ? 'Delivered' : 'Appointed') + ']' + (fi.note ? ' · ' + fi.note : '');
-      push(fi.w || 'w_visacash', 'out', fi.fee, 'ভিসা ও সফটওয়্যার খরচ (Appointed/Delivered)', (v.serial ? '#' + v.serial + ' ' : '') + v.name, subTxt, false, "visaFeeSheet('" + v.id + "')");
+    if (fi.basePaid && fi.baseDate === D && fi.baseFee > 0) {
+      push(fi.baseW || 'w_visacash', 'out', fi.baseFee, '১. ভিসা ফি (Base Visa Fee)', (v.serial ? '#' + v.serial + ' ' : '') + v.name, 'অ্যাপয়েন্টমেন্ট ভিসা ফি' + (fi.note ? ' · ' + fi.note : ''), false, "visaFeeSheet('" + v.id + "')");
+    }
+    if (fi.softPaid && fi.softDate === D && fi.softFee > 0) {
+      push(fi.softW || 'w_visacash', 'out', fi.softFee, '২. ভিসা সফটওয়্যার চার্জ (Software Fee)', (v.serial ? '#' + v.serial + ' ' : '') + v.name, 'ভিসা সফটওয়্যার/স্লট খরচ' + (fi.note ? ' · ' + fi.note : ''), false, "visaFeeSheet('" + v.id + "')");
     }
   });
 
@@ -3096,6 +3207,49 @@ function dailyGuideHtml() {
     + '</div>';
 }
 
+
+function agentB2bSheet(D) {
+  const dt = D || UI.dhd || today();
+  sheet('📲 মোবাইল ব্যাংকিং এজেন্ট B2B (ক্যাশ পরের দিন দিলে)',
+    '<div class="sm" style="background:var(--soft);padding:10px 12px;border-radius:10px;border:1px solid var(--acc);line-height:1.55">'
+    + '<b>💡 এজেন্ট B2B-এর সহজ নিয়ম:</b><br>'
+    + '• <b>একই দিনে ক্যাশ দিয়ে দিলে:</b> এজেন্ট আপনার ওয়ালেটে B2B দিল এবং আপনি <b>আজই</b> তাকে নগদ ক্যাশ দিয়ে দিলেন — তাহলে <b>অ্যাপে কিছুই লিখতে হবে না!</b> (কারণ আপনার বিকাশ বক্সে টাকা বেড়েছে আর ক্যাশ ড্রয়ারে ঠিক তত টাকাই কমেছে, তাই দিন শেষে দুই বক্সের যোগফল অটো মিলে যাবে)।<br>'
+    + '• <b>ক্যাশ পরের দিন দিলে (বাকি থাকলে):</b> এজেন্ট আজ আপনার ওয়ালেটে B2B দিল কিন্তু আপনি ক্যাশ দেবেন <b>কালকে (পরের দিন)</b> — কেবল তখনই নিচের অপশনটি ব্যবহার করুন, যাতে আজ বিকাশে টাকা বেশি থাকলেও হিসাব মিলে যায় এবং কাল ক্যাশ দিলে কালকের হিসাবও মিলে যায়!</div>'
+    + '<div class="seg" style="margin-top:6px">'
+    + '<button type="button" id="b2b_t1" class="on" onclick="$(\'b2b_t1\').className=\'on\';$(\'b2b_t2\').className=\'\';$(\'b2b_dir\').value=\'in\';$(\'b2b_lbl\').textContent=\'আজ এজেন্ট কত টাকা B2B দিল (ক্যাশ কালকে দেবেন)? (৳)\'">📥 ১. আজ ওয়ালেটে B2B আসলো (ক্যাশ পরে দেব +)</button>'
+    + '<button type="button" id="b2b_t2" class="" onclick="$(\'b2b_t2\').className=\'on\';$(\'b2b_t1\').className=\'\';$(\'b2b_dir\').value=\'out\';$(\'b2b_lbl\').textContent=\'আজ এজেন্টকে আগের B2B-এর কত ক্যাশ পরিশোধ করলেন? (৳)\'">📤 ২. আজ এজেন্টকে আগের B2B-এর ক্যাশ দিলাম (−)</button>'
+    + '</div>'
+    + '<input type="hidden" id="b2b_dir" value="in">'
+    + '<div class="grid2"><div class="field"><label for="b2b_date">তারিখ</label><input id="b2b_date" type="date" value="' + dt + '"></div>'
+    + '<div class="field"><label for="b2b_amt" id="b2b_lbl">আজ এজেন্ট কত টাকা B2B দিল (ক্যাশ কালকে দেবেন)? (৳)</label><input id="b2b_amt" type="number" inputmode="decimal" placeholder="যেমন: 50000"></div></div>'
+    + '<div class="field"><label for="b2b_agent">এজেন্ট বা কোম্পানির নাম (ঐচ্ছিক)</label><input id="b2b_agent" placeholder="যেমন: বিকাশ/নগদ ডিএসও (DSO) ভাই"></div>'
+    + '<div class="field"><label for="b2b_note">📝 নোট (ঐচ্ছিক)</label><input id="b2b_note" placeholder="যেমন: আজ B2B নিলাম, কাল ক্যাশ দেব"></div>'
+    + '<button type="button" class="btn block" onclick="saveAgentB2b()">✅ সেভ করুন (দৈনিক হিসাবে মিলিয়ে নিন)</button>');
+}
+
+function saveAgentB2b() {
+  const amt = n(val('b2b_amt'));
+  if (amt <= 0) { toast('টাকার অংক দিন'); return; }
+  const dir = val('b2b_dir') === 'out' ? 'out' : 'in';
+  const dt = val('b2b_date') || today();
+  const ag = val('b2b_agent').trim() || 'বিকাশ/নগদ এজেন্ট (B2B)';
+  const nt = val('b2b_note').trim();
+  const id = uid();
+  S.wtx[id] = {
+    id, type: 'simple', dir,
+    cat: dir === 'in' ? '📲 এজেন্ট B2B গ্রহণ (ক্যাশ পরে দেবেন +)' : '📲 এজেন্ট B2B-এর বকেয়া ক্যাশ পরিশোধ (−)',
+    isRev: false,
+    date: dt, amt, w: dir === 'in' ? 'w_bkash' : 'w_counter',
+    client: ag,
+    note: nt || (dir === 'in' ? 'ওয়ালেটে B2B এসেছে, ক্যাশ পরে দেওয়া হবে' : 'আগের B2B-এর নগদ ক্যাশ পরিশোধ'),
+    by: actor(),
+    createdAt: Date.now()
+  };
+  save('wtx', id);
+  closeSheet();
+  toast(dir === 'in' ? ('✅ +' + money(amt) + ' এজেন্ট B2B জমা হিসেবে ধরা হয়েছে! কাল ক্যাশ দিলে ২ নম্বর অপশনে গিয়ে বিয়োগ দেবেন।') : ('✅ −' + money(amt) + ' এজেন্ট B2B ক্যাশ পরিশোধ হিসেবে আজকের হিসাব থেকে কমেছে!'));
+}
+
 function autoAdjustMfsDiff(D) {
   const openVal = $('dc_tot_open') ? n(val('dc_tot_open')) : 0;
   const extIn = $('dh_ext_in_v') ? n(val('dh_ext_in_v')) : 0;
@@ -3257,7 +3411,7 @@ function totalMathDetailHtml(R) {
 
 function vDhisab() {
   const D = UI.dhd || today(), rel = relDay(D), R = dayReconcile(D);
-  const pendVisaFees = VISA.rows.filter(v => (v.mode === 'APPOINTED' || v.mode === 'DELIVERED') && !visaFeeInfo(v).paid && visaFeeInfo(v).fee > 0);
+  const pendVisaFees = VISA.rows.filter(v => v.mode !== 'RETURNED' && (v.mode === 'APPOINTED' || v.mode === 'DELIVERED' || visaFeeInfo(v).paidAny) && visaFeeInfo(v).pendAmt > 0);
   const startD = S.settings.dhStartDate || '';
 
   // Top Date Navigation + 1-Click Fresh Start Button
@@ -3268,14 +3422,20 @@ function vDhisab() {
     + '<button type="button" class="btn sm good" onclick="freshStartSheet(\'' + D + '\')">🚀 নতুন শুরুর ব্যালেন্স সেট করুন</button>'
     + '</div></div>';
 
-  // Pending Visa Appointment Fees Section
-  const visaPendHtml = pendVisaFees.length ? ('<h2>⏳ ভিসা অ্যাপয়েন্টমেন্ট হয়েছে কিন্তু ভিসা খরচ এখনো বাকি (' + pendVisaFees.length + 'টি)</h2>'
-    + '<div class="card stack" style="gap:8px">'
-    + '<div class="sm mut">ভিসা অ্যাপয়েন্টমেন্ট হলে যে ভিসা ফি ও সফটওয়্যার চার্জ আজ বা পরে দিতে হয়, সেগুলোর বাকি তালিকা (আজ পরিশোধ করলে "খরচ দিন" চাপুন):</div>'
+  // Pending Visa Base Fee / Software Fee Section (1-click per expense)
+  const visaPendHtml = pendVisaFees.length ? ('<h2>⏳ ভিসা ফি বা সফটওয়্যার ফি এখনো দেওয়া বাকি (' + pendVisaFees.length + 'টি ফাইল)</h2>'
+    + '<div class="card stack" style="gap:8px;border:1.5px solid var(--warn)">'
+    + '<div class="sm mut">ভিসা ফি সাধারণত অ্যাপয়েন্টমেন্টের দিন যায়, কিন্তু সফটওয়্যার ফি যেদিন দেন সেদিন নিচের বাটনে ১-ক্লিক করলেই আজকের দৈনিক হিসাব থেকে কমে যাবে:</div>'
     + pendVisaFees.map(v => {
       const fi = visaFeeInfo(v);
-      return '<div class="kv" style="align-items:center"><span style="color:var(--ink)"><b>' + (v.serial ? '#' + esc(v.serial) + ' ' : '') + esc(v.name) + '</b><div class="sm mut">' + (v.apptDate ? 'Appt: ' + fd(v.apptDate) + ' · ' : '') + 'ভিসা ফি ' + money(v.baseFee) + ' + সফটওয়্যার ' + money(v.softFee) + '</div></span>'
-        + '<span class="row" style="gap:8px"><b class="num bad">' + money(fi.fee) + '</b><button class="btn sm warnb" onclick="visaFeeSheet(\'' + v.id + '\')">খরচ দিন</button></span></div>';
+      return '<div class="kv" style="align-items:center;flex-wrap:wrap;gap:8px"><span style="color:var(--ink);min-width:180px"><b>' + (v.serial ? '#' + esc(v.serial) + ' ' : '') + esc(v.name) + '</b>'
+        + '<div class="sm mut">' + (v.apptDate ? 'Appt: ' + fd(v.apptDate) + ' · ' : '')
+        + '১. ভিসা ফি: <b class="' + (fi.basePaid ? 'good' : 'bad') + '">' + money(fi.baseFee) + (fi.basePaid ? ' (✓ গেছে)' : ' (বাকি)') + '</b> · '
+        + '২. সফটওয়্যার: <b class="' + (fi.softPaid ? 'good' : 'bad') + '">' + money(fi.softFee) + (fi.softPaid ? ' (✓ গেছে)' : ' (বাকি)') + '</b></div></span>'
+        + '<span class="row wrapr" style="gap:6px">'
+        + (!fi.basePaid && fi.baseFee > 0 ? '<button class="btn sm warnb" onclick="toggleVisaPartQuick(\'' + v.id + '\',\'base\')">✓ ভিসা ফি (' + money(fi.baseFee) + ') আজ গেছে</button>' : '')
+        + (!fi.softPaid && fi.softFee > 0 ? '<button class="btn sm warnb" onclick="toggleVisaPartQuick(\'' + v.id + '\',\'soft\')">✓ সফটওয়্যার ফি (' + money(fi.softFee) + ') আজ দিলাম</button>' : '')
+        + '<button class="btn sm ghost" onclick="visaFeeSheet(\'' + v.id + '\')">✎ এডিট</button></span></div>';
     }).join('') + '</div>') : '';
 
   // ===== ডিফল্ট: সহজ ১-বক্স টোটাল মেথড (Simple Total Method) =====
@@ -3314,10 +3474,10 @@ function vDhisab() {
       }
       return '<div class="acct-row" style="' + (w.id === 'w_ipres' ? 'border-color:var(--acc);background:var(--soft)' : '') + '">'
         + '<div><b style="font-size:14px">' + (idx + 1) + '. ' + esc(w.name) + '</b> <span class="pill ' + (w.id === 'w_ipres' ? 'warn' : (WKIND[w.kind] ? WKIND[w.kind].badge : '')) + '" style="font-size:10px;padding:1px 6px">' + (w.id === 'w_ipres' ? 'IP ফান্ড' : esc(kBadge)) + '</span>'
-        + (w.owner ? '<div class="sm mut">' + esc(w.owner) + '</div>' : '') + ipHint + '</div>'
+        + (w.owner ? '<div class="sm ' + (wIsPer(w) ? 'bad' : 'mut') + '" style="font-weight:' + (wIsPer(w) ? '700' : '400') + '">' + (wIsPer(w) ? '👤 ব্যক্তিগত অ্যাকাউন্ট (' + esc(w.owner) + ')' : '🏢 দোকান/বিজনেস (' + esc(w.owner) + ')') + '</div>' : '') + ipHint + '</div>'
         + '<div class="acct-inp-wrap"><small>১. শুরুতে ছিল (Opening ৳)</small>'
         + '<input class="tot_w_open" data-wid="' + esc(w.id) + '" id="tot_open_w_' + esc(w.id) + '" type="number" inputmode="decimal" placeholder="0" value="' + openVal + '" oninput="syncTotAcctBoxes(' + Math.round(R.extIn) + ',' + Math.round(R.extOut) + ')"></div>'
-        + '<div class="acct-inp-wrap"><small>২. দিন শেষে আছে (Ending ৳)</small>'
+        + '<div class="acct-inp-wrap"><div class="row between"><small>২. দিন শেষে আছে (Ending ৳)</small><span id="tot_dl_' + esc(w.id) + '" class="sm ' + (c.hasActual ? (Math.round(c.actual - c.open) > 0 ? 'good' : (Math.round(c.actual - c.open) < 0 ? 'bad' : 'mut')) : 'mut') + '" style="font-size:10.5px;font-weight:700">' + (c.hasActual ? (Math.round(c.actual - c.open) === 0 ? 'অপরিবর্তিত' : (Math.round(c.actual - c.open) > 0 ? '+' + money(c.actual - c.open) : '−' + money(Math.abs(c.actual - c.open)))) : '') + '</span></div>'
         + '<input class="tot_w_end end-f" data-wid="' + esc(w.id) + '" id="tot_end_w_' + esc(w.id) + '" type="number" inputmode="decimal" placeholder="দিন শেষে কত আছে?" value="' + endVal + '" oninput="syncTotAcctBoxes(' + Math.round(R.extIn) + ',' + Math.round(R.extOut) + ')"></div>'
         + '</div>';
     }).join('');
@@ -3326,7 +3486,7 @@ function vDhisab() {
       + '<div class="row between wrapr" style="gap:8px">'
       + '<div><b style="font-size:17px">🏦 ৩টি ড্রয়ার ও সব অ্যাকাউন্টের বক্স + টোটাল মেথড (একসাথে)</b>'
       + '<div class="sm mut">সকালে <b>১. শুরুতে ছিল</b> ঘরে ওপেনিং ব্যালেন্স বসিয়ে দিন (আগের সব ডাটা অক্ষত থাকবে, পুরনো হিসাব এর সাথে মিশবে না)। আর রাতে <b>২. দিন শেষে আছে</b> ঘরে ব্যালেন্স বসিয়ে সেভ করলেই সেটি কালকের ওপেনিং হয়ে যাবে!</div></div>'
-      + '<button type="button" class="btn sm ghost" onclick="walletManageSheet()">⚙️ নতুন বিকাশ/ব্যাংক যোগ করুন</button>'
+      + '<div class="row wrapr" style="gap:6px"><button type="button" class="btn sm warnb" onclick="copyUnchangedOpenToEnd()" title="যে অ্যাকাউন্টগুলোতে আজ লেনদেন হয়নি সেগুলোতে ১ ক্লিকে সকালের ব্যালেন্স বসিয়ে দিন">⚡ খালি বক্সে সকালের ব্যালেন্স কপি করুন</button><button type="button" class="btn sm ghost" onclick="walletManageSheet()">⚙️ নতুন বিকাশ/ব্যাংক যোগ</button></div>'
       + '</div>'
       + '<div class="acct-box-grid">' + acctRowsHtml
       + '<div class="acct-row tot">'
@@ -3375,8 +3535,9 @@ function vDhisab() {
       + '</div>'
       + '<div class="grid2">'
       + '<button class="btn sm ghost block" onclick="quickDhEntry(\'visa_ret\')">↩ ভিসা ফেরত ও রাখা চার্জ</button>'
-      + '<button class="btn sm ghost block" onclick="quickDhEntry(\'wallet_io\')">➕/➖ অন্য যেকোনো জমা বা খরচ</button>'
-      + '</div>';
+      + '<button class="btn sm warnb block" onclick="agentB2bSheet(\'' + D + '\')">📲 এজেন্ট B2B (ক্যাশ পরের দিন দিলে)</button>'
+      + '</div>'
+      + '<button class="btn sm ghost block" onclick="quickDhEntry(\'wallet_io\')">➕/➖ অন্য যেকোনো জমা বা খরচ (ব্যক্তিগত বা সমন্বয়)</button>';
 
     // Recent 7 Days Closing History
     const histDays = []; for (let i = 6; i >= 0; i--) histDays.push(addD(D, -i)); histDays.reverse();
@@ -3515,11 +3676,40 @@ function vDhisab() {
   return modeTopBanner + dateNav + dailyGuideHtml() + hero + unsetBox + quickBar + expandAllBar + drawerCards + saveCloseBox + gormilActionGuideHtml(R) + visaPendHtml + txSec;
 }
 
+function copyUnchangedOpenToEnd() {
+  let copied = 0;
+  document.querySelectorAll('.tot_w_end').forEach(eInp => {
+    const wid = eInp.getAttribute('data-wid');
+    const oInp = $('tot_open_w_' + wid);
+    if (eInp.value.trim() === '' && oInp && oInp.value.trim() !== '') {
+      eInp.value = oInp.value;
+      copied++;
+    }
+  });
+  syncTotAcctBoxes();
+  toast(copied > 0 ? ('⚡ ' + copied + 'টি খালি বক্সে সকালের ব্যালেন্স বসানো হয়েছে! এখন যে বক্সগুলোতে টাকা বদলেছে শুধু সেগুলো এডিট করুন।') : 'সবগুলো বক্সেই ইতিমধ্যে ব্যালেন্স লেখা আছে!');
+}
+
 function syncTotAcctBoxes(extIn, extOut) {
   let sumO = 0, sumE = 0, anyE = false;
   document.querySelectorAll('.tot_w_open').forEach(inp => { sumO += n(inp.value); });
   document.querySelectorAll('.tot_w_end').forEach(inp => {
-    if (inp.value.trim() !== '') { sumE += n(inp.value); anyE = true; }
+    const wid = inp.getAttribute('data-wid');
+    const oVal = $('tot_open_w_' + wid) ? n($('tot_open_w_' + wid).value) : 0;
+    const dEl = $('tot_dl_' + wid);
+    if (inp.value.trim() !== '') {
+      const eVal = n(inp.value);
+      sumE += eVal;
+      anyE = true;
+      if (dEl) {
+        const dlt = Math.round(eVal - oVal);
+        dEl.className = 'sm ' + (dlt > 0 ? 'good' : (dlt < 0 ? 'bad' : 'mut'));
+        dEl.textContent = dlt === 0 ? 'অপরিবর্তিত (৳০)' : (dlt > 0 ? 'আজ বেড়েছে: +' + money(dlt) : 'আজ কমেছে: −' + money(Math.abs(dlt)));
+      }
+    } else if (dEl) {
+      dEl.className = 'sm mut';
+      dEl.textContent = '';
+    }
   });
   if ($('dc_tot_open')) $('dc_tot_open').value = Math.round(sumO);
   if ($('dc_tot_act')) $('dc_tot_act').value = anyE ? Math.round(sumE) : '';
