@@ -258,6 +258,7 @@ const DEFWALLETS = () => [
   { id: 'w_counter', name: 'Counter Drawer (কাউন্টার ড্রয়ার)', kind: 'drawer', sub: 'Counter', owner: 'Rajan', openBal: 0 },
   { id: 'w_passdoc', name: 'Passport/Docs Drawer (পাসপোর্ট/ডকুমেন্ট)', kind: 'drawer', sub: 'Passport/Docs', owner: 'Rabbi', openBal: 0 },
   { id: 'w_visacash', name: 'Visa Cash Drawer (ভিসা ক্যাশ ড্রয়ার)', kind: 'drawer', sub: 'Visa', owner: 'মালিক', openBal: 0 },
+  { id: 'w_ipres', name: 'IP Reserve Box (আইপি রিজার্ভ বক্স)', kind: 'drawer', sub: 'IP Reserve', owner: 'মালিক', openBal: 0 },
   { id: 'w_bkash', name: 'bKash (বিকাশ)', kind: 'mfs', sub: 'bKash', owner: 'Business', openBal: 0 },
   { id: 'w_nagad', name: 'Nagad (নগদ)', kind: 'mfs', sub: 'Nagad', owner: 'Business', openBal: 0 },
   { id: 'w_rocket', name: 'Rocket (রকেট)', kind: 'mfs', sub: 'Rocket', owner: 'Personal', openBal: 0 },
@@ -955,13 +956,13 @@ function ipPaySheet(defAmt, editId, wk0) {
     + '<div class="field"><label for="ip_wk">কোন সপ্তাহের IP</label><select id="ip_wk" onchange="ipWkChg()">' + opts + '</select></div>'
     + '<div class="grid2"><div class="field"><label for="ip_date">কবে দিয়েছেন</label><input id="ip_date" type="date" value="' + dv + '"></div><div class="field"><label for="ip_amt">কত টাকা (৳)</label><input id="ip_amt" type="number" inputmode="decimal" value="' + (amt || '') + '"></div></div>'
     + '<div class="chips"><button type="button" class="chip" onclick="ipWkChg()">সপ্তাহের পুরো বাকি</button><button type="button" class="chip" onclick="$(\'ip_date\').value=today()">আজকের তারিখ</button></div>'
-    + wFieldHtml('ip_w', p && p.w ? p.w : 'w_passdoc', 'কোন ড্রয়ার / বিকাশ / ব্যাংক থেকে IP দিলেন') + '<div class="field"><label for="ip_note">নোট (ঐচ্ছিক)</label><input id="ip_note" value="' + esc(p ? p.note : '') + '" placeholder="যেমন: আংশিক দিলাম"></div>'
+    + wFieldHtml('ip_w', p && p.w ? p.w : 'w_ipres', 'কোন বক্স / ড্রয়ার থেকে IP দিলেন (ডিফল্ট: IP Reserve Box)') + '<div class="field"><label for="ip_note">নোট (ঐচ্ছিক)</label><input id="ip_note" value="' + esc(p ? p.note : '') + '" placeholder="যেমন: আংশিক দিলাম"></div>'
     + '<button class="btn block" onclick="saveIpPay(\'' + (editId || '') + '\')">সেভ করুন</button>' + (p ? '<button class="btn danger block" onclick="arm(this,function(){delIpPay(\'' + editId + '\')})">মুছে ফেলুন</button>' : ''));
 }
 function ipWkChg() { const w = (window._ipW || {})[val('ip_wk')]; if (!w) return; $('ip_date').value = w.pay; $('ip_amt').value = w.left || ''; }
 function saveIpPay(editId) {
   const a = n(val('ip_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
-  const id = editId || uid(); S.ipPays[id] = { id, date: val('ip_date') || today(), amt: a, wk: val('ip_wk'), w: val('ip_w') || 'w_passdoc', note: val('ip_note').trim(), createdAt: (S.ipPays[id] && S.ipPays[id].createdAt) || Date.now() };
+  const id = editId || uid(); S.ipPays[id] = { id, date: val('ip_date') || today(), amt: a, wk: val('ip_wk'), w: val('ip_w') || 'w_ipres', note: val('ip_note').trim(), createdAt: (S.ipPays[id] && S.ipPays[id].createdAt) || Date.now() };
   save('ipPays', id); closeSheet(); toast('IP পেমেন্ট সেভ হয়েছে');
 }
 function delIpPay(id) { remove('ipPays', id); closeSheet(); toast('মুছে গেছে'); }
@@ -2174,7 +2175,14 @@ const WKIND = {
 };
 const wallets = () => {
   const l = arr(S.settings.wallets).filter(w => w && w.id);
-  return l.length ? l : DEFWALLETS();
+  if (!l.length) return DEFWALLETS();
+  if (!l.some(w => w.id === 'w_ipres') && !(S.settings.removedWallets || []).includes('w_ipres')) {
+    const idx = l.findIndex(w => w.id === 'w_visacash');
+    const ipw = { id: 'w_ipres', name: 'IP Reserve Box (আইপি রিজার্ভ বক্স)', kind: 'drawer', sub: 'IP Reserve', owner: 'মালিক', openBal: 0 };
+    if (idx !== -1) l.splice(idx + 1, 0, ipw);
+    else l.push(ipw);
+  }
+  return l;
 };
 const walletById = id => wallets().find(w => w.id === id) || wallets()[0] || { id: 'w_counter', name: 'Counter Drawer', kind: 'drawer' };
 const wName = id => { const w = wallets().find(x => x.id === id); return w ? w.name : 'Counter Drawer'; };
@@ -2415,7 +2423,7 @@ function allTxForDate(D) {
 
   // ২. পাসপোর্ট IP পেমেন্ট (−)
   Object.values(S.ipPays).forEach(p => {
-    if (p && p.date === D) push(p.w || 'w_passdoc', 'out', p.amt, 'পাসপোর্ট IP পেমেন্ট', 'IP পরিশোধ', (p.wk ? fd(p.wk) + ' সপ্তাহের IP' : '') + (p.note ? ' · ' + p.note : ''), false, "ipPaySheet(null,'" + p.id + "')");
+    if (p && p.date === D) push(p.w || 'w_ipres', 'out', p.amt, 'পাসপোর্ট IP পেমেন্ট (রিজার্ভ থেকে)', 'IP পরিশোধ', (p.wk ? fd(p.wk) + ' সপ্তাহের IP' : '') + (p.note ? ' · ' + p.note : ''), false, "ipPaySheet(null,'" + p.id + "')");
   });
 
   // ৩. ডকুমেন্ট কাজ: ক্লায়েন্ট জমা (+), ফেরত (−), কাজের খরচ (−)
@@ -2827,23 +2835,106 @@ function saveTotCustomOpen(D) {
 }
 
 /* ---------- স্মার্ট গরমিল ডিটেক্টর ---------- */
+function saveSuspenseDiff(D) {
+  const openVal = $('dc_tot_open') ? n(val('dc_tot_open')) : 0;
+  const extIn = $('dh_ext_in_v') ? n(val('dh_ext_in_v')) : 0;
+  const extOut = $('dh_ext_out_v') ? n(val('dh_ext_out_v')) : 0;
+  const exp = openVal + extIn - extOut;
+  const rawAct = val('dc_tot_act').trim();
+  if (rawAct === '') { toast('আগে দিন শেষে কত টাকা আছে তা বক্সে লিখুন'); return; }
+  const act = n(rawAct);
+  const diff = Math.round(act - exp);
+  if (Math.abs(diff) < 1) { toast('হিসাব ইতিমধ্যেই মিলে আছে!'); return; }
+  saveDayClosingSimple(D, true);
+  const id = uid();
+  const isExtra = diff > 0;
+  S.wtx[id] = {
+    id, type: 'simple', dir: isExtra ? 'in' : 'out',
+    cat: isExtra ? '🔍 অমীমাংসিত গরমিল — টাকা বেশি (পরে মিলাব)' : '🔍 অমীমাংসিত গরমিল — টাকা কম (পরে মিলাব)',
+    isRev: false,
+    date: D, amt: Math.abs(diff), w: 'w_counter',
+    client: 'বড় গরমিল (' + (isExtra ? 'বেশি +' : 'কম −') + money(Math.abs(diff)) + ') — কারণ খুঁজে পেলে এটি মুছে আসল এন্ট্রি দেবেন',
+    note: 'আপাতত ক্লোজিং মেলানোর জন্য রাখা হলো, পরে মনে পড়লে ডিলিট করে আসল খাতে দেবেন',
+    by: actor(),
+    createdAt: Date.now()
+  };
+  save('wtx', id);
+  render();
+  toast('📌 গরমিলের ' + money(Math.abs(diff)) + ' "পরে মিলাব (Suspense)" হিসেবে নোটসহ রাখা হয়েছে। পরে কারণ মনে পড়লে এটি মুছে আসল এন্ট্রি দেবেন!');
+}
+
 function smartHintsForTotal(R) {
   if (!R.tHasAct || Math.abs(R.tDiff) < 0.5) return '';
   const absD = Math.round(Math.abs(R.tDiff));
+  const isBig = absD >= 300;
   const hints = [];
+
+  // ১. হুবহু সমান অংকের এন্ট্রি বা অর্ধেক অংকের উল্টো এন্ট্রি (Double entry or wrong-side entry)
   R.extTxs.forEach(t => {
     if (Math.abs(t.amt - absD) < 2) {
-      hints.push('🔎 আজ <b>' + esc(t.title) + ' (' + esc(t.cat) + ': ' + money(t.amt) + ')</b> এন্ট্রি দেওয়া হয়েছে — এটি কি দুবার লেখা হয়েছে বা বাদ পড়েছে?');
+      hints.push('🎯 <b>হুবহু টাকার মিল পাওয়া গেছে:</b> আজ <b>' + esc(t.title) + ' (' + esc(t.cat) + ': ' + money(t.amt) + ')</b> এন্ট্রি দেওয়া হয়েছে — এটি কি ভুলে দুবার লেখা হয়েছে বা ভুল করে তোলা হয়েছে?');
+    } else if (absD >= 100 && Math.abs(t.amt * 2 - absD) < 2) {
+      hints.push('🔄 <b>উল্টো এন্ট্রির সম্ভাবনা:</b> আজ <b>' + esc(t.title) + ' (' + money(t.amt) + ')</b> ' + (t.dir === 'in' ? 'জমা (+)' : 'খরচ (−)') + ' হিসেবে লেখা হয়েছে। এটি যদি ভুলে উল্টো দিকে লেখা হয় তবে ঠিক দুগুণ (' + money(absD) + ') গরমিল হয়!');
     }
   });
+
+  // ২. ফাইলগুলোর মধ্যে আজকের সম্ভাব্য বাদ পড়া চালান, ভিসা খরচ, ডকুমেন্ট খরচ বা কাস্টমার জমা খোঁজা
   if (R.tDiff < 0) {
-    hints.push('💸 <b>হিসাবের চেয়ে ' + money(absD) + ' কম আছে (Short):</b> (১) আজ কোনো দোকান খরচ, ব্যক্তিগত খরচ, চালান বা ভিসা/ডকুমেন্ট খরচ হয়েছে যা এখনো অ্যাপে লেখেননি? (২) কেউ কি আজ বাকি নিয়েছে যা বাকি খাতায় তোলা হয়নি?');
+    // টাকা কম (Short) -> খরচ হয়েছে কিন্তু মার্ক করা হয়নি এমন ফাইল খুঁজি
+    Object.values(S.files).forEach(f => {
+      if (!f.challan && n(f.passFee) > 0 && Math.abs(n(f.passFee) - absD) <= 500) {
+        hints.push('🛂 <b>পাসপোর্ট চালান চেক:</b> <b>' + esc(f.name) + '</b>-এর পাসপোর্ট ফি <b>' + money(f.passFee) + '</b> এখনো "চালান বাকি" দেখাচ্ছে — আজ কি এর চালান করেছেন?');
+      }
+    });
+    VISA.rows.forEach(v => {
+      const fi = visaFeeInfo(v);
+      if (!fi.paid && fi.fee > 0 && Math.abs(fi.fee - absD) <= 500) {
+        hints.push('✈️ <b>ভিসা খরচ চেক:</b> <b>' + esc(v.name) + '</b>-এর ভিসা ও সফটওয়্যার খরচ <b>' + money(fi.fee) + '</b> এখনো মার্ক করা হয়নি — আজ কি এটি পরিশোধ করেছেন?');
+      }
+    });
+    Object.values(S.docs).forEach(d => {
+      if (!d.costDone && n(d.cost) > 0 && Math.abs(n(d.cost) - absD) <= 300) {
+        hints.push('📄 <b>ডকুমেন্ট খরচ চেক:</b> <b>' + esc(d.name) + ' (' + esc(d.cat) + ')</b>-এর কাজের খরচ <b>' + money(d.cost) + '</b> এখনো "খরচ বাকি" আছে — আজ কি টাকাটা দিয়েছেন?');
+      }
+    });
   } else {
-    hints.push('💰 <b>হিসাবের চেয়ে ' + money(absD) + ' বেশি আছে (Extra):</b> (১) কোনো কাস্টমার কি পাসপোর্ট, ভিসা বা ডকুমেন্টের বিল দিয়েছে যা এখনো ফাইলে "জমা নিলাম" দেওয়া হয়নি? (২) কাউন্টারের ফটোকপি/অনলাইন কাজের ক্যাশ কি এখনো কাউন্টার ট্যাবে বা এক্সট্রা আয়ে তোলা হয়নি?');
+    // টাকা বেশি (Extra) -> কাস্টমার জমা দিয়েছে কিন্তু তোলা হয়নি এমন ফাইল খুঁজি
+    Object.values(S.files).forEach(f => {
+      const c = fileCalc(f);
+      if (c.due > 0 && (Math.abs(c.due - absD) <= 500 || f.appDate === R.D)) {
+        hints.push('🛂 <b>পাসপোর্ট জমা চেক:</b> <b>' + esc(f.name) + '</b>-এর ফাইলে এখনো <b>' + money(c.due) + '</b> বাকি দেখাচ্ছে — তিনি কি আজ টাকা জমা দিয়েছেন?');
+      }
+    });
+    Object.values(S.docs).forEach(d => {
+      const c = docCalc(d);
+      if (c.due > 0 && (Math.abs(c.due - absD) <= 300 || d.recvDate === R.D)) {
+        hints.push('📄 <b>ডকুমেন্ট জমা চেক:</b> <b>' + esc(d.name) + ' (' + esc(d.cat) + ')</b>-এর কাজে <b>' + money(c.due) + '</b> বাকি দেখাচ্ছে — তিনি কি আজ টাকা দিয়েছেন?');
+      }
+    });
   }
-  return '<div class="ipbox stack" style="gap:6px;background:var(--warnbg);border-color:var(--warn);font-size:13px">'
-    + '<b style="color:var(--warn)">💡 কেন গরমিল হতে পারে (স্মার্ট ক্লু):</b>'
-    + hints.map(h => '<div>' + h + '</div>').join('')
+
+  // ৩. সংখ্যা লেখার ভুল (শূন্য কম/বেশি বা উল্টাপাল্টা সংখ্যা — Divisible by 9 rule)
+  if (absD >= 90 && absD % 9 === 0) {
+    hints.push('🔢 <b>সংখ্যা বা শূন্য (0) লেখার ভুল হতে পারে:</b> গরমিলের অংকটি (' + money(absD) + ') ৯ দিয়ে বিভাজ্য! সাধারণত কোনো সংখ্যায় একটি শূন্য (0) কম বা বেশি পড়লে (যেমন ৫০০-এর জায়গায় ৫০০০ বা ৫০) অথবা অংক উল্টে গেলে (যেমন ২৪০০-এর জায়গায় ৪২০০) এমন গরমিল হয়। উপরের বক্সগুলোর সংখ্যা একবার মিলিয়ে দেখুন।');
+  }
+
+  if (R.tDiff < 0) {
+    hints.push('💸 <b>হিসাবের চেয়ে ' + money(absD) + ' কম আছে (Short):</b> (১) আজ কোনো বড় খরচ, পাসপোর্ট চালান, ভিসা ফি বা কাস্টমার রিটার্ন দিয়েছেন যা অ্যাপে তোলা হয়নি? (২) কেউ কি আজ বড় অংকের টাকা বাকি বা ধার নিয়েছে যা বাকি খাতায় লেখেননি?');
+  } else {
+    hints.push('💰 <b>হিসাবের চেয়ে ' + money(absD) + ' বেশি আছে (Extra):</b> (১) কোনো কাস্টমার কি পাসপোর্ট, ভিসা বা ডকুমেন্টের টাকা জমা দিয়েছে যা এখনো ফাইলে তোলা হয়নি? (২) কেউ কি আগের বাকি টাকা শোধ করেছে বা বিকাশ/ব্যাংকে এক্সট্রা টাকা পাঠিয়েছে যা লেখেননি?');
+  }
+
+  return '<div class="ipbox stack" style="gap:8px;background:' + (isBig ? 'var(--badbg)' : 'var(--warnbg)') + ';border:2px solid ' + (isBig ? 'var(--bad)' : 'var(--warn)') + ';font-size:13px">'
+    + '<div class="row between wrapr" style="gap:6px"><b style="color:' + (isBig ? 'var(--bad)' : 'var(--warn)') + ';font-size:14.5px">'
+    + (isBig ? '🚨 বড় গরমিল ডিটেক্টিভ (' + money(absD) + ' গরমিল — সম্ভাব্য কারণসমূহ):' : '💡 কেন গরমিল হতে পারে (স্মার্ট ক্লু):')
+    + '</b>'
+    + (isBig ? '<span class="pill bad">বড় অংকের গরমিল — চেক করুন</span>' : '<span class="pill warn">ছোট গরমিল</span>')
+    + '</div>'
+    + hints.map(h => '<div style="background:var(--card);padding:7px 10px;border-radius:8px;border:1px solid var(--line)">' + h + '</div>').join('')
+    + (isBig ? '<div class="row between wrapr" style="gap:8px;padding-top:4px;border-top:1px dashed var(--line)">'
+      + '<span class="sm"><b>রাতে তাড়াহুড়োয় কারণ খুঁজে না পেলে কী করবেন?</b><br>এটিকে বিকাশ চার্জে না মিশিয়ে আপাতত <b>"পরে মিলাব (Suspense)"</b> হিসেবে নোটসহ রেখে দিন। কাল মনে পড়লে ডিলিট করে আসল খাতে বসাতে পারবেন:</span>'
+      + '<button type="button" class="btn sm danger" onclick="saveSuspenseDiff(\'' + R.D + '\')">📌 "পরে মিলাব (Suspense)" হিসেবে লিখে রাখুন</button>'
+      + '</div>' : '')
     + '</div>';
 }
 
@@ -2922,27 +3013,86 @@ function walletMathSheet(D, wid) {
 }
 
 /* ---------- টোটাল মেথডের সহজ ও পরিষ্কার গাইড ---------- */
+function ipReserveDepositSheet(D) {
+  const Eip = ipEngine();
+  const todayIpFiles = Object.values(S.files).filter(f => f && !f.ret && f.ipOn && (f.jomaDate === D || (!f.jomaDate && f.appDate === D)));
+  const todayIpSum = todayIpFiles.reduce((s, f) => s + n(f.ipAmt), 0);
+  const oInp = $('tot_open_w_w_ipres'), eInp = $('tot_end_w_w_ipres');
+  const curOpen = oInp ? n(oInp.value) : 0;
+  const curEnd = eInp && eInp.value !== '' ? n(eInp.value) : curOpen;
+  sheet('🛡️ IP রিজার্ভ বক্সে টাকা রাখুন / তুলুন',
+    '<div class="sm" style="background:var(--soft);padding:10px 12px;border-radius:10px;border:1px solid var(--acc);line-height:1.55">'
+    + '<b>IP রিজার্ভ যেভাবে কাজ করে:</b><br>'
+    + '১. <b>দিন শেষে টাকা রাখা:</b> সারাদিন পাসপোর্টের যে IP টাকা জমে, দিন শেষে ক্যাশ ড্রয়ার থেকে সেই টাকাটা সরিয়ে <b>IP রিজার্ভ বক্সে</b> রাখুন।<br>'
+    + '২. <b>IP পরিশোধ করা:</b> যেদিন IP দেবেন, সেদিন এই রিজার্ভ বক্স থেকেই টাকা দেবেন (<b>"📤 রিজার্ভ থেকে IP দিলাম"</b> বাটনে চাপলেই রিজার্ভ থেকে কমে যাবে)।</div>'
+    + '<div class="card stack" style="box-shadow:none;background:var(--bg);gap:4px">'
+    + kv('রিজার্ভ বক্সে আজ শুরুতে ছিল', money(curOpen))
+    + kv('আজকের ফাইলে নতুন IP জমেছে (' + todayIpFiles.length + 'টি)', money(todayIpSum), 'good')
+    + kv('মোট বকেয়া IP (এখনো পরিশোধ বাকি)', money(Eip.left), Eip.left > 0 ? 'bad' : 'good')
+    + '</div>'
+    + '<div class="field"><label for="ipr_add">আজ ক্যাশ ড্রয়ার থেকে কত টাকা IP রিজার্ভ বক্সে রাখলেন? (৳)</label>'
+    + '<input id="ipr_add" type="number" inputmode="decimal" value="' + (todayIpSum || '') + '" placeholder="যেমন: ' + (todayIpSum || 1200) + '" oninput="const v=n(this.value);if($(\'ipr_new_end\'))$(\'ipr_new_end\').value=' + curOpen + '+v">'
+    + '</div>'
+    + '<div class="field"><label for="ipr_new_end">তাহলে আজ দিন শেষে IP রিজার্ভ বক্সে মোট হলো (৳)</label>'
+    + '<input id="ipr_new_end" type="number" inputmode="decimal" value="' + (curOpen + todayIpSum) + '" style="font-weight:800;color:var(--good)"></div>'
+    + '<div class="grid2">'
+    + '<button type="button" class="btn block" onclick="applyIpReserveEnd(\'' + D + '\')">✅ রিজার্ভ বক্সে বসালাম</button>'
+    + '<button type="button" class="btn ghost block" onclick="closeSheet();ipPaySheet()">📤 রিজার্ভ থেকে IP পরিশোধ করুন</button>'
+    + '</div>');
+}
+
+function applyIpReserveEnd(D) {
+  const newEnd = n(val('ipr_new_end'));
+  const added = n(val('ipr_add'));
+  const eInp = $('tot_end_w_w_ipres');
+  if (eInp) {
+    eInp.value = Math.round(newEnd);
+    // If Counter or Passport drawer has an ending balance typed, we don't force-change it, just remind user
+    syncTotAcctBoxes();
+  }
+  saveDayClosingSimple(D, true);
+  closeSheet();
+  render();
+  toast('🛡️ IP রিজার্ভ বক্সে +' + money(added) + ' যোগ হয়ে মোট ' + money(newEnd) + ' বসেছে!');
+}
+
 function dailyGuideHtml() {
-  const open = !!UI.showGuide;
-  const toggleBtn = '<div class="card row between wrapr" style="padding:12px 15px;border:1.5px solid var(--acc);background:var(--soft);gap:10px">'
-    + '<div style="min-width:0"><b>📖 কীভাবে কাজ করবেন ও গরমিল হলে কী করবেন? (সম্পূর্ণ নির্দেশিকা)</b><div class="sm mut">আগামীকাল থেকে নতুন ওপেনিং দিয়ে শুরু, বিকাশ/নগদ কমিশন-চার্জ সমন্বয় ও গরমিল সমাধানের নিয়ম</div></div>'
-    + '<button type="button" class="btn sm ' + (open ? 'danger' : '') + '" onclick="toggleDhGuide()">' + (open ? '✕ গাইড লুকান' : '👁️ নিয়ম ও নির্দেশিকা দেখুন') + '</button>'
+  const open = UI.showGuide !== undefined ? !!UI.showGuide : true;
+  const toggleBtn = '<div class="card row between wrapr" style="padding:12px 15px;border:2px solid var(--acc);background:var(--soft);gap:10px">'
+    + '<div style="min-width:0"><b style="font-size:15px">📖 এক নজরে সহজ নিয়মাবলী (কীভাবে প্রতিদিন হিসাব করবেন?)</b><div class="sm mut">সকালের ওপেনিং · সারাদিনের কাজ · IP রিজার্ভ · ভিসা ও রিটার্ন · রাতের ক্লোজিং ও গরমিল মেলানো</div></div>'
+    + '<button type="button" class="btn sm ' + (open ? 'ghost' : '') + '" onclick="toggleDhGuide()">' + (open ? '🔼 নিয়মাবলী ছোট করুন' : '👁️ সহজ নিয়মাবলী দেখুন') + '</button>'
     + '</div>';
   if (!open) return toggleBtn;
   return toggleBtn
-    + '<div class="card stack" style="gap:10px;border:1.5px solid var(--acc);background:var(--soft);font-size:13.5px;line-height:1.55">'
-    + '<div class="ipbox" style="background:var(--card)"><b>১. আগামীকাল থেকে নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু (আগের সব ডাটা অক্ষত থাকবে!):</b><br>'
-    + '• আপনার আগের পাসপোর্ট, ডকুমেন্ট, ভিসা, বাকি খাতা বা খরচের সব ডাটা যেমন আছে ঠিক তেমনই থাকবে—কিছুই মুছবে না।<br>'
-    + '• আগামীকাল সকালে নিচে আপনার <b>৩টি ক্যাশ ড্রয়ার (Counter, Passport/Docs, Visa)</b> এবং সেটিংস থেকে যোগ করা <b>বিকাশ/নগদ ও ব্যাংক অ্যাকাউন্টের</b> <b>«১. শুরুতে ছিল (Opening)»</b> বক্সগুলোতে টাকা বসিয়ে <b>«🌅 শুধু শুরুর ব্যালেন্স (Opening) সেভ করুন»</b> বাটনে চাপ দিন (অথবা উপরে <b>«🚀 নতুন শুরুর ব্যালেন্স সেট করুন»</b> চাপুন)। আগের কোনো পুরনো হিসাব এর সাথে মিশবে না!</div>'
-    + '<div class="ipbox" style="background:var(--card)"><b>২. সারাদিন কাজের নিয়ম (প্রতি এন্ট্রিতে ড্রয়ার সিলেক্ট করার ঝামেলা নেই!):</b><br>'
-    + '• <b>টাকা আসবে (+):</b> কাস্টমার পাসপোর্ট/ডকুমেন্টের বিল জমা দিলে (+), ভিসা অ্যাপে টাকা জমা দিলে (+), কাউন্টারের কাজ করলে (+), বা কেউ বাকি টাকা ফেরত দিলে (+) অটোমেটিক আজকের হিসাবে যোগ হবে।<br>'
-    + '• <b>টাকা চলে যাবে (−):</b> পাসপোর্ট চালান করলে (−), ভিসা ফাইল Appointed/Delivered হয়ে খরচ মার্ক করলে (−), ডকুমেন্টের খরচ করলে (−), দোকান বা ব্যক্তিগত খরচ করলে (−), কেউ বাকি নিলে (−) এবং কাস্টমারকে রিটার্ন/ফেরত দিলে (−) অটোমেটিক আজকের হিসাব থেকে বিয়োগ হবে।</div>'
-    + '<div class="ipbox" style="background:var(--card)"><b>৩. বিকাশ/নগদ এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি গরমিল হলে করণীয়:</b><br>'
-    + '• বিকাশ/নগদে ক্যাশ-ইন/আউট করলে কিছু কমিশন আসে আবার পেমেন্ট দিলে কিছু চার্জ কাটে—তাই দিন শেষে ৩০-১০০ টাকা একটু কম বা বেশি (গরমিল) থাকাটাই স্বাভাবিক!<br>'
-    + '• এর জন্য সারাদিন প্রতিবার চার্জ/কমিশন লেখার দরকার নেই। রাতে <b>«২. দিন শেষে আছে (Ending)»</b> বক্সগুলোতে আসল ব্যালেন্স বসানোর পর:<br>'
-    + '  — আপনি চাইলে সরাসরি <b>«💾 দিন শেষের হিসাব সেভ করুন»</b> বাটনে চাপ দিতে পারেন (আপনার আসল Ending ব্যালেন্সই কালকের Opening হয়ে যাবে, গরমিলের টাকা পরের দিনে কোনো ঝামেলা করবে না!)।<br>'
-    + '  — অথবা ১-ক্লিকে <b>«⚡ বিকাশ/নগদ কমিশন বা চার্জ হিসেবে এই গরমিলটুকু মিলিয়ে দিন»</b> বাটনে চাপ দিলে ওই পার্থক্যটুকু আজকের চার্জ/কমিশন হিসেবে যোগ হয়ে আজকের হিসাবও ১০০% (৳০ পার্থক্য) মিলে যাবে!</div>'
-    + '<button type="button" class="btn sm ghost block" onclick="toggleDhGuide(false)">🔼 নির্দেশিকা বন্ধ করুন</button>'
+    + '<div class="card stack" style="gap:10px;border:2px solid var(--acc);background:var(--card);font-size:13.5px;line-height:1.6">'
+    + '<div class="gormil-grid">'
+    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--acc)">'
+    + '<b>🌅 ধাপ ১: সকালের শুরু (মাত্র ১ বার)</b><br>'
+    + '• আগামীকাল সকালে নিচে আপনার <b>৩টি ক্যাশ ড্রয়ার, IP রিজার্ভ বক্স ও বিকাশ/নগদ/ব্যাংকের</b> <b>«১. শুরুতে ছিল»</b> ঘরে কোনটাতে কত টাকা আছে বসান এবং <b>«🌅 সকালে শুধু শুরুর ব্যালেন্স সেভ করুন»</b> চাপুন।<br>'
+    + '• <b>আগের সব ডাটা অক্ষত থাকবে</b>—পুরনো কোনো হিসাব আজকের সাথে মিশবে না। পরের দিন থেকে আগের রাতের ক্লোজিং নিজে থেকেই সকালে বসে যাবে!'
+    + '</div>'
+    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--good)">'
+    + '<b>☀️ ধাপ ২: সারাদিনের কাজ (ড্রয়ার সিলেক্ট করতে হবে না!)</b><br>'
+    + '• <b>টাকা আসবে (+):</b> কাস্টমার পাসপোর্ট/ডকুমেন্ট/ভিসার টাকা জমা দিলে, কাউন্টারের কাজ করলে, বা কেউ বাকি শোধ করলে অটো যোগ হবে (+)<br>'
+    + '• <b>টাকা যাবে (−):</b> পাসপোর্ট চালান করলে, ভিসা খরচ মার্ক করলে, ডকুমেন্ট খরচ করলে, দোকান/ব্যক্তিগত খরচ করলে, কেউ বাকি নিলে বা ফেরত দিলে অটো বিয়োগ হবে (−)।'
+    + '</div>'
+    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--warn)">'
+    + '<b>🛡️ ধাপ ৩: IP রিজার্ভ বক্স যেভাবে কাজ করে</b><br>'
+    + '• <b>রিজার্ভে টাকা রাখা:</b> দিন শেষে ক্যাশ ড্রয়ার থেকে IP-এর টাকা তুলে <b>IP Reserve Box</b>-এ রাখুন এবং বক্সের <b>«দিন শেষে আছে»</b> ঘরে নতুন ব্যালেন্সটি লিখুন (ক্যাশ ড্রয়ারে কমবে আর রিজার্ভ বক্সে বাড়বে, তাই মোট হিসাব অটো মিলে থাকবে!)।<br>'
+    + '• <b>রিজার্ভ থেকে IP দেওয়া:</b> যেদিন IP পরিশোধ করবেন, সেদিন <b>«📤 রিজার্ভ থেকে IP দিলাম»</b> বাটনে চাপ দিয়ে টাকা লিখবেন—তখন রিজার্ভ থেকে টাকা কমে যাবে (−)।'
+    + '</div>'
+    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid #8b5cf6">'
+    + '<b>✈️ ধাপ ৪: ভিসা খরচ ও ↩️ রিটার্ন/ফেরত নিয়ম</b><br>'
+    + '• <b>ভিসার ২টি খরচ:</b> ফাইল Appointed/Delivered হলে ভিসা কার্ডে <b>«✓ খরচ হয়েছে»</b> চাপুন—<b>১. ভিসা ফি</b> ও <b>২. সফটওয়্যার চার্জ</b> অটো বাদ যাবে।<br>'
+    + '• <b>রিটার্ন হিসাব:</b> কেউ ২০০০ জমা দিলে ৫০০ চার্জ রাখলে শুধু <b>রাখা চার্জ ৫০০</b> লিখুন—সফটওয়্যার নিজেই <b>ফেরত ১৫০০</b> বসিয়ে ক্যাশ থেকে ১৫০০ কমাবে (ভুলে ২০০০ ফেরত + ৫০০ চার্জ হবে না!)।'
+    + '</div>'
+    + '</div>'
+    + '<div class="ipbox" style="background:var(--soft);border:1.5px solid var(--acc)">'
+    + '<b>🌙 ধাপ ৫: রাতে দিন শেষে মেলানো ও গরমিল হলে করণীয়</b><br>'
+    + '• রাতে প্রতিটি ড্রয়ার, IP রিজার্ভ বক্স ও বিকাশ/নগদ/ব্যাংকে কত টাকা আছে তা <b>«২. দিন শেষে আছে (Ending)»</b> ঘরগুলোতে বসান।<br>'
+    + '• <b>ছোট গরমিল (বিকাশ/নগদ কমিশন বা চার্জ):</b> এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু কম-বেশি হলে সরাসরি <b>«💾 রাতে দিন শেষের হিসাব সেভ করুন»</b> চাপুন (আসল ব্যালেন্সই কালকের ওপেনিং হবে), অথবা ১-ক্লিকে <b>«⚡ বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিন»</b> চাপুন।<br>'
+    + '• <b>বড় গরমিল হলে:</b> নিচে লাল রঙের <b>«🚨 বড় গরমিল ডিটেক্টিভ»</b> বক্স নিজে থেকেই বলে দেবে কোন ফাইলের জমা, চালান, ভিসা খরচ বা বাকি তোলা বাদ পড়েছে! আর রাতে কারণ মনে না পড়লে <b>«📌 পরে মিলাব (Suspense)»</b> বাটনে চেপে রেখে দিন।'
+    + '</div>'
     + '</div>';
 }
 
@@ -3151,9 +3301,20 @@ function vDhisab() {
       const kBadge = WKIND[w.kind] ? WKIND[w.kind].short : 'অ্যাকাউন্ট';
       const openVal = Math.round(c.open);
       const endVal = c.hasActual ? Math.round(c.actual) : '';
-      return '<div class="acct-row">'
-        + '<div><b style="font-size:14px">' + (idx + 1) + '. ' + esc(w.name) + '</b> <span class="pill ' + (WKIND[w.kind] ? WKIND[w.kind].badge : '') + '" style="font-size:10px;padding:1px 6px">' + esc(kBadge) + '</span>'
-        + (w.owner ? '<div class="sm mut">' + esc(w.owner) + '</div>' : '') + '</div>'
+      let ipHint = '';
+      if (w.id === 'w_ipres') {
+        const Eip = ipEngine();
+        const todayIpFiles = Object.values(S.files).filter(f => f && !f.ret && f.ipOn && (f.jomaDate === D || (!f.jomaDate && f.appDate === D)));
+        const todayIpSum = todayIpFiles.reduce((s, f) => s + n(f.ipAmt), 0);
+        const todayIpPaid = Object.values(S.ipPays).filter(p => p && p.date === D).reduce((s, p) => s + n(p.amt), 0);
+        ipHint = '<div class="sm" style="margin-top:4px;padding:5px 8px;background:var(--soft);border-radius:7px;border:1px solid var(--acc);color:var(--ink)">'
+          + '🛡️ <b>IP রিজার্ভ তথ্য:</b> আজ ফাইলে IP জমেছে: <b class="good">' + money(todayIpSum) + '</b> (' + todayIpFiles.length + 'টি) · আজ IP দেওয়া হয়েছে: <b class="bad">' + money(todayIpPaid) + '</b> · মোট বকেয়া IP: <b>' + money(Eip.left) + '</b>'
+          + '<div class="row wrapr" style="gap:6px;margin-top:4px"><button type="button" class="btn sm good" style="padding:3px 9px;font-size:11.5px" onclick="ipReserveDepositSheet(\'' + D + '\')">📥 রিজার্ভে টাকা রাখলাম</button><button type="button" class="btn sm warnb" style="padding:3px 9px;font-size:11.5px" onclick="ipPaySheet()">📤 রিজার্ভ থেকে IP দিলাম</button></div>'
+          + '</div>';
+      }
+      return '<div class="acct-row" style="' + (w.id === 'w_ipres' ? 'border-color:var(--acc);background:var(--soft)' : '') + '">'
+        + '<div><b style="font-size:14px">' + (idx + 1) + '. ' + esc(w.name) + '</b> <span class="pill ' + (w.id === 'w_ipres' ? 'warn' : (WKIND[w.kind] ? WKIND[w.kind].badge : '')) + '" style="font-size:10px;padding:1px 6px">' + (w.id === 'w_ipres' ? 'IP ফান্ড' : esc(kBadge)) + '</span>'
+        + (w.owner ? '<div class="sm mut">' + esc(w.owner) + '</div>' : '') + ipHint + '</div>'
         + '<div class="acct-inp-wrap"><small>১. শুরুতে ছিল (Opening ৳)</small>'
         + '<input class="tot_w_open" data-wid="' + esc(w.id) + '" id="tot_open_w_' + esc(w.id) + '" type="number" inputmode="decimal" placeholder="0" value="' + openVal + '" oninput="syncTotAcctBoxes(' + Math.round(R.extIn) + ',' + Math.round(R.extOut) + ')"></div>'
         + '<div class="acct-inp-wrap"><small>২. দিন শেষে আছে (Ending ৳)</small>'
