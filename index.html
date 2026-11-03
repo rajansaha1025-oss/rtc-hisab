@@ -1054,7 +1054,7 @@ function vLoan() {
   return '<div class="grid2"><div class="card"><div class="mut sm">আমি পাব</div><div class="num b good" style="font-size:22px">' + money(get) + '</div></div><div class="card"><div class="mut sm">আমি দেব</div><div class="num b bad" style="font-size:22px">' + money(give) + '</div></div></div>'
     + (ls.length ? ls.map(l => {
       const b = loanBal(l), le = lastEntry(l);
-      return '<div class="card stack" style="gap:12px">' + (l.note ? notePill(l.note, 1) : '') + '<div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('loans', l.id) + ' ' + esc(l.person) + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) + (le.note ? ' · 📝 ' + esc(le.note) : '') : 'এখনও কিছু নেই') + '</div></div>'
+      return '<div class="card stack" style="gap:12px">' + (l.note ? notePill(l.note, 1) : '') + '<div class="row" style="cursor:pointer" onclick="loanSheet(\'' + l.id + '\')"><span class="avatar ' + (b > 0 ? 'g' : (b < 0 ? 'r' : '')) + '">' + initial(l.person) + '</span><div style="flex:1;min-width:0"><div class="nm">' + serNo('loans', l.id) + ' ' + esc(l.person) + (l.phone ? ' <span class="sm" style="font-weight:600">· 📱 ' + waPhone(l.phone) + ' · <a href="tel:' + esc(l.phone) + '" onclick="event.stopPropagation()" style="color:var(--acc);text-decoration:none">📞 কল</a></span>' : '') + '</div><div class="mut sm">' + (le ? 'শেষ: ' + fd(le.date) + ' · ' + LK[entryKind(le)].t + ' ' + money(le.amt) + (le.note ? ' · 📝 ' + esc(le.note) : '') : 'এখনও কিছু নেই') + '</div></div>'
         + '<div style="text-align:right"><b class="num ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '" style="font-size:17px">' + money(Math.abs(b)) + '</b><div class="sm mut">' + (b > 0 ? 'পাব' : (b < 0 ? 'দেব' : 'মিটে গেছে')) + '</div></div></div>'
         + '<div class="grid2"><button class="btn sm warnb" onclick="quickLoan(\'' + l.id + '\',\'lend\')">' + ic('up') + ' সে নিল</button><button class="btn sm good" onclick="quickLoan(\'' + l.id + '\',\'lendback\')">' + ic('down') + ' সে ফেরত দিল</button></div><div class="grid2"><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'borrow\')">আমি নিলাম</button><button class="btn sm ghost" onclick="quickLoan(\'' + l.id + '\',\'payback\')">আমি ফেরত দিলাম</button></div></div>';
     }).join('') : '<div class="empty">কারো সাথে বাকি নেই। নিচে "নতুন ব্যক্তি" চেপে শুরু করুন।</div>')
@@ -1091,7 +1091,10 @@ function loanSheet(id) {
   sheet(esc(l.person) + (l.phone ? ' <span class="sm">' + waPhone(l.phone) + '</span>' : ''),
     '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে নিয়েছে</div><b class="num">' + money(took) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">সে ফেরত দিয়েছে</div><b class="num good">' + money(back) + '</b></div></div>' + ((bor || pay) ? '<div class="grid2" style="text-align:center"><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি নিয়েছি</div><b class="num">' + money(bor) + '</b></div><div class="card" style="box-shadow:none;background:var(--bg);padding:10px"><div class="mut sm">আমি ফেরত দিয়েছি</div><b class="num good">' + money(pay) + '</b></div></div>' : '') + ''
     + '<div class="card" style="box-shadow:none;background:' + (b > 0 ? 'var(--goodbg)' : (b < 0 ? 'var(--badbg)' : 'var(--soft)')) + ';text-align:center"><div class="sm ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : 'mut')) + '">' + (b > 0 ? 'এখনও বাকি, আমি পাব' : (b < 0 ? 'আমি দেব' : 'হিসাব মিটে গেছে')) + '</div><div class="num b ' + (b > 0 ? 'good' : (b < 0 ? 'bad' : '')) + '" style="font-size:30px">' + money(Math.abs(b)) + '</div></div>'
-    + '<div class="field"><label for="ln_note">📝 নোট (এই ব্যক্তির কার্ডে দেখাবে)</label><div class="row"><input id="ln_note" value="' + esc(l.note || '') + '" placeholder="যেমন: কিসের বাকি, কবে দেবে"><button type="button" class="btn sm ghost" onclick="saveLoanNote(\'' + id + '\')">সেভ</button></div></div>'
+    + '<div class="ipbox stack" style="gap:8px;background:var(--bg)">'
+    + '<div class="grid2"><div class="field"><label for="ln_phone">📱 ফোন নম্বর (কার্ডে দেখাবে)</label><input id="ln_phone" type="tel" inputmode="tel" value="' + esc(l.phone || '') + '" placeholder="01XXXXXXXXX"></div>'
+    + '<div class="field"><label for="ln_note">📝 নোট (এই ব্যক্তির কার্ডে দেখাবে)</label><input id="ln_note" value="' + esc(l.note || '') + '" placeholder="যেমন: কিসের বাকি, কবে দেবে"></div></div>'
+    + '<button type="button" class="btn sm ghost block" onclick="saveLoanNote(\'' + id + '\')">💾 ফোন নম্বর ও কার্ডের নোট সেভ করুন</button></div>'
     + dirSeg(window._dir)
     + '<div class="grid2"><div class="field"><label for="l_date">তারিখ</label><input id="l_date" type="date" value="' + today() + '"></div><div class="field"><label for="l_amt">টাকা (৳)</label><input id="l_amt" type="number" inputmode="decimal"></div></div>'
     + wFieldHtml('l_w', lastW('l_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংক') + '<div class="field"><label for="l_note">নোট</label><input id="l_note" placeholder="ঐচ্ছিক"></div><button class="btn block" onclick="addEntry(\'' + id + '\')">এন্ট্রি যোগ করুন</button>'
@@ -1100,6 +1103,8 @@ function loanSheet(id) {
 }
 function addEntry(id, close) {
   const a = n(val('l_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
+  if ($('ln_phone')) S.loans[id].phone = val('ln_phone').trim();
+  if ($('ln_note')) S.loans[id].note = val('ln_note').trim();
   const k = LK[window._dir] ? window._dir : 'lend'; S.loans[id].entries.push({ id: uid(), date: val('l_date') || today(), amt: a, dir: LK[k].dir, kind: k, w: val('l_w') || 'w_counter', note: val('l_note').trim() }); save('loans', id);
   if (close) { closeSheet(); toast('সেভ হয়েছে'); } else loanSheet(id);
 }
@@ -2113,7 +2118,14 @@ function docCatCard(CC) {
 }
 
 /* ---------- বাকি খাতা: নোট ---------- */
-function saveLoanNote(id) { const l = S.loans[id]; if (!l) return; l.note = val('ln_note').trim(); save('loans', id); toast('নোট সেভ হয়েছে'); }
+function saveLoanNote(id) {
+  const l = S.loans[id]; if (!l) return;
+  if ($('ln_phone')) l.phone = val('ln_phone').trim();
+  if ($('ln_note')) l.note = val('ln_note').trim();
+  save('loans', id);
+  render();
+  toast('ফোন নম্বর ও নোট সেভ হয়েছে');
+}
 
 /* ---------- CSV: ক্যাশ ও রেফারেন্স ---------- */
 function exportCash() {
