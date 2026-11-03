@@ -320,6 +320,16 @@ function norm(d) {
   Object.values(out.loans).forEach(l => { l.entries = arr(l.entries); });
   Object.values(out.docs).forEach(f => { f.payments = arr(f.payments); f.refunds = arr(f.refunds); f.log = arr(f.log); f.spends = arr(f.spends); f.driveFiles = arr(f.driveFiles); });
   Object.values(out.cnt).forEach(f => { f.payments = arr(f.payments); f.log = arr(f.log); });
+  ['files', 'docs', 'cnt'].forEach(coll => {
+    const items = Object.values(out[coll] || {});
+    let maxS = 0;
+    items.forEach(x => { const sn = parseInt(x && x.serial, 10); if (sn > maxS) maxS = sn; });
+    const missing = items.filter(x => x && !(parseInt(x.serial, 10) > 0));
+    if (missing.length) {
+      missing.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.appDate || a.recvDate || a.date || '').localeCompare(String(b.appDate || b.recvDate || b.date || '')) || String(a.id).localeCompare(String(b.id)));
+      missing.forEach(x => { maxS++; x.serial = maxS; });
+    }
+  });
   return out;
 }
 function arr(x) { return !x ? [] : (Array.isArray(x) ? x.filter(v => v != null) : Object.values(x)); }
@@ -359,9 +369,30 @@ function logAct(coll, id, del) {
   S.alog[e.id] = e; if (af) SNAP[k] = af; else delete SNAP[k]; enqueue('PUT', FB.root + '/alog/' + e.id, e);
   const ks = Object.keys(S.alog).sort((a, b) => S.alog[a].at - S.alog[b].at); while (ks.length > 250) { const d = ks.shift(); delete S.alog[d]; enqueue('DELETE', FB.root + '/alog/' + d); }
 }
+function getSerialNum(coll, id) {
+  const o = S[coll] && S[coll][id];
+  if (o && parseInt(o.serial, 10) > 0) return parseInt(o.serial, 10);
+  const items = Object.values(S[coll] || {});
+  let maxS = 0;
+  items.forEach(x => { const sn = parseInt(x && x.serial, 10); if (sn > maxS) maxS = sn; });
+  if (o) { maxS++; o.serial = maxS; return maxS; }
+  return 0;
+}
+function nextSerialNum(coll) {
+  let maxS = 0;
+  Object.values(S[coll] || {}).forEach(x => { const sn = parseInt(x && x.serial, 10); if (sn > maxS) maxS = sn; });
+  return maxS + 1;
+}
 function serNo(coll, id) {
-  if (!SERC[coll]) { const m = {}; Object.values(S[coll] || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || String(a.id).localeCompare(String(b.id))).forEach((x, i) => { m[x.id] = i + 1; }); SERC[coll] = m; }
-  return SERC[coll][id] ? '<span class="sno">#' + SERC[coll][id] + '</span>' : '';
+  const sn = getSerialNum(coll, id);
+  return sn ? '<span class="sno" style="background:var(--acc);color:#fff;padding:1px 7px;border-radius:6px;font-weight:800;font-size:12px">#' + sn + '</span>' : '';
+}
+function matchSerialOrText(coll, rec, q, textFields) {
+  if (!q) return true;
+  const cleanQ = q.replace(/^#/, '').trim();
+  const sn = String(getSerialNum(coll, rec.id));
+  if (/^#?\d+$/.test(q.trim()) && sn === cleanQ) return true;
+  return ('#' + sn + ' ' + sn + ' ' + textFields).toLowerCase().includes(q);
 }
 
 /* ---------- ক্লাউড (Firebase REST) ---------- */
@@ -535,8 +566,8 @@ function overall(rr) {
   Object.values(S.cnt).forEach(cc => { if (!inR(cc.date, r)) return; const k = cntCalc(cc); const x = o.cn; x.n++; x.bill += k.total; x.paid += k.paid; x.due += k.due; x.cost += k.cost; x.profit += k.profit; });
   { const CM = cashModel(); Object.keys(CM.day).forEach(d => { if (!inR(d, r)) return; Object.keys(CM.day[d]).forEach(id => { const x = CM.day[d][id]; o.cash.coll += x.coll; o.cash.extra += x.extra; o.cash.by[id] = (o.cash.by[id] || 0) + x.coll; }); }); }
   VISA.rows.forEach(v => { if (!v.profit && !v.bill) return; if ((!rr && UI.period === 'all') || (v.date && inR(v.date, r))) { o.visa += v.profit; o.visaN++; if (v.mode === 'RETURNED') { o.visaKept += v.profit; o.visaRetN++; } } });
-  let wtxRev = 0; Object.values(S.wtx || {}).forEach(t => { if (!t || !inR(t.date, r)) return; if (t.type === 'visa_return') wtxRev += n(t.kept); else if (t.isRev && t.dir === 'in') wtxRev += n(t.amt); });
-  o.wtxRev = wtxRev;
+  let wtxRev = 0, cntWtxRev = 0; Object.values(S.wtx || {}).forEach(t => { if (!t || !inR(t.date, r)) return; if (t.type === 'visa_return') wtxRev += n(t.kept); else if (t.isRev && t.dir === 'in') { wtxRev += n(t.amt); if (t.cat === 'কাউন্টার এক্সট্রা সার্ভিস (আয়)') cntWtxRev += n(t.amt); } });
+  o.wtxRev = wtxRev; o.cntWtxRev = cntWtxRev; o.cntCashRev = o.cash.extra + cntWtxRev; o.cntTotRev = o.cntCashRev + o.cn.profit;
   o.income = o.pp.profit + o.visa + o.exp.income + o.doc.profit + o.cn.profit + o.cash.extra + wtxRev; o.net = o.income - o.exp.shop; o.left = o.net - o.exp.personal;
   let get = 0, give = 0; Object.values(S.loans).forEach(l => { const b = loanBal(l); if (b > 0) get += b; else give -= b; });
   o.get = get; o.give = give; return o;
@@ -596,7 +627,7 @@ function render() {
 
 
 
-function go(t) { if (isStaff() && !STAFF_TABS.includes(t)) t = 'doc'; tab = t; navClose(); render(); window.scrollTo(0, 0); if (t === 'visa' || t === 'vjoma' || t === 'home' || t === 'dhisab') loadVisa().then(() => { if (tab === t) render(); }); }
+function go(t) { if (isStaff() && !STAFF_TABS.includes(t)) t = 'doc'; tab = t; navClose(); render(); window.scrollTo(0, 0); if (t === 'visa' || t === 'vjoma' || t === 'home' || t === 'dhisab' || t === 'today') loadVisa().then(() => { if (tab === t) render(); }); }
 
 function renderLogin() {
   $('app').innerHTML = '<div class="login wrap pad"><div class="card"><img class="logo" src="'+LOGO+'" alt="RTC" style="margin:0 auto;width:76px;height:76px;border-radius:20px"><h1 style="margin:0;font-size:22px">RTC হিসাব</h1><p class="mut sm" style="margin:0">ভিসা অ্যাপের একই ইমেইল ও পাসওয়ার্ড দিন</p>'
@@ -646,8 +677,8 @@ function vHome() {
     + (MODE === 'cloud' && o.visaRetN ? kv('&nbsp;&nbsp;↳ এর মধ্যে ভিসা ফেরতে রাখা চার্জ (' + o.visaRetN + 'টি)', money(o.visaKept), 'good') : '')
     + (o.pp.retN ? kv('&nbsp;&nbsp;↳ এর মধ্যে পাসপোর্ট ফেরতে রাখা চার্জ (' + o.pp.retN + 'টি)', money(o.pp.kept), 'good') : '')
     + kv('ডকুমেন্ট কাজের লাভ (' + o.doc.n + 'টি ডেলিভারড/ফেরত)', money(o.doc.profit), o.doc.profit >= 0 ? 'good' : 'bad')
-    + (o.cn.n ? kv('পুরনো কাউন্টার এন্ট্রির লাভ (' + o.cn.n + 'টি)', money(o.cn.profit), o.cn.profit >= 0 ? 'good' : 'bad') : '')
-    + kv('কাউন্টার আয় (দিন শেষের হিসাব)', money(o.cash.extra), 'good')
+    + kv('কাউন্টার মোট আয় (নগদ + বাকি)', money(o.cntTotRev), 'good')
+    + (o.cntCashRev > 0 || o.cn.profit > 0 ? kv('&nbsp;&nbsp;↳ নগদ ক্যাশ: ' + money(o.cntCashRev) + ' + কাউন্টার বাকি/কাজ: ' + money(o.cn.profit), money(o.cntTotRev), 'mut') : '')
     + kv('অন্য সার্ভিসের লাভ', money(o.exp.income), 'good')
     + kv('<b style="color:var(--ink)">মোট আয়</b>', '<b>' + money(o.income) + '</b>') + '</div>'
     + '<h2>দোকান খরচ</h2><div class="card">'
@@ -684,26 +715,32 @@ function vPass() {
     if (UI.pf === 'clear' && (c.due || !n(f.total))) return false;
     if (UI.pf === 'drive' && !hasDriveFiles(f)) return false;
     if (UI.prf !== 'all' && (UI.prf === '__none' ? f.ref : f.ref !== UI.prf)) return false;
-    if (q && !(f.name + ' ' + (f.phone || '') + ' ' + (f.gmail || '') + ' ' + (f.ref || '')).toLowerCase().includes(q)) return false;
+    if (q && !matchSerialOrText('files', f, q, (f.name || '') + ' ' + (f.phone || '') + ' ' + (f.gmail || '') + ' ' + (f.ref || '') + ' ' + (f.note || ''))) return false;
     return true;
   });
-  if (UI.pv === 'list') list.sort((a, b) => fileCalc(b).due - fileCalc(a).due); else list.sort((a, b) => (b.appDate || '').localeCompare(a.appDate || '') || (b.createdAt || 0) - (a.createdAt || 0));
+  const pSort = UI.pSort || 'ser_desc';
+  if (UI.pv === 'list' || pSort === 'due') list.sort((a, b) => fileCalc(b).due - fileCalc(a).due || getSerialNum('files', b.id) - getSerialNum('files', a.id));
+  else if (pSort === 'ser_asc') list.sort((a, b) => getSerialNum('files', a.id) - getSerialNum('files', b.id));
+  else list.sort((a, b) => getSerialNum('files', b.id) - getSerialNum('files', a.id));
   const T = files.reduce((t, f) => { const c = fileCalc(f); t.bill += c.bill; t.paid += c.paid; t.due += c.due; if (c.due) t.dn++; if (!f.challan && !f.ret) t.ch++; if (c.ret) { t.rn++; t.kept += c.kept; t.rd += c.refundDue; t.rf += c.refunded; } return t; }, { bill: 0, paid: 0, due: 0, dn: 0, ch: 0, rn: 0, kept: 0, rd: 0, rf: 0 });
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা পেয়েছি</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি পাব</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div></div>'
     + '<div class="row between wrapr sm mut"><span>' + T.dn + ' জনের টাকা বাকি</span><span>' + T.ch + 'টি ফাইলের চালান বাকি</span></div>'
     + (T.rn ? '<div class="ipbox stack" style="gap:6px"><div class="row between sm"><b>↩ ফেরত ফাইল ' + T.rn + 'টি</b><span class="mut">রাখা চার্জ (আমার আয়) <b class="num good">' + money(T.kept) + '</b></span></div><div class="row between sm"><span class="mut">ফেরত দিয়েছি ' + money(T.rf) + '</span>' + (T.rd > 0.001 ? '<b class="bad">ক্লায়েন্টকে ফেরত দিতে বাকি ' + money(T.rd) + '</b>' : '<b class="good">✓ সব ফেরত দেওয়া হয়েছে</b>') + '</div></div>' : '') + '</div>';
   const filters = [['all', 'সব'], ['due', 'টাকা বাকি'], ['chalan', 'চালান বাকি'], ['ip', 'IP বাকি'], ['clear', 'পুরো জমা'], ['ret', 'ফেরত'], ['refund', 'ফেরত দিতে বাকি'], ['drive', '☁️ Drive ফাইল']];
   return seg + sum
-    + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="নাম, ফোন, Gmail বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="row between"><div class="chips">' + filters.map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
+    + '<div class="stack" style="gap:8px"><input id="p_q" type="search" placeholder="🔍 #সিরিয়াল নম্বর (যেমন: 12), নাম, ফোন বা রেফারেন্স খুঁজুন" value="' + esc(UI.pq) + '" oninput="UI.pq=this.value;renderListOnly()"><div class="row between"><div class="chips">' + filters.map(x => '<button class="chip' + (UI.pf === x[0] ? ' on' : '') + '" onclick="UI.pf=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
     + refFilterRow()
-    + '<div class="seg" style="max-width:240px"><button class="' + (UI.pv === 'card' ? 'on' : '') + '" onclick="UI.pv=\'card\';render()">কার্ড</button><button class="' + (UI.pv === 'list' ? 'on' : '') + '" onclick="UI.pv=\'list\';render()">তালিকা (বাকি আগে)</button></div></div>'
+    + '<div class="row between wrapr" style="gap:8px">'
+    + '<div class="seg" style="max-width:230px"><button class="' + (UI.pv === 'card' ? 'on' : '') + '" onclick="UI.pv=\'card\';render()">কার্ড</button><button class="' + (UI.pv === 'list' ? 'on' : '') + '" onclick="UI.pv=\'list\';render()">তালিকা (বাকি আগে)</button></div>'
+    + '<div class="chips"><button type="button" class="chip' + ((UI.pSort || 'ser_desc') === 'ser_desc' ? ' on' : '') + '" onclick="UI.pSort=\'ser_desc\';render()">🔢 সিরিয়াল (নতুন উপরে)</button><button type="button" class="chip' + (UI.pSort === 'ser_asc' ? ' on' : '') + '" onclick="UI.pSort=\'ser_asc\';render()">🔢 সিরিয়াল (#1 থেকে)</button><button type="button" class="chip' + (UI.pSort === 'due' ? ' on' : '') + '" onclick="UI.pSort=\'due\';render()">💰 বাকি আগে</button></div>'
+    + '</div></div>'
     + '<div id="plist" class="stack">' + (UI.pv === 'list' ? passTable(list) : passCards(list, E)) + '</div>' + fab;
 }
 function passTable(list) {
   if (!list.length) return '<div class="empty">কোনো ফাইল নেই</div>';
   const t = list.reduce((a, f) => { const c = fileCalc(f); a.b += c.bill; a.p += c.paid; a.d += c.due; return a; }, { b: 0, p: 0, d: 0 });
   return '<div class="card" style="padding:6px 12px"><div class="kv sm" style="font-weight:700;color:var(--mut)"><span style="flex:1">ক্লায়েন্ট</span><span style="width:62px;text-align:right">বিল</span><span style="width:62px;text-align:right">জমা</span><span style="width:62px;text-align:right">বাকি</span></div>'
-    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)"><b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (c.ret ? ' · ↩ ফেরত' + (c.refundDue > 0.001 ? ' (ফেরত দিতে ' + Math.round(c.refundDue) + ')' : '') : (f.challan ? '' : ' · চালান বাকি')) + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(c.bill) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
+    + list.map(f => { const c = fileCalc(f); return '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + f.id + '\')"><span style="flex:1;min-width:0;color:var(--ink)">' + serNo('files', f.id) + ' <b>' + esc(f.name) + '</b><div class="sm mut">' + fd(f.appDate) + (c.ret ? ' · ↩ ফেরত' + (c.refundDue > 0.001 ? ' (ফেরত দিতে ' + Math.round(c.refundDue) + ')' : '') : (f.challan ? '' : ' · চালান বাকি')) + (f.ref ? ' · ' + refBadge(f.ref) : '') + '</div></span><b class="num sm" style="width:62px;text-align:right">' + Math.round(c.bill) + '</b><b class="num sm good" style="width:62px;text-align:right">' + Math.round(c.paid) + '</b><b class="num sm ' + (c.due ? 'bad' : 'mut') + '" style="width:62px;text-align:right">' + Math.round(c.due) + '</b></div>'; }).join('')
     + '<div class="kv" style="font-weight:700"><span style="flex:1">মোট</span><span class="num sm" style="width:62px;text-align:right">' + Math.round(t.b) + '</span><span class="num sm good" style="width:62px;text-align:right">' + Math.round(t.p) + '</span><span class="num sm bad" style="width:62px;text-align:right">' + Math.round(t.d) + '</span></div></div>';
 }
 const UIW = { old: false };
@@ -804,10 +841,10 @@ function passCards(list, E) {
 
 /* ফাইল ফর্ম */
 function fileForm(id, keep) {
-  if (!keep) { const f = id ? S.files[id] : null; fm = f ? JSON.parse(JSON.stringify(f)) : { id: '', _tempId: 'pf_' + uid(), name: '', phone: '', gmail: '', ref: '', appDate: today(), jomaDate: '', total: '', passFee: '', ipOn: true, ipAmt: S.settings.defaultIp, ipPaidDate: '', note: '', payments: [], ret: false, retDate: '', kept: '', retSpent: false, retCost: '', refunds: [], driveFiles: [] }; fm.driveFiles = arr(fm.driveFiles); }
+  if (!keep) { const f = id ? S.files[id] : null; fm = f ? JSON.parse(JSON.stringify(f)) : { id: '', _tempId: 'pf_' + uid(), serial: nextSerialNum('files'), name: '', phone: '', gmail: '', ref: '', appDate: today(), jomaDate: '', total: '', passFee: '', ipOn: true, ipAmt: S.settings.defaultIp, ipPaidDate: '', note: '', payments: [], ret: false, retDate: '', kept: '', retSpent: false, retCost: '', refunds: [], driveFiles: [] }; if (!fm.serial) fm.serial = f && f.id ? getSerialNum('files', f.id) : nextSerialNum('files'); fm.driveFiles = arr(fm.driveFiles); }
   const f = fm;
-  sheet(f.id ? 'ফাইল এডিট' : 'নতুন পাসপোর্ট ফাইল',
-    '<div class="field"><label for="f_name">কার নামে পাসপোর্ট</label><input id="f_name" value="' + esc(f.name) + '" placeholder="ক্লায়েন্টের নাম"></div>'
+  sheet(f.id ? ('ফাইল এডিট — সিরিয়াল #' + (f.serial || getSerialNum('files', f.id))) : ('নতুন পাসপোর্ট ফাইল — সিরিয়াল #' + (f.serial || nextSerialNum('files'))),
+    '<div class="grid2" style="grid-template-columns:110px 1fr"><div class="field"><label for="f_serial">🔢 সিরিয়াল নং</label><input id="f_serial" type="number" inputmode="numeric" value="' + (parseInt(f.serial, 10) || nextSerialNum('files')) + '" style="font-weight:800;color:var(--acc)"></div><div class="field"><label for="f_name">কার নামে পাসপোর্ট *</label><input id="f_name" value="' + esc(f.name) + '" placeholder="ক্লায়েন্টের নাম"></div></div>'
     + '<div class="field"><label for="f_phone">ফোন নম্বর</label><input id="f_phone" type="tel" inputmode="tel" value="' + esc(f.phone) + '"></div>'
     + '<div class="field"><label for="f_note">📝 নোট (কার্ডের একদম উপরে দেখাবে)</label><textarea id="f_note" placeholder="যেকোনো নোট">' + esc(f.note) + '</textarea></div>'
     + '<div class="field"><label>কোন Gmail দিয়ে করা হয়েছে</label><div class="chips" id="ch_gmail">' + gmailChips() + '</div></div>'
@@ -854,7 +891,7 @@ function commitList(listKey, field) {
   $('ch_gmail').innerHTML = gmailChips(); $('ch_ref').innerHTML = refChips();
 }
 function grab() {
-  fm.name = val('f_name').trim(); fm.phone = val('f_phone').trim(); fm.appDate = val('f_app') || today(); fm.jomaDate = val('f_joma'); fm.total = val('f_total'); fm.passFee = val('f_fee');
+  fm.serial = parseInt(val('f_serial'), 10) || fm.serial || nextSerialNum('files'); fm.name = val('f_name').trim(); fm.phone = val('f_phone').trim(); fm.appDate = val('f_app') || today(); fm.jomaDate = val('f_joma'); fm.total = val('f_total'); fm.passFee = val('f_fee');
   fm.challan = $('f_chal').checked; fm.challanDate = fm.challan ? (val('f_chdate') || today()) : ''; fm.challanW = fm.challan ? val('f_chw') : ''; fm.ipOn = $('f_ipon').checked; fm.ipAmt = val('f_ipamt'); fm.note = val('f_note').trim();
   fm.ret = $('f_ret').checked; fm.retDate = fm.ret ? (val('f_retdate') || today()) : ''; fm.kept = val('f_kept'); fm.retSpent = $('f_rsp').checked; fm.retCost = val('f_rcost'); fm.refunds = arr(fm.refunds);
 }
@@ -959,8 +996,9 @@ function saveFile() {
     }
   }
   const id = fm.id || fm._tempId || uid(); const oldRec = S.files[id]; delete fm._tempId;
-  const rec = Object.assign({}, fm, { id, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), kept: n(fm.kept), retCost: n(fm.retCost), driveFiles: arr(fm.driveFiles), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
-  S.files[id] = rec; save('files', id);
+  const serial = parseInt(fm.serial, 10) || (oldRec && parseInt(oldRec.serial, 10)) || nextSerialNum('files');
+  const rec = Object.assign({}, fm, { id, serial, total: n(fm.total), passFee: n(fm.passFee), ipAmt: n(fm.ipAmt), kept: n(fm.kept), retCost: n(fm.retCost), driveFiles: arr(fm.driveFiles), createdAt: fm.createdAt || Date.now(), updatedAt: Date.now() });
+  SERC = {}; S.files[id] = rec; save('files', id);
   if (oldRec && oldRec.name && oldRec.name !== rec.name) driveSyncHisabRec('files', rec);
   fm = null; $('sheet').hidden = true; $('sheet').innerHTML = ''; render(); toast('সেভ হয়েছে');
 }
@@ -1409,20 +1447,28 @@ function vDoc() {
   const base = Object.values(S.docs).map(d => ({ d, c: docCalc(d) })).filter(({ d }) => {
     if (UI.dc !== 'all' && d.cat !== UI.dc) return false;
     const m = (d.recvDate || '').slice(0, 7); if (UI.dm === 'month' && m !== mo) return false; if (UI.dm === 'last' && m !== lm) return false;
-    if (q && !((d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || '')).toLowerCase().includes(q)) return false;
+    if (q && !matchSerialOrText('docs', d, q, (d.name || '') + ' ' + (d.phone || '') + ' ' + (d.refNo || '') + ' ' + (d.note || '') + ' ' + (d.cat || ''))) return false;
     return true;
   });
-  const list = base.filter(x => DF[UI.df][1](x, t0)).sort((a, b) => (b.d.recvDate || '').localeCompare(a.d.recvDate || '') || (b.d.createdAt || 0) - (a.d.createdAt || 0));
+  const dSort = UI.dSort || 'ser_desc';
+  const list = base.filter(x => DF[UI.df][1](x, t0)).sort((a, b) => {
+    if (dSort === 'due') return (b.c.due - a.c.due) || (getSerialNum('docs', b.d.id) - getSerialNum('docs', a.d.id));
+    if (dSort === 'ser_asc') return getSerialNum('docs', a.d.id) - getSerialNum('docs', b.d.id);
+    return getSerialNum('docs', b.d.id) - getSerialNum('docs', a.d.id);
+  });
   const T = list.reduce((t, x) => { t.bill += x.c.bill; t.paid += x.c.paid; t.due += x.c.due; t.cost += x.c.cost; if (x.c.real) t.profit += x.c.profit; return t; }, { bill: 0, paid: 0, due: 0, cost: 0, profit: 0 });
   const cnt = s => list.filter(x => x.d.status === s).length;
   const sum = '<div class="card stack" style="gap:10px"><div class="mini num"><div><small>মোট বিল</small><b>' + money(T.bill) + '</b></div><div><small>জমা</small><b class="good">' + money(T.paid) + '</b></div><div><small>বাকি</small><b class="' + (T.due ? 'bad' : 'good') + '">' + money(T.due) + '</b></div><div><small>লাভ হয়েছে</small><b class="' + (T.profit >= 0 ? 'good' : 'bad') + '">' + money(T.profit) + '</b></div></div>'
     + '<div class="row between wrapr sm mut"><span>' + list.length + 'টি কাজ · চলমান ' + cnt('run') + ' · ডেলিভারড ' + cnt('done') + ' · ফেরত ' + cnt('ret') + '</span><span>মোট খরচ ' + money(T.cost) + '</span></div></div>';
   const cats = ['all'].concat(S.settings.docCats); const CC = docCatStats(q, mo, lm);
   return dcashCard() + sum + docCatCard(CC)
-    + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
+    + '<div class="stack" style="gap:8px"><input id="d_q" type="search" placeholder="🔍 #সিরিয়াল নম্বর (যেমন: 5), নাম, ফোন, নম্বর বা নোট খুঁজুন" value="' + esc(UI.dq) + '" oninput="UI.dq=this.value;reFocus(\'d_q\')">'
     + '<div class="hs">' + cats.map(c => chipB((c === 'all' ? 'সব ধরন' : c) + ' (' + ((CC[c] && CC[c].n) || 0) + ')', UI.dc === c, "UI.dc=this.dataset.v;render()", c)).join('') + '</div>'
     + '<div class="hs">' + Object.keys(DF).map(k => { const cn = base.filter(x => DF[k][1](x, t0)).length; return chipB(DF[k][0] + (k === 'all' ? '' : ' (' + cn + ')'), UI.df === k, "UI.df='" + k + "';render()"); }).join('') + '</div>'
-    + '<div class="seg" style="max-width:300px">' + [['all', 'সব সময়'], ['month', 'এই মাস'], ['last', 'গত মাস']].map(x => '<button class="' + (UI.dm === x[0] ? 'on' : '') + '" onclick="UI.dm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div></div>'
+    + '<div class="row between wrapr" style="gap:8px">'
+    + '<div class="seg" style="max-width:260px">' + [['all', 'সব সময়'], ['month', 'এই মাস'], ['last', 'গত মাস']].map(x => '<button class="' + (UI.dm === x[0] ? 'on' : '') + '" onclick="UI.dm=\'' + x[0] + '\';render()">' + x[1] + '</button>').join('') + '</div>'
+    + '<div class="chips"><button type="button" class="chip' + ((UI.dSort || 'ser_desc') === 'ser_desc' ? ' on' : '') + '" onclick="UI.dSort=\'ser_desc\';render()">🔢 সিরিয়াল (নতুন উপরে)</button><button type="button" class="chip' + (UI.dSort === 'ser_asc' ? ' on' : '') + '" onclick="UI.dSort=\'ser_asc\';render()">🔢 সিরিয়াল (#1 থেকে)</button><button type="button" class="chip' + (UI.dSort === 'due' ? ' on' : '') + '" onclick="UI.dSort=\'due\';render()">💰 বাকি আগে</button></div>'
+    + '</div></div>'
     + '<div class="stack">' + (list.length ? list.map(x => docCard(x.d, x.c, t0)).join('') : '<div class="empty">' + (Object.keys(S.docs).length ? 'এই ফিল্টারে কোনো কাজ নেই' : 'কোনো কাজ নেই। নিচের "নতুন কাজ" চেপে প্রথম এন্ট্রি দিন।') + '</div>') + '</div>'
     + '<button class="btn fab" onclick="djForm()">' + ic('plus') + ' নতুন কাজ</button>';
 }
@@ -1476,7 +1522,7 @@ function djForm(id) {
   sheet(id ? 'ডকুমেন্ট কাজ এডিট' : 'নতুন ডকুমেন্ট কাজ',
     '<div class="field"><label for="dj_note">📝 নোট (কার্ডের একদম উপরে দেখাবে)</label><textarea id="dj_note" placeholder="যেমন: ছবি আনেনি, কাল আসবে / ভুল তথ্য ঠিক করতে হবে">' + esc(d.note) + '</textarea></div>'
     + '<div class="field"><label>কাজের ধরন</label><div class="chips" id="dj_cats">' + djCatChips() + '</div></div>'
-    + '<div class="field"><label for="dj_name">ক্লায়েন্টের নাম</label><input id="dj_name" value="' + esc(d.name) + '" placeholder="কার কাজ"></div>'
+    + '<div class="grid2" style="grid-template-columns:110px 1fr"><div class="field"><label for="dj_serial">🔢 সিরিয়াল নং</label><input id="dj_serial" type="number" inputmode="numeric" value="' + (parseInt(d.serial, 10) || (id ? getSerialNum('docs', id) : nextSerialNum('docs'))) + '" style="font-weight:800;color:var(--acc)"></div><div class="field"><label for="dj_name">ক্লায়েন্টের নাম *</label><input id="dj_name" value="' + esc(d.name) + '" placeholder="কার কাজ"></div></div>'
     + '<div class="field"><label for="dj_phone">ফোন নম্বর</label><input id="dj_phone" type="tel" inputmode="tel" value="' + esc(d.phone) + '" placeholder="01XXXXXXXXX"></div>'
     + '<div class="field"><label for="dj_refno">NID / ফর্ম / ট্র্যাকিং নম্বর (ঐচ্ছিক)</label><input id="dj_refno" value="' + esc(d.refNo) + '"></div>'
     + '<div class="grid2"><div class="field"><label for="dj_recv">কাজ নেওয়ার তারিখ</label><input id="dj_recv" type="date" value="' + d.recvDate + '"></div><div class="field"><label for="dj_promise">কবে দেওয়ার কথা</label><input id="dj_promise" type="date" value="' + (d.promiseDate || '') + '"></div></div>'
@@ -1507,7 +1553,7 @@ function djCat(v) { DJ.cat = v; $('dj_cats').innerHTML = djCatChips(); }
 function djCatNew() { $('dj_cats').insertAdjacentHTML('beforeend', '<div class="row" style="width:100%;margin-top:4px"><input id="dc_in" placeholder="যেমন: ড্রাইভিং লাইসেন্স"><button type="button" class="btn sm" onclick="djCatCommit()">যোগ</button></div>'); $('dc_in').focus(); }
 function djCatCommit() { const v = val('dc_in').trim(); if (!v) return; if (!S.settings.docCats.includes(v)) { S.settings.docCats.push(v); saveSettings(); } DJ.cat = v; $('dj_cats').innerHTML = djCatChips(); }
 function djGrab() {
-  const d = DJ; d.name = val('dj_name').trim(); d.phone = val('dj_phone').trim(); d.refNo = val('dj_refno').trim(); d.note = val('dj_note').trim();
+  const d = DJ; d.serial = parseInt(val('dj_serial'), 10) || d.serial || nextSerialNum('docs'); d.name = val('dj_name').trim(); d.phone = val('dj_phone').trim(); d.refNo = val('dj_refno').trim(); d.note = val('dj_note').trim();
   d.recvDate = val('dj_recv') || today(); d.promiseDate = val('dj_promise'); d.total = val('dj_total'); d.cost = val('dj_cost'); d.costDone = $('dj_cdone').checked;
   d.doneDate = val('dj_donedate'); d.retDate = val('dj_retdate'); d.kept = val('dj_kept');
 }
@@ -1580,7 +1626,9 @@ function djSave() {
   if (d.status === 'done' && d.doneDate && d.doneDate < d.recvDate) w.push('ডেলিভারির তারিখ নেওয়ার তারিখের আগে');
   if (w.length && !d._ack) { d._ack = true; $('dj_warn').innerHTML = '⚠ ' + w.map(esc).join('<br>⚠ ') + '<br><b>ঠিক থাকলে আবার "সেভ" চাপুন</b>'; $('dj_save').textContent = 'তবুও সেভ করুন'; $('dj_warn').scrollIntoView({ block: 'center' }); return; }
   const id = d.id || d._tempId || uid(); const old = d._orig;
-  const rec = { id, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, costDate: d.costDone ? ((old && old.costDate) || today()) : '', status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), driveFolderId: d.driveFolderId || '', driveFolderName: d.driveFolderName || '', driveFileId: d.driveFileId || '', driveFileName: d.driveFileName || '', pdfName: d.pdfName || '', pdfBy: d.pdfBy || '', pdfAt: d.pdfAt || '', photoFileId: d.photoFileId || '', photoFileName: d.photoFileName || '', photoBy: d.photoBy || '', photoAt: d.photoAt || '', passportFileId: d.passportFileId || '', passportFileName: d.passportFileName || '', passportBy: d.passportBy || '', passportAt: d.passportAt || '', docCopyFileId: d.docCopyFileId || '', docCopyFileName: d.docCopyFileName || '', docCopyBy: d.docCopyBy || '', docCopyAt: d.docCopyAt || '', driveFiles: arr(d.driveFiles), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
+  const serial = parseInt(d.serial, 10) || (old && parseInt(old.serial, 10)) || nextSerialNum('docs');
+  SERC = {};
+  const rec = { id, serial, cat: d.cat, name: d.name, phone: d.phone, refNo: d.refNo, recvDate: d.recvDate, promiseDate: d.promiseDate, total: n(d.total), cost: n(d.cost), costDone: !!d.costDone, costDate: d.costDone ? ((old && old.costDate) || today()) : '', status: d.status, doneDate: d.status === 'done' ? (d.doneDate || today()) : '', retDate: d.status === 'ret' ? (d.retDate || today()) : '', kept: d.status === 'ret' ? n(d.kept) : 0, note: d.note, by, payments: d.payments, refunds: d.refunds, spends: arr(d.spends), driveFolderId: d.driveFolderId || '', driveFolderName: d.driveFolderName || '', driveFileId: d.driveFileId || '', driveFileName: d.driveFileName || '', pdfName: d.pdfName || '', pdfBy: d.pdfBy || '', pdfAt: d.pdfAt || '', photoFileId: d.photoFileId || '', photoFileName: d.photoFileName || '', photoBy: d.photoBy || '', photoAt: d.photoAt || '', passportFileId: d.passportFileId || '', passportFileName: d.passportFileName || '', passportBy: d.passportBy || '', passportAt: d.passportAt || '', docCopyFileId: d.docCopyFileId || '', docCopyFileName: d.docCopyFileName || '', docCopyBy: d.docCopyBy || '', docCopyAt: d.docCopyAt || '', driveFiles: arr(d.driveFiles), createdAt: d.createdAt || Date.now(), createdBy: d.createdBy || by || actor(), log: arr(d.log) };
   commit('docs', rec, d._base, logMsgs(old, rec, DKEYS));
   if (old && (old.name !== rec.name || old.cat !== rec.cat)) driveSyncHisabRec('docs', rec);
   DJ = null; closeSheet(); toast('সেভ হয়েছে');
@@ -1720,31 +1768,92 @@ function cRow(c, showDate) {
 function vCnt() {
   const D = UI.cd || today();
   const modeSeg = '<div class="seg" style="margin-bottom:4px">'
-    + '<button type="button" class="' + (UI.cm !== 'each' ? 'on' : '') + '" onclick="UI.cm=\'day\';render()">💵 দিন শেষের ক্যাশ ও ফটোকপি বাকি</button>'
-    + '<button type="button" class="' + (UI.cm === 'each' ? 'on' : '') + '" onclick="UI.cm=\'each\';render()">📋 প্রতিটি কাজ আলাদা এন্ট্রি</button>'
+    + '<button type="button" class="' + (UI.cm !== 'each' ? 'on' : '') + '" onclick="UI.cm=\'day\';render()">💵 নগদ ক্যাশ + বাকি (সহজ হিসাব)</button>'
+    + '<button type="button" class="' + (UI.cm === 'each' ? 'on' : '') + '" onclick="UI.cm=\'each\';render()">📋 প্রতিটি কাজ আলাদা তালিকা</button>'
     + '</div>';
   if (UI.cm === 'each') return cntDateNav(D) + modeSeg + cntEach(D);
-  return cntDateNav(D) + modeSeg + cntBakiActionCard(D) + cntLegacy() + cashDayView(D);
+  return cntDateNav(D) + modeSeg + cntDaySummaryBanner(D) + cashDayView(D) + cntBakiActionCard(D) + cntLegacy();
+}
+function cntDayCashAndDue(D) {
+  const M = cashModel(), dd = M.day[D] || {};
+  let cdaySum = 0;
+  M.A.forEach(a => { const x = dd[a.id]; if (x) cdaySum += x.coll; });
+  let wtxCash = 0;
+  Object.values(S.wtx || {}).forEach(t => { if (t && t.date === D && t.isRev && t.dir === 'in' && t.cat === 'কাউন্টার এক্সট্রা সার্ভিস (আয়)') wtxCash += n(t.amt); });
+  let cntPaidToday = 0, cntDueToday = 0;
+  Object.values(S.cnt || {}).forEach(c => {
+    if (!c) return;
+    const k = cntCalc(c);
+    if (c.date === D) cntDueToday += k.due;
+    arr(c.payments).forEach(p => { if (p && p.date === D && (c.standalone || p.isDuePay || p.date !== c.date)) cntPaidToday += n(p.amt); });
+  });
+  const cashToday = cdaySum + wtxCash + cntPaidToday;
+  const totalIncomeToday = cdaySum + wtxCash + Object.values(S.cnt || {}).filter(c => c && c.date === D).reduce((s, c) => s + cntCalc(c).profit, 0);
+  return { cashToday, cntDueToday, totalIncomeToday, cdaySum, wtxCash };
+}
+function cntDaySummaryBanner(D) {
+  const rel = relDay(D), S0 = cntDayCashAndDue(D);
+  return '<div class="card stack" style="gap:10px;border:2px solid var(--acc);background:var(--soft)">'
+    + '<div class="row between wrapr" style="gap:6px">'
+    + '<div><b style="font-size:16px">📊 ' + rel + 'র কাউন্টার হিসাব (নগদ ক্যাশ + বাকি = মোট আয়)</b>'
+    + '<div class="sm mut">আপনার নিয়ম: <b>১. নগদ ক্যাশ</b> আলাদা লিখবেন এবং <b>২. বাকি</b> আলাদা লিখবেন — দুটো মিলে <b>মোট আয়</b> দেখাবে, আর <b>শুধু নগদ ক্যাশটুকু</b> দৈনিক হিসাবে (+) যাবে!</div></div>'
+    + '<button type="button" class="btn sm" onclick="counterSmartSheet()">⚡ এক স্ক্রিনে নগদ ও বাকি লিখুন</button>'
+    + '</div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)">'
+    + '<div><small>১. নগদ ক্যাশ (দৈনিক + যাবে)</small><b class="good">+' + money(S0.cashToday) + '</b></div>'
+    + '<div><small>২. আজ বাকি (পাব)</small><b class="' + (S0.cntDueToday > 0 ? 'bad' : '') + '">' + money(S0.cntDueToday) + '</b></div>'
+    + '<div><small>৩. মোট কাউন্টার আয় (১+২)</small><b style="color:var(--acc)">' + money(S0.totalIncomeToday) + '</b></div>'
+    + '</div></div>';
 }
 function cntBakiActionCard(D) {
   const rel = relDay(D);
-  const todayBaki = Object.values(S.cnt).filter(c => c.date === D && cntCalc(c).due > 0.001);
-  const todayBakiSum = todayBaki.reduce((s, c) => s + cntCalc(c).due, 0);
-  return '<div class="card stack" style="gap:10px;border:2px solid var(--acc);background:var(--soft)">'
-    + '<div class="row between wrapr" style="gap:8px">'
-    + '<div><b style="font-size:15.5px">🧾 ফটোকপি বা কাউন্টারের কাজে কেউ বাকি নিলে কী করবেন? (দৈনিক হিসাব কখনোই গরমিল হবে না!)</b>'
-    + '<div class="sm mut">ফটোকপি, প্রিন্ট বা অনলাইন কাজের টাকা কেউ বাকি রাখলে সেটিকে সাধারণ «বাকি খাতা» বা «নগদ ক্যাশ আয়ে» মেশাবেন না—নিচের বাটনে লিখুন:</div></div>'
-    + (todayBakiSum > 0 ? '<span class="pill bad">' + rel + ' কাউন্টারে বাকি: ' + money(todayBakiSum) + '</span>' : '<span class="pill good">স্মার্ট সমাধান</span>')
+  const svcs = S.settings.services && S.settings.services.length ? S.settings.services : [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }];
+  if (!window._inlineSvc) window._inlineSvc = svcs[0].n;
+  return '<div class="card stack" style="gap:10px;border-left:5px solid var(--warn)">'
+    + '<div class="row between wrapr" style="gap:6px">'
+    + '<div><b style="font-size:15.5px">📝 ২. ' + rel + ' কাউন্টারে কেউ বাকি নিলে এখানে আলাদা লিখুন (যেমন: ৳৪০০)</b>'
+    + '<div class="sm mut">নগদ ক্যাশ উপরের বক্সে লিখবেন (যেমন ৬০০), আর কেউ বাকি নিলে নিচে আলাদা লিখুন (যেমন ৪০০)। এতে মোট আয় হবে <b>৬০০ + ৪০০ = ১,০০০ টাকা</b>, আর দৈনিক ক্যাশে যাবে শুধু <b>+৬০০ টাকা</b>!</div></div>'
+    + '</div>'
+    + '<div class="chips" id="in_cnt_svcs">' + svcs.map(x => chipB(x.n, x.n === window._inlineSvc, "pickInlineCntSvc(this.dataset.v)", x.n)).join('') + '</div>'
+    + '<div class="grid2">'
+    + '<div class="field"><label for="inc_due">কত টাকা বাকি নিল? (৳) *</label><input id="inc_due" type="number" inputmode="decimal" placeholder="যেমন: 400"></div>'
+    + '<div class="field"><label for="inc_name">কাস্টমারের নাম *</label><input id="inc_name" placeholder="যার কাছে বাকি (যেমন: রহিম)"></div>'
     + '</div>'
     + '<div class="grid2">'
-    + '<button type="button" class="btn block" onclick="counterSmartSheet(\'due\')">➕ ১. ফটোকপি / এক্সট্রা কাজের বাকি লিখুন</button>'
-    + '<button type="button" class="btn warnb block" onclick="counterSmartSheet(\'split\')">🧮 ২. সারাদিনের মোট কাজ থেকে বাকি বাদ দিন</button>'
+    + '<div class="field"><label for="inc_phone">ফোন নম্বর (ঐচ্ছিক)</label><input id="inc_phone" type="tel" inputmode="tel" placeholder="01XXXXXXXXX"></div>'
+    + '<div class="field"><label for="inc_note">📝 নোট (ঐচ্ছিক)</label><input id="inc_note" placeholder="যেমন: ফটোকপি ও অনলাইন কাজ"></div>'
     + '</div>'
-    + '<div class="sm" style="background:var(--card);padding:8px 10px;border-radius:9px;border:1px solid var(--line);line-height:1.5">'
-    + '💡 <b>কেন এতে দৈনিক হিসাব মিলে থাকবে?</b><br>'
-    + '• কেউ ১০০ টাকার ফটোকপি বাকিতে নিলে আপনার ড্রয়ার থেকে নগদ টাকা বের হয়নি (শুধু কাগজ গেছে)। তাই এখানে বাকি লিখলে আজ শুধু যতটুকু নগদ দিয়েছে সেটাই ক্যাশে যোগ (+) হবে, আর বাকি টাকাটা <b>কাউন্টার বাকি তালিকায়</b> জমা থাকবে (ড্রয়ার থেকে নগদ বিয়োগ হবে না)।<br>'
-    + '• আবার আপনি যদি সারাদিনের মোট কাজের হিসাব একসাথে করেন (যেমন মোট কাজ ৫০০ টাকা, এর মধ্যে রহিম ১০০ টাকা বাকি), তবে <b>২ নম্বর বাটনে</b> চাপলে সফটওয়্যার নিজেই আজ ক্যাশে <b>+৳৪০০</b> ধরবে এবং রহিমের নামে <b>৳১০০ বাকি</b> লিখে রাখবে!'
-    + '</div></div>';
+    + '<button type="button" class="btn warnb block" onclick="saveInlineCntBaki(\'' + D + '\')">➕ বাকি যোগ করুন (মোট আয়ে যোগ হবে, আজকের ক্যাশে যাবে না)</button>'
+    + '</div>';
+}
+function pickInlineCntSvc(v) {
+  window._inlineSvc = v;
+  const el = $('in_cnt_svcs');
+  if (el) {
+    const svcs = S.settings.services && S.settings.services.length ? S.settings.services : [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }];
+    el.innerHTML = svcs.map(x => chipB(x.n, x.n === window._inlineSvc, "pickInlineCntSvc(this.dataset.v)", x.n)).join('');
+  }
+}
+function saveInlineCntBaki(D) {
+  const due = n(val('inc_due'));
+  const nm = val('inc_name').trim();
+  const ph = val('inc_phone').trim();
+  const nt = val('inc_note').trim();
+  if (due <= 0) { toast('কত টাকা বাকি নিল তা লিখুন (যেমন: 400)'); return; }
+  if (!nm && !ph) { toast('কাস্টমারের নাম বা ফোন নম্বর লিখুন'); return; }
+  const dt = D || UI.cd || today();
+  const by = ME || actor();
+  const svc = window._inlineSvc || 'ফটোকপি';
+  const id = uid();
+  const rec = {
+    id, serial: nextSerialNum('cnt'), date: dt, svc, qty: 1, total: due, cost: 0,
+    name: nm, phone: ph, note: nt, by, standalone: true,
+    payments: [],
+    createdAt: Date.now(), createdBy: by, log: []
+  };
+  commit('cnt', rec, null, ['কাউন্টার বাকি এন্ট্রি: ' + money(due)]);
+  render();
+  toast('✅ ' + (nm || svc) + '-এর ' + money(due) + ' বাকি যোগ হয়েছে! (মোট আয়ে যোগ হয়েছে, আজকের দৈনিক ক্যাশে যাবে না)');
 }
 function cntLegacy() {
   const dueL = Object.values(S.cnt).filter(c => cntCalc(c).due > 0.001).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
@@ -2228,26 +2337,237 @@ function tdRow(x) {
   return '<div class="kv" style="cursor:pointer;align-items:center" onclick="djForm(\'' + d.id + '\')"><span style="color:var(--ink);min-width:0">' + serNo('docs', d.id) + ' <b>' + esc(d.name) + '</b><div class="sm mut">' + esc(d.cat) + (d.phone ? ' · ' + esc(d.phone) : '') + '</div>' + (d.note ? '<div class="enote">📝 ' + esc(d.note) + '</div>' : '') + '</span><span style="text-align:right"><b class="num">' + money(c.bill) + '</b><div class="sm num good">জমা ' + money(c.paid) + '</div>' + (c.due ? '<div class="sm num bad">বাকি ' + money(c.due) + '</div>' : '') + '</span></div>';
 }
 function vToday() {
-  const D = UI.td || today(), rel = relDay(D), dc = dcStat(D), cd = cashDay(D), cm = cashModel().day[D] || {};
-  let cColl = 0, cExtra = 0; Object.values(cm).forEach(x => { cColl += x.coll; cExtra += x.extra; });
-  const docs = Object.values(S.docs).map(d => ({ d, c: docCalc(d) }));
-  const recv = docs.filter(x => x.d.recvDate === D), dlv = docs.filter(x => x.d.status === 'done' && x.d.doneDate === D), ret = docs.filter(x => x.d.status === 'ret' && x.d.retDate === D);
-  const profit = dlv.concat(ret).reduce((s, x) => s + x.c.profit, 0), sum = (l, f) => l.reduce((s, x) => s + f(x), 0);
-  const ex = { shop: 0, personal: 0, income: 0 }; Object.values(S.expenses).forEach(e => { if (e.date === D) ex[e.kind] += n(e.amt); });
-  const pf = Object.values(S.files).filter(f => f.appDate === D); let lg = 0, lr = 0;
-  Object.values(S.loans).forEach(l => arr(l.entries).forEach(e => { if (e.date === D) { if (e.dir === 'gave') lg += n(e.amt); else lr += n(e.amt); } }));
-  const sps = dc.rows.filter(r => r.t === 'sp');
-  const pill = !dc.has ? '<span class="pill warn">গোনা হয়নি</span>' : (Math.abs(dc.diff) < 0.5 ? '<span class="pill good">✓ মিলেছে</span>' : '<span class="pill bad">⚠ ' + (dc.diff < 0 ? 'কম ' : 'বেশি ') + money(Math.abs(dc.diff)) + '</span>');
-  const grp = (t, l, emp) => '<div class="card" style="padding:12px 14px"><div class="row between"><b>' + t + '</b><span class="pill">' + l.length + 'টি</span></div>' + (l.length ? l.map(tdRow).join('') : '<div class="mut sm" style="padding:6px 0">' + emp + '</div>') + '</div>';
-  return '<div class="card row between"><button class="ib" onclick="tdShift(-1)" aria-label="আগের দিন">‹</button><div style="text-align:center"><input type="date" value="' + D + '" onchange="tdJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">' + rel + '</div></div><button class="ib" onclick="tdShift(1)" aria-label="পরের দিন">›</button></div>'
-    + '<div class="card"><div class="row between"><b>💵 ক্যাশ</b>' + pill + '</div>'
-    + kv('ডকুমেন্টে জমা নিয়েছি', money(dc.inn), 'good') + kv('ডকুমেন্টে ফেরত দিয়েছি', money(dc.out), dc.out ? 'bad' : '') + kv('ডকুমেন্টের খরচ', money(dc.sp), dc.sp ? 'bad' : '') + kv('<b>ডকুমেন্ট ক্যাশে থাকার কথা</b>', '<b>' + money(dc.exp) + '</b>') + (dc.has ? kv('গুনে পেয়েছি', money(dc.amt)) : '')
-    + kv('কাউন্টার ক্যাশ (গোনা)', money(cColl), 'good') + kv('পাসপোর্ট ক্লায়েন্ট জমা', money(cd.pp), 'good') + '</div>'
-    + '<div class="card"><b>📈 লাভ ও খরচ</b>' + kv('ডকুমেন্ট লাভ (' + (dlv.length + ret.length) + 'টি ডেলিভারড/ফেরত)', money(profit), profit >= 0 ? 'good' : 'bad') + kv('কাউন্টার আয়', money(cExtra), 'good') + kv('অন্য আয়', money(ex.income), 'good') + kv('দোকান খরচ', money(ex.shop), ex.shop ? 'bad' : '') + kv('ব্যক্তিগত খরচ', money(ex.personal), ex.personal ? 'bad' : '') + '</div>'
-    + '<div class="card"><b>🧾 বিল ও বাকি (আজ নেওয়া ডকুমেন্ট কাজ)</b>' + kv('কাজ', recv.length + 'টি') + kv('মোট বিল', money(sum(recv, x => x.c.bill))) + kv('জমা', money(sum(recv, x => x.c.paid)), 'good') + kv('বাকি', money(sum(recv, x => x.c.due)), sum(recv, x => x.c.due) ? 'bad' : '') + '</div>'
-    + grp('📥 আজ নেওয়া কাজ', recv, 'আজ কোনো কাজ নেওয়া হয়নি') + grp('✅ আজ ডেলিভারড', dlv, 'আজ কোনো ডেলিভারি নেই') + grp('↩ আজ ফেরত', ret, 'আজ কোনো ফেরত নেই')
-    + '<div class="card"><div class="row between"><b>💸 ডকুমেন্ট খরচ</b><span class="pill">' + sps.length + 'টি</span></div>' + (sps.length ? sps.map(r => '<div class="kv"><span style="color:var(--ink)"><b>' + esc(r.nm) + '</b><div class="sm mut">' + esc(r.cat) + (r.by ? ' · ' + esc(r.by) : '') + '</div>' + (r.note ? '<div class="enote">📝 ' + esc(r.note) + '</div>' : '') + '</span><b class="num bad">−' + money(r.amt) + '</b></div>').join('') : '<div class="mut sm" style="padding:6px 0">আজ কোনো খরচ নেই</div>') + '</div>'
-    + '<div class="card"><b>📋 অন্যান্য</b>' + kv('নতুন পাসপোর্ট ফাইল', pf.length + 'টি') + kv('বাকি খাতা — দিয়েছি/দিলাম (সে নিল)', money(lg)) + kv('বাকি খাতা — পেয়েছি (সে ফেরত দিল)', money(lr)) + '</div>';
+  const D = UI.td || today(), rel = relDay(D), sum = (l, f) => l.reduce((s, x) => s + f(x), 0);
+  const R = dayReconcile(D);
+  const dc = dcStat(D);
+
+  // ১. ভিসা সফটওয়্যার (VISA.rows + S.vmeta)
+  const vAll = MODE === 'cloud' ? (VISA.rows || []) : [];
+  const vCreated = vAll.filter(v => v.date === D);
+  const vApptToday = vAll.filter(v => v.mode !== 'RETURNED' && v.apptDate === D);
+  const vDelToday = vAll.filter(v => v.mode === 'DELIVERED' && v.delDate === D);
+  const vRetToday = vAll.filter(v => {
+    if (v.mode !== 'RETURNED') return false;
+    const vm = vMetaOf(v.id);
+    return (vm.refDate || v.last || v.date) === D;
+  });
+  const vPaysToday = [];
+  vAll.forEach(v => {
+    arr(v.payList).forEach(p => {
+      if (p && p.d === D && n(p.amt) > 0) vPaysToday.push({ v, p, amt: n(p.amt) });
+    });
+  });
+  const vCostsToday = [];
+  vAll.forEach(v => {
+    const fi = visaFeeInfo(v);
+    if (fi.basePaid && fi.baseDate === D && fi.baseFee > 0) vCostsToday.push({ v, label: '১. ভিসা ফি (Base Fee)', amt: fi.baseFee });
+    if (fi.softPaid && fi.softDate === D && fi.softFee > 0) vCostsToday.push({ v, label: '২. সফটওয়্যার চার্জ', amt: fi.softFee });
+  });
+  // ভিসা থেকে আজকের অর্জিত লাভ (আজ তৈরি বা অ্যাপয়েন্টমেন্ট/ডেলিভারি/ফেরত হওয়া ফাইল)
+  const vProfitFiles = vAll.filter(v => (v.mode === 'RETURNED' ? ((vMetaOf(v.id).refDate || v.last || v.date) === D) : ((v.apptDate || v.delDate || v.date) === D && (v.mode === 'APPOINTED' || v.mode === 'DELIVERED'))));
+  const vBillToday = sum(vCreated, v => n(v.bill));
+  const vInToday = sum(vPaysToday, x => x.amt);
+  const vOutToday = sum(vCostsToday, x => x.amt) + sum(vRetToday, v => n(v.refund));
+  const vDueToday = sum(vCreated, v => n(v.due));
+  const vProfitToday = sum(vProfitFiles, v => n(v.profit));
+
+  // ২. পাসপোর্ট সেকশন (S.files + S.ipPays)
+  const pAll = Object.values(S.files).map(f => ({ f, c: fileCalc(f) })).sort((a, b) => getSerialNum('files', b.f.id) - getSerialNum('files', a.f.id));
+  const pNew = pAll.filter(x => x.f.appDate === D && !x.c.ret);
+  const pRet = pAll.filter(x => x.c.ret && (x.f.retDate || x.f.appDate) === D);
+  const pJoma = pAll.filter(x => x.f.jomaDate === D);
+  const pPaysToday = [], pRefsToday = [], pChalToday = [];
+  pAll.forEach(({ f, c }) => {
+    arr(f.payments).forEach(p => { if (p && p.date === D && n(p.amt) > 0) pPaysToday.push({ f, c, p, amt: n(p.amt) }); });
+    arr(f.refunds).forEach(r => { if (r && r.date === D && n(r.amt) > 0) pRefsToday.push({ f, c, r, amt: n(r.amt) }); });
+    if (f.challan && f.challanDate === D && n(f.passFee) > 0) pChalToday.push({ f, c, amt: n(f.passFee) });
+  });
+  const ipPaidToday = Object.values(S.ipPays).filter(p => p && p.date === D);
+  const pBillToday = sum(pNew, x => x.c.bill) + sum(pRet, x => x.c.kept);
+  const pInToday = sum(pPaysToday, x => x.amt);
+  const pOutToday = sum(pChalToday, x => x.amt) + sum(pRefsToday, x => x.amt) + sum(ipPaidToday, p => n(p.amt));
+  const pDueToday = sum(pNew, x => x.c.due) + sum(pRet, x => x.c.due);
+  const pProfitToday = sum(pNew, x => x.c.profit) + sum(pRet, x => x.c.profit);
+
+  // ৩. ডকুমেন্ট সেকশন (S.docs)
+  const dAll = Object.values(S.docs).map(d => ({ d, c: docCalc(d) })).sort((a, b) => getSerialNum('docs', b.d.id) - getSerialNum('docs', a.d.id));
+  const dRecv = dAll.filter(x => x.d.recvDate === D);
+  const dDlv = dAll.filter(x => x.d.status === 'done' && (x.d.doneDate || x.d.recvDate) === D);
+  const dRet = dAll.filter(x => x.d.status === 'ret' && (x.d.retDate || x.d.recvDate) === D);
+  const dPaysToday = [], dRefsToday = [], dSpendsToday = [];
+  dAll.forEach(({ d, c }) => {
+    arr(d.payments).forEach(p => { if (p && p.date === D && n(p.amt) > 0) dPaysToday.push({ d, c, p, amt: n(p.amt) }); });
+    arr(d.refunds).forEach(r => { if (r && r.date === D && n(r.amt) > 0) dRefsToday.push({ d, c, r, amt: n(r.amt) }); });
+    arr(d.spends).forEach(sp => { if (sp && sp.date === D && n(sp.amt) > 0) dSpendsToday.push({ d, c, sp, amt: n(sp.amt) }); });
+    if (!arr(d.spends).length && d.costDone && n(d.cost) > 0 && (d.costDate || d.doneDate || d.recvDate) === D) {
+      dSpendsToday.push({ d, c, sp: { note: 'কাজের খরচ টিক দেওয়া' }, amt: n(d.cost) });
+    }
+  });
+  const dBillToday = sum(dRecv, x => x.c.bill);
+  const dInToday = sum(dPaysToday, x => x.amt);
+  const dOutToday = sum(dSpendsToday, x => x.amt) + sum(dRefsToday, x => x.amt);
+  const dDueToday = sum(dRecv, x => x.c.due);
+  const dProfitToday = sum(dDlv.concat(dRet), x => x.c.profit);
+
+  // ৪. কাউন্টার ও ফটোকপি সেকশন (S.cnt, S.cday, S.wtx)
+  const C0 = cntDayCashAndDue(D);
+  const cntEntriesToday = Object.values(S.cnt || {}).filter(c => c && c.date === D).sort((a, b) => getSerialNum('cnt', b.id) - getSerialNum('cnt', a.id));
+  const cntDueCollectedToday = [];
+  Object.values(S.cnt || {}).forEach(c => {
+    arr(c.payments).forEach(p => {
+      if (p && p.date === D && (p.isDuePay || (c.date && p.date !== c.date))) cntDueCollectedToday.push({ c, p, amt: n(p.amt) });
+    });
+  });
+
+  // ৫. দোকান খরচ, ব্যক্তিগত খরচ ও অন্য আয় (S.expenses)
+  const expToday = Object.values(S.expenses).filter(e => e && e.date === D);
+  const shopExpList = expToday.filter(e => e.kind === 'shop');
+  const perExpList = expToday.filter(e => e.kind === 'personal');
+  const othIncList = expToday.filter(e => e.kind === 'income');
+  const shopExpSum = sum(shopExpList, e => n(e.amt));
+  const perExpSum = sum(perExpList, e => n(e.amt));
+  const othIncSum = sum(othIncList, e => n(e.amt));
+
+  // ৬. বাকি খাতা (S.loans) ও বিকাশ/নগদ/ব্যাংক বিশেষ লেনদেন (S.wtx)
+  const loanTxsToday = [];
+  let loanGaveSum = 0, loanGotSum = 0;
+  Object.values(S.loans).forEach(l => {
+    arr(l.entries).forEach(e => {
+      if (e && e.date === D) {
+        const k = entryKind(e), info = LK[k];
+        const isOut = (k === 'lend' || k === 'payback');
+        if (isOut) loanGaveSum += n(e.amt); else loanGotSum += n(e.amt);
+        loanTxsToday.push({ l, e, isOut, label: info.t, amt: n(e.amt) });
+      }
+    });
+  });
+  const wtxToday = Object.values(S.wtx || {}).filter(t => t && t.date === D);
+
+  // 🏆 ওভারঅল মাস্টার যোগফল (Overall Totals Across All Sections)
+  const grandBill = vBillToday + pBillToday + dBillToday + C0.totalIncomeToday;
+  const grandCashIn = R.extIn;
+  const grandCashOut = R.extOut;
+  const grandNewDue = vDueToday + pDueToday + dDueToday + C0.cntDueToday;
+  const grandGrossIncome = vProfitToday + pProfitToday + dProfitToday + C0.totalIncomeToday + othIncSum;
+  const grandNetProfit = grandGrossIncome - shopExpSum;
+
+  // নেভিগেশন বার
+  const topNav = '<div class="card row between wrapr" style="gap:8px">'
+    + '<button class="ib" onclick="tdShift(-1)" aria-label="আগের দিন">‹</button>'
+    + '<div style="text-align:center"><input type="date" value="' + D + '" onchange="tdJump(this.value)" style="text-align:center;font-weight:700;border:0;background:none;padding:2px;max-width:170px"><div class="sm mut">📅 ' + rel + 'র সম্পূর্ণ কাজের ওভারঅল রিপোর্ট (সব সেকশন + ভিসা সফটওয়্যার)</div></div>'
+    + '<div class="row" style="gap:6px">'
+    + (D !== today() ? '<button type="button" class="btn sm ghost" onclick="tdJump(today())">আজ</button>' : '')
+    + (MODE === 'cloud' ? '<button type="button" class="btn sm ghost" onclick="loadVisa(true).then(()=>{render();toast(\'ভিসা ডাটা আপডেট হয়েছে\')})">🔄 ভিসা সিঙ্ক</button>' : '')
+    + '<button class="ib" onclick="tdShift(1)" aria-label="পরের দিন">›</button>'
+    + '</div></div>';
+
+  // 🏆 ১. ওভারঅল মাস্টার সামারি হিরো কার্ড
+  const masterHero = '<div class="card hero">'
+    + '<div class="row between"><span class="sm" style="opacity:.85">🏆 ' + rel + ' (' + fd(D) + ') — সব সেকশন মিলিয়ে ওভারঅল নিট লাভ</span><span class="pill good">সব সেকশন + ভিসা</span></div>'
+    + '<div class="big num">' + money(grandNetProfit) + '</div>'
+    + '<div class="sm" style="opacity:.9">মোট লাভ/আয়: <b class="num">' + money(grandGrossIncome) + '</b> &nbsp;−&nbsp; দোকান খরচ: <b class="num">' + money(shopExpSum) + '</b> &nbsp;·&nbsp; ব্যক্তিগত খরচ: <b class="num">' + money(perExpSum) + '</b> (লাভের বাইরে)</div>'
+    + '<div class="tri" style="margin-top:10px">'
+    + '<div><small>🧾 আজ মোট কাজের বিল</small><b class="num">' + money(grandBill) + '</b></div>'
+    + '<div><small>📥 আজ নগদ জমা (+)</small><b class="num">+' + money(grandCashIn) + '</b></div>'
+    + '<div><small>📤 আজ মোট খরচ/প্রদান (−)</small><b class="num">−' + money(grandCashOut) + '</b></div>'
+    + '</div>'
+    + '<div class="tri" style="margin-top:6px">'
+    + '<div><small>🔴 আজ নতুন বাকি (পাব)</small><b class="num">' + money(grandNewDue) + '</b></div>'
+    + '<div><small>📈 মোট লাভ (Gross)</small><b class="num">' + money(grandGrossIncome) + '</b></div>'
+    + '<div style="cursor:pointer" onclick="dhJump(\'' + D + '\');go(\'dhisab\')"><small>🏦 দৈনিক ক্যাশ ক্লোজিং ↗</small><b class="num">' + money(R.tExpected) + '</b></div>'
+    + '</div></div>';
+
+  // 📊 ২. সেকশন অনুযায়ী এক নজরে টেবিল (Every Section Breakdown Table)
+  const secRow = (ico, name, countTxt, bill, inn, out, due, prof, js) => '<div style="display:grid;grid-template-columns:1.5fr .9fr .9fr .9fr .9fr 1fr;gap:4px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:12.5px;cursor:pointer" onclick="' + js + '">'
+    + '<span style="min-width:0"><b>' + ico + ' ' + name + '</b><div class="sm mut" style="font-size:10.5px">' + countTxt + '</div></span>'
+    + '<span class="num" style="text-align:right">' + (bill ? Math.round(bill) : '—') + '</span>'
+    + '<span class="num good" style="text-align:right">' + (inn ? '+' + Math.round(inn) : '—') + '</span>'
+    + '<span class="num bad" style="text-align:right">' + (out ? '−' + Math.round(out) : '—') + '</span>'
+    + '<span class="num ' + (due ? 'bad' : 'mut') + '" style="text-align:right">' + (due ? Math.round(due) : '—') + '</span>'
+    + '<b class="num ' + (prof >= 0 ? 'good' : 'bad') + '" style="text-align:right">' + (prof ? Math.round(prof) : '০') + '</b></div>';
+
+  const secTableCard = '<div class="card stack" style="gap:4px;overflow-x:auto">'
+    + '<div class="row between"><b style="font-size:15.5px">📊 সেকশন অনুযায়ী ' + rel + 'র ওভারঅল হিসাব (ক্লিক করলে সেকশনে যাবে)</b><span class="pill">৬টি সেকশন</span></div>'
+    + '<div class="sm mut" style="display:grid;grid-template-columns:1.5fr .9fr .9fr .9fr .9fr 1fr;gap:4px;font-weight:700;padding-top:4px">'
+    + '<span>সেকশন</span><span style="text-align:right">বিল</span><span style="text-align:right">জমা(+)</span><span style="text-align:right">খরচ(−)</span><span style="text-align:right">বাকি</span><span style="text-align:right">লাভ/আয়</span></div>'
+    + secRow('✈️', 'ভিসা সফটওয়্যার', vCreated.length + ' নতুন · ' + (vApptToday.length + vDelToday.length) + ' Appt/Del', vBillToday, vInToday, vOutToday, vDueToday, vProfitToday, "go('visa')")
+    + secRow('🛂', 'পাসপোর্ট সেকশন', pNew.length + ' নতুন · ' + pChalToday.length + ' চালান', pBillToday, pInToday, pOutToday, pDueToday, pProfitToday, "go('pass')")
+    + secRow('📄', 'ডকুমেন্ট সেকশন', dRecv.length + ' নতুন · ' + dDlv.length + ' ডেলিভারড', dBillToday, dInToday, dOutToday, dDueToday, dProfitToday, "go('doc')")
+    + secRow('🖨️', 'কাউন্টার ও ফটোকপি', 'নগদ ' + Math.round(C0.cashToday) + ' + বাকি ' + Math.round(C0.cntDueToday), C0.totalIncomeToday, C0.cashToday, 0, C0.cntDueToday, C0.totalIncomeToday, "cDate('" + D + "');go('cnt')")
+    + secRow('🧾', 'দোকান/ব্যক্তিগত খরচ ও আয়', shopExpList.length + ' দোকান · ' + perExpList.length + ' ব্যক্তিগত', 0, othIncSum, shopExpSum + perExpSum, 0, othIncSum - shopExpSum, "go('exp')")
+    + secRow('📒', 'বাকি খাতা (ধার/আদায়)', loanTxsToday.length + 'টি লেনদেন', 0, loanGotSum, loanGaveSum, loanGaveSum, 0, "go('loan')")
+    + '<div style="display:grid;grid-template-columns:1.5fr .9fr .9fr .9fr .9fr 1fr;gap:4px;align-items:center;padding:9px 0 2px;border-top:2px solid var(--line);font-weight:800;font-size:13px">'
+    + '<span>মোট (নিট লাভসহ)</span>'
+    + '<span class="num" style="text-align:right">' + Math.round(grandBill) + '</span>'
+    + '<span class="num good" style="text-align:right">+' + Math.round(grandCashIn) + '</span>'
+    + '<span class="num bad" style="text-align:right">−' + Math.round(grandCashOut) + '</span>'
+    + '<span class="num bad" style="text-align:right">' + Math.round(grandNewDue) + '</span>'
+    + '<span class="num ' + (grandNetProfit >= 0 ? 'good' : 'bad') + '" style="text-align:right">' + Math.round(grandNetProfit) + '</span>'
+    + '</div></div>';
+
+  // ✈️ সেকশন ১ বিস্তারিত: ভিসা সফটওয়্যার
+  const vFileRow = v => '<div class="kv" style="align-items:center;cursor:pointer" onclick="go(\'visa\')"><span style="color:var(--ink);min-width:0">' + (v.serial ? '<span class="sno">#' + esc(v.serial) + '</span> ' : '') + '<b>' + esc(v.name) + '</b> <span class="pill" style="font-size:10px">' + esc(v.mode) + '</span><div class="sm mut">বিল ' + money(v.bill) + ' · জমা ' + money(v.paid) + (v.due > 0 ? ' · <span class="bad">বাকি ' + money(v.due) + '</span>' : '') + '</div></span><span style="text-align:right"><b class="num ' + (v.profit >= 0 ? 'good' : 'bad') + '">লাভ ' + money(v.profit) + '</b></span></div>';
+  const visaSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid #0077b6">'
+    + '<div class="row between"><b style="font-size:15.5px">✈️ ১. ভিসা সফটওয়্যারের ' + rel + 'র বিস্তারিত</b><button type="button" class="btn sm ghost" onclick="go(\'visa\')">ভিসা ট্যাবে যান ↗</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(4,1fr)"><div><small>নতুন বিল</small><b>' + money(vBillToday) + '</b></div><div><small>আজ জমা (+)</small><b class="good">+' + money(vInToday) + '</b></div><div><small>আজ খরচ/ফেরত (−)</small><b class="bad">−' + money(vOutToday) + '</b></div><div><small>আজ লাভ</small><b class="good">' + money(vProfitToday) + '</b></div></div>'
+    + (vCreated.length ? '<div><b class="sm mut">📥 আজ নতুন এন্ট্রি হওয়া ভিসা ফাইল (' + vCreated.length + 'টি):</b>' + vCreated.map(vFileRow).join('') + '</div>' : '')
+    + (vProfitFiles.length ? '<div><b class="sm mut">📅 আজ অ্যাপয়েন্টেড / ডেলিভারড / ফেরত ভিসা ফাইল (' + vProfitFiles.length + 'টি):</b>' + vProfitFiles.map(vFileRow).join('') + '</div>' : '')
+    + (vPaysToday.length ? '<div><b class="sm good">💵 আজ ভিসায় টাকা জমা দিয়েছে (' + vPaysToday.length + 'টি):</b>' + vPaysToday.map(x => '<div class="kv"><span style="color:var(--ink)">' + (x.v.serial ? '<span class="sno">#' + esc(x.v.serial) + '</span> ' : '') + '<b>' + esc(x.v.name) + '</b></span><b class="num good">+' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (vCostsToday.length ? '<div><b class="sm bad">📤 আজ ভিসা ফি ও সফটওয়্যার খরচ গেছে (' + vCostsToday.length + 'টি):</b>' + vCostsToday.map(x => '<div class="kv"><span style="color:var(--ink)">' + (x.v.serial ? '<span class="sno">#' + esc(x.v.serial) + '</span> ' : '') + '<b>' + esc(x.v.name) + '</b> · <span class="sm mut">' + esc(x.label) + '</span></span><b class="num bad">−' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (!vCreated.length && !vProfitFiles.length && !vPaysToday.length && !vCostsToday.length ? '<div class="sm mut">' + (MODE === 'cloud' ? 'এই দিনে ভিসা সফটওয়্যারে কোনো নতুন ফাইল বা লেনদেন নেই।' : 'ভিসা সফটওয়্যারের ডাটা দেখতে ক্লাউড মোডে লগইন করুন।') + '</div>' : '')
+    + '</div>';
+
+  // 🛂 সেকশন ২ বিস্তারিত: পাসপোর্ট ফাইল
+  const passFileRow = x => '<div class="kv" style="align-items:center;cursor:pointer" onclick="fileForm(\'' + x.f.id + '\')"><span style="color:var(--ink);min-width:0">' + serNo('files', x.f.id) + ' <b>' + esc(x.f.name) + '</b>' + (x.f.ref ? ' · ' + refBadge(x.f.ref) : '') + '<div class="sm mut">বিল ' + money(x.c.bill) + ' · জমা ' + money(x.c.paid) + (x.c.due > 0 ? ' · <span class="bad">বাকি ' + money(x.c.due) + '</span>' : ' · <span class="good">পুরো জমা</span>') + ' · ফি ' + money(x.f.passFee) + (x.f.ipOn ? ' · IP ' + money(x.f.ipAmt) : '') + '</div></span><span style="text-align:right"><b class="num ' + (x.c.profit >= 0 ? 'good' : 'bad') + '">লাভ ' + money(x.c.profit) + '</b></span></div>';
+  const passSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid var(--acc)">'
+    + '<div class="row between"><b style="font-size:15.5px">🛂 ২. পাসপোর্ট সেকশনের ' + rel + 'র বিস্তারিত</b><button type="button" class="btn sm ghost" onclick="fileForm()">＋ নতুন পাসপোর্ট</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(5,1fr)"><div><small>নতুন বিল</small><b>' + money(pBillToday) + '</b></div><div><small>আজ জমা (+)</small><b class="good">+' + money(pInToday) + '</b></div><div><small>চালান/IP (−)</small><b class="bad">−' + money(pOutToday) + '</b></div><div><small>নতুন বাকি</small><b class="' + (pDueToday ? 'bad' : '') + '">' + money(pDueToday) + '</b></div><div><small>আজ লাভ</small><b class="good">' + money(pProfitToday) + '</b></div></div>'
+    + (pNew.length ? '<div><b class="sm mut">📥 আজ নেওয়া নতুন পাসপোর্ট ফাইল (' + pNew.length + 'টি):</b>' + pNew.map(passFileRow).join('') + '</div>' : '')
+    + (pRet.length ? '<div><b class="sm bad">↩ আজ ফেরত যাওয়া পাসপোর্ট ফাইল (' + pRet.length + 'টি):</b>' + pRet.map(passFileRow).join('') + '</div>' : '')
+    + (pPaysToday.length ? '<div><b class="sm good">💵 আজ পাসপোর্টে কাস্টমার জমা দিয়েছে (' + pPaysToday.length + 'টি):</b>' + pPaysToday.map(x => '<div class="kv" style="cursor:pointer" onclick="fileForm(\'' + x.f.id + '\')"><span style="color:var(--ink)">' + serNo('files', x.f.id) + ' <b>' + esc(x.f.name) + '</b>' + (x.p.note ? ' · <span class="sm mut">📝 ' + esc(x.p.note) + '</span>' : '') + '</span><b class="num good">+' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (pChalToday.length ? '<div><b class="sm bad">📤 আজ পাসপোর্ট চালান সম্পন্ন হয়েছে (' + pChalToday.length + 'টি):</b>' + pChalToday.map(x => '<div class="kv" style="cursor:pointer" onclick="fileForm(\'' + x.f.id + '\')"><span style="color:var(--ink)">' + serNo('files', x.f.id) + ' <b>' + esc(x.f.name) + '</b></span><b class="num bad">−' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (pJoma.length ? '<div class="sm mut">🛡️ আজ ফাইল joma হয়েছে: <b>' + pJoma.length + 'টি</b> (মোট IP জমেছে: <b>' + money(sum(pJoma, x => x.f.ipOn ? n(x.f.ipAmt) : 0)) + '</b>)</div>' : '')
+    + (ipPaidToday.length ? '<div><b class="sm bad">📤 আজ IP পরিশোধ করা হয়েছে:</b>' + ipPaidToday.map(p => '<div class="kv"><span style="color:var(--ink)">IP পেমেন্ট' + (p.note ? ' · ' + esc(p.note) : '') + '</span><b class="num bad">−' + money(p.amt) + '</b></div>').join('') + '</div>' : '')
+    + (!pNew.length && !pRet.length && !pPaysToday.length && !pChalToday.length && !ipPaidToday.length ? '<div class="sm mut">এই দিনে পাসপোর্ট সেকশনে কোনো নতুন ফাইল বা লেনদেন নেই।</div>' : '')
+    + '</div>';
+
+  // 📄 সেকশন ৩ বিস্তারিত: ডকুমেন্ট কাজ
+  const docSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid var(--good)">'
+    + '<div class="row between"><b style="font-size:15.5px">📄 ৩. ডকুমেন্ট সেকশনের ' + rel + 'র বিস্তারিত</b><button type="button" class="btn sm ghost" onclick="djForm()">＋ নতুন ডকুমেন্ট কাজ</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(5,1fr)"><div><small>নতুন বিল</small><b>' + money(dBillToday) + '</b></div><div><small>আজ জমা (+)</small><b class="good">+' + money(dInToday) + '</b></div><div><small>খরচ/ফেরত (−)</small><b class="bad">−' + money(dOutToday) + '</b></div><div><small>নতুন বাকি</small><b class="' + (dDueToday ? 'bad' : '') + '">' + money(dDueToday) + '</b></div><div><small>অর্জিত লাভ</small><b class="good">' + money(dProfitToday) + '</b></div></div>'
+    + (dRecv.length ? '<div><b class="sm mut">📥 আজ নেওয়া ডকুমেন্ট কাজ (' + dRecv.length + 'টি):</b>' + dRecv.map(tdRow).join('') + '</div>' : '')
+    + (dDlv.length ? '<div><b class="sm good">✅ আজ ডেলিভারড ডকুমেন্ট কাজ (' + dDlv.length + 'টি):</b>' + dDlv.map(tdRow).join('') + '</div>' : '')
+    + (dRet.length ? '<div><b class="sm bad">↩ আজ ফেরত ডকুমেন্ট কাজ (' + dRet.length + 'টি):</b>' + dRet.map(tdRow).join('') + '</div>' : '')
+    + (dPaysToday.length ? '<div><b class="sm good">💵 আজ ডকুমেন্টে জমা এসেছে (' + dPaysToday.length + 'টি):</b>' + dPaysToday.map(x => '<div class="kv" style="cursor:pointer" onclick="djForm(\'' + x.d.id + '\')"><span style="color:var(--ink)">' + serNo('docs', x.d.id) + ' <b>' + esc(x.d.name) + '</b> (' + esc(x.d.cat) + ')</span><b class="num good">+' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (dSpendsToday.length ? '<div><b class="sm bad">💸 আজ ডকুমেন্ট কাজের খরচ (' + dSpendsToday.length + 'টি):</b>' + dSpendsToday.map(x => '<div class="kv" style="cursor:pointer" onclick="djForm(\'' + x.d.id + '\')"><span style="color:var(--ink)">' + serNo('docs', x.d.id) + ' <b>' + esc(x.d.name) + '</b> (' + esc(x.d.cat) + ')' + (x.sp && x.sp.note ? ' · <span class="sm mut">' + esc(x.sp.note) + '</span>' : '') + '</span><b class="num bad">−' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (!dRecv.length && !dDlv.length && !dRet.length && !dPaysToday.length && !dSpendsToday.length ? '<div class="sm mut">এই দিনে ডকুমেন্ট সেকশনে কোনো কাজ বা লেনদেন নেই।</div>' : '')
+    + '</div>';
+
+  // 🖨️ সেকশন ৪ বিস্তারিত: কাউন্টার ও ফটোকপি
+  const cntSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid var(--warn)">'
+    + '<div class="row between"><b style="font-size:15.5px">🖨️ ৪. কাউন্টার ও ফটোকপি সেকশনের ' + rel + 'র বিস্তারিত</b><button type="button" class="btn sm ghost" onclick="counterSmartSheet()">＋ নগদ / বাকি লিখুন</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>১. নগদ ক্যাশ (+)</small><b class="good">+' + money(C0.cashToday) + '</b></div><div><small>২. আজ বাকি (পাব)</small><b class="' + (C0.cntDueToday ? 'bad' : '') + '">' + money(C0.cntDueToday) + '</b></div><div><small>৩. মোট কাউন্টার আয় (১+২)</small><b style="color:var(--acc)">' + money(C0.totalIncomeToday) + '</b></div></div>'
+    + (cntEntriesToday.length ? '<div><b class="sm mut">📝 আজ কাউন্টারে লেখা বাকি ও কাজের তালিকা (' + cntEntriesToday.length + 'টি):</b>' + cntEntriesToday.map(c => cRow(c, false)).join('') + '</div>' : '')
+    + (cntDueCollectedToday.length ? '<div><b class="sm good">💵 আজ পুরনো কাউন্টার বকেয়া আদায় (' + cntDueCollectedToday.length + 'টি):</b>' + cntDueCollectedToday.map(x => '<div class="kv" style="cursor:pointer" onclick="cForm(\'' + x.c.id + '\')"><span style="color:var(--ink)"><b>' + esc(x.c.name || x.c.svc) + '</b> (' + fd(x.c.date) + ' তারিখের বাকি)</span><b class="num good">+' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + '</div>';
+
+  // 🧾 সেকশন ৫ বিস্তারিত: দোকান খরচ, ব্যক্তিগত খরচ ও অন্য আয়
+  const expSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid var(--bad)">'
+    + '<div class="row between"><b style="font-size:15.5px">🧾 ৫. দোকান খরচ, ব্যক্তিগত খরচ ও অন্য আয় (' + expToday.length + 'টি)</b><button type="button" class="btn sm ghost" onclick="UI.ek=\'shop\';expForm()">＋ খরচ যোগ</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>দোকান খরচ (−)</small><b class="bad">−' + money(shopExpSum) + '</b></div><div><small>ব্যক্তিগত খরচ (−)</small><b class="bad">−' + money(perExpSum) + '</b></div><div><small>অন্য আয় (+)</small><b class="good">+' + money(othIncSum) + '</b></div></div>'
+    + (expToday.length ? expToday.map(e => '<div class="kv" style="cursor:pointer" onclick="expForm(\'' + e.id + '\')"><span style="color:var(--ink)"><b>' + esc(e.cat) + '</b> <span class="pill" style="font-size:10px">' + esc(KIND[e.kind] || e.kind) + '</span>' + (e.note ? '<div class="sm mut">📝 ' + esc(e.note) + '</div>' : '') + '</span><b class="num ' + (e.kind === 'income' ? 'good' : 'bad') + '">' + (e.kind === 'income' ? '+' : '−') + money(e.amt) + '</b></div>').join('') : '<div class="sm mut">এই দিনে কোনো দোকান বা ব্যক্তিগত খরচ লেখা হয়নি।</div>')
+    + '</div>';
+
+  // 📒 সেকশন ৬ বিস্তারিত: বাকি খাতা ও বিকাশ/নগদ/ড্রয়ার লেনদেন
+  const loanWtxSecHtml = '<div class="card stack" style="gap:8px;border-left:5px solid #8b5cf6">'
+    + '<div class="row between"><b style="font-size:15.5px">📒 ৬. বাকি খাতা ও বিকাশ/নগদ/ব্যাংক লেনদেন</b><button type="button" class="btn sm ghost" onclick="go(\'loan\')">বাকি খাতা ↗</button></div>'
+    + '<div class="mini num" style="grid-template-columns:repeat(2,1fr)"><div><small>বাকি খাতা — দিলাম/নিল (−)</small><b class="bad">−' + money(loanGaveSum) + '</b></div><div><small>বাকি খাতা — পেলাম/ফেরত দিল (+)</small><b class="good">+' + money(loanGotSum) + '</b></div></div>'
+    + (loanTxsToday.length ? '<div><b class="sm mut">📒 আজকের বাকি খাতা লেনদেন (' + loanTxsToday.length + 'টি):</b>' + loanTxsToday.map(x => '<div class="kv" style="cursor:pointer" onclick="loanSheet(\'' + x.l.id + '\')"><span style="color:var(--ink)"><b>' + esc(x.l.person) + '</b> · <span class="sm mut">' + esc(x.label) + (x.e.note ? ' (' + esc(x.e.note) + ')' : '') + '</span></span><b class="num ' + (x.isOut ? 'bad' : 'good') + '">' + (x.isOut ? '−' : '+') + money(x.amt) + '</b></div>').join('') + '</div>' : '')
+    + (wtxToday.length ? '<div><b class="sm mut">📱 বিকাশ/নগদ, এজেন্ট B2B ও সরাসরি ড্রয়ার লেনদেন (' + wtxToday.length + 'টি):</b>' + wtxToday.map(t => '<div class="kv" style="cursor:pointer" onclick="wtxSheet(\'' + t.id + '\')"><span style="color:var(--ink)"><b>' + esc(t.client || t.cat || 'লেনদেন') + '</b>' + (t.note ? '<div class="sm mut">📝 ' + esc(t.note) + '</div>' : '') + '</span><b class="num ' + (t.dir === 'out' ? 'bad' : 'good') + '">' + (t.dir === 'out' ? '−' : '+') + money(t.amt) + '</b></div>').join('') + '</div>' : '')
+    + (!loanTxsToday.length && !wtxToday.length ? '<div class="sm mut">এই দিনে বাকি খাতা বা অতিরিক্ত ওয়ালেট লেনদেন নেই।</div>' : '')
+    + '</div>';
+
+  return topNav + masterHero + secTableCard + visaSecHtml + passSecHtml + docSecHtml + cntSecHtml + expSecHtml + loanWtxSecHtml;
 }
 /* ====== অ্যাক্টিভিটি লগ ====== */
 const ALA = { add: ['নতুন', 'good'], edit: ['বদল', 'warn'], del: ['মুছেছে', 'bad'] };
@@ -2638,7 +2958,7 @@ function allTxForDate(D) {
         const catLbl = isOldDuePay ? 'কাউন্টার বকেয়া আদায় (আয়)' : 'কাউন্টার এক্সট্রা সার্ভিস (আয়)';
         const titleLbl = (c.name ? c.name + ' — ' : '') + (c.svc || 'কাউন্টার') + (n(c.qty) > 1 ? ' × ' + n(c.qty) : '');
         const subLbl = (isOldDuePay ? '📅 ' + fd(c.date) + ' তারিখের ফটোকপি/কাউন্টার বাকি আদায় · ' : '') + (p.note ? '📝 ' + p.note + ' · ' : '') + (k.due > 0 ? 'এখনো বাকি ' + money(k.due) : 'পুরো পরিশোধ');
-        push(p.w || 'w_counter', 'in', p.amt, catLbl, titleLbl, subLbl, true, "cForm('" + c.id + "')");
+        push(p.w || 'w_counter', 'in', p.amt, catLbl, titleLbl, subLbl, !isOldDuePay, "cForm('" + c.id + "')");
       }
     });
   });
@@ -2897,6 +3217,7 @@ function dayReconcile(D) {
     });
     Object.values(S.files).forEach(f => { const c = fileCalc(f); if (c.ret && f.retDate === D) revKept += c.kept; else if (!c.ret && f.appDate === D) revDocPass += c.profit; });
     Object.values(S.docs).forEach(d => { const c = docCalc(d); if (c.real && docProfitDate(d) === D) { if (d.status === 'ret') revKept += c.kept; else revDocPass += c.profit; } });
+    Object.values(S.cnt).forEach(c => { if (c && c.date === D) { const k = cntCalc(c); revCounter += k.due; } });
   }
   VISA.rows.forEach(v => {
     const fi = visaFeeInfo(v);
@@ -2922,8 +3243,13 @@ function freshStartSheet(defDate) {
 // Always show all 3 drawers + all added accounts in Fresh Start so per-account opening balances feed Total Method
 
   const ws = wallets();
-  sheet('🚀 নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করুন',
-    '<div class="mut sm">আপনি যেদিন থেকে (যেমন: আগামীকাল বা আজ) নতুন ব্যালেন্স দিয়ে দৈনিক হিসাব শুরু করতে চান, সেই তারিখটি বাছুন এবং প্রতিটি ড্রয়ার ও বিকাশ/ব্যাংকে শুরুর দিন সকালে যত টাকা থাকবে তা নিচে বসিয়ে সেভ করুন। আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
+  sheet('🚀 কালকে বা আজ থেকে নতুন করে দৈনিক হিসাব শুরু করুন',
+    '<div class="ipbox stack" style="gap:6px;background:var(--soft);border:1.5px solid var(--acc);font-size:13px;line-height:1.55">'
+    + '<b>📋 নতুন করে শুরু করার গাইডলাইন (IP রিজার্ভ ও ওপেনিং ব্যালেন্স):</b>'
+    + '<div><b>১. 🛡️ আগে থেকে জমানো IP-এর টাকা থাকলে:</b> আপনার কাছে আগের ফাইলগুলোর জমানো IP-এর যত টাকা আলাদা বক্সে/খামে রাখা আছে, তা নিচের <b>«IP Reserve Box (আইপি রিজার্ভ বক্স)»</b> ঘরে বসান। (এর ফলে পরে যেদিন আপনি বক্স থেকে IP পরিশোধ করবেন, সেদিন ওই বক্স থেকেই টাকা কমবে এবং হিসাব ১০০% মিলে থাকবে!)</div>'
+    + '<div><b>২. 🗄️ ক্যাশ ড্রয়ার ও 📱 বিকাশ/ব্যাংক:</b> সকালে দোকানের ক্যাশ ড্রয়ারে নগদ যত টাকা আছে এবং বিকাশ/নগদ/ব্যাংকে যত ব্যালেন্স আছে তা সংশ্লিষ্ট ঘরে বসান।</div>'
+    + '<div><b>৩. ✅ পুরনো হিসাব মিশবে না:</b> নিচে সেভ চাপলে আপনার নির্ধারিত তারিখ থেকে নতুন হিসাব শুরু হবে—আগের পুরনো কোনো ফাইল বা হিসাব এর সাথে মিশবে না!</div>'
+    + '</div>'
     + '<div class="field"><label for="fs_date">কবে থেকে নতুন হিসাব শুরু করবেন?</label>'
     + '<div class="row" style="gap:6px"><input id="fs_date" type="date" value="' + D + '">'
     + '<button type="button" class="btn sm ghost" onclick="$(\x27fs_date\x27).value=\'' + today() + '\'">আজ (' + fd(today()) + ')</button>'
@@ -3260,40 +3586,27 @@ function applyIpReserveEnd(D) {
 
 function dailyGuideHtml() {
   const open = UI.showGuide !== undefined ? !!UI.showGuide : true;
-  const toggleBtn = '<div class="card row between wrapr" style="padding:12px 15px;border:2px solid var(--acc);background:var(--soft);gap:10px">'
-    + '<div style="min-width:0"><b style="font-size:15px">📖 এক নজরে সহজ নিয়মাবলী (কীভাবে প্রতিদিন হিসাব করবেন?)</b><div class="sm mut">সকালের ওপেনিং · সারাদিনের কাজ · IP রিজার্ভ · ভিসা ও রিটার্ন · রাতের ক্লোজিং ও গরমিল মেলানো</div></div>'
-    + '<button type="button" class="btn sm ' + (open ? 'ghost' : '') + '" onclick="toggleDhGuide()">' + (open ? '🔼 নিয়মাবলী ছোট করুন' : '👁️ সহজ নিয়মাবলী দেখুন') + '</button>'
+  const toggleBtn = '<div class="card row between wrapr" style="padding:11px 14px;border:2px solid var(--acc);background:var(--soft);gap:10px">'
+    + '<div style="min-width:0"><b style="font-size:15px">📖 কালকে থেকে নতুন করে দৈনিক হিসাব শুরু করার গাইডলাইন (IP রিজার্ভ ও ওপেনিং ব্যালেন্স)</b><div class="sm mut">মাত্র ৩টি সহজ ধাপে পুরো দোকানের হিসাব মেলান</div></div>'
+    + '<button type="button" class="btn sm ' + (open ? 'ghost' : '') + '" onclick="toggleDhGuide()">' + (open ? '🔼 গাইডলাইন লুকান' : '👁️ গাইডলাইন দেখুন') + '</button>'
     + '</div>';
   if (!open) return toggleBtn;
   return toggleBtn
-    + '<div class="card stack" style="gap:10px;border:2px solid var(--acc);background:var(--card);font-size:13.5px;line-height:1.6">'
-    + '<div class="gormil-grid">'
+    + '<div class="card stack" style="gap:8px;border:2px solid var(--acc);background:var(--card);font-size:13.5px;line-height:1.55">'
+    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--warn)">'
+    + '<b>🛡️ ১. প্রথম কাজ — IP রিজার্ভ বক্সে আগের জমানো টাকা বসানো:</b><br>'
+    + '• আপনার কাছে আগে থেকে জমানো IP-এর যত টাকা বক্সে আছে, তা নিচে <b>«4. IP Reserve Box (আইপি রিজার্ভ বক্স)»</b>-এর <b>«১. শুরুতে ছিল (Opening ৳)»</b> ঘরে বসান।<br>'
+    + '• <b>কেন বসাবেন?</b> কারণ পরে যেদিন আপনি ওই বক্স থেকে IP পরিশোধ করবেন (<b>«📤 রিজার্ভ থেকে IP দিলাম»</b>), সেদিন বক্স থেকে টাকা কমবে (−)। তাই শুরুতে আগের জমানো টাকাটা বসানো থাকলে হিসাব ১০০% মিলে থাকবে!'
+    + '</div>'
     + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--acc)">'
-    + '<b>🌅 ধাপ ১: সকালের শুরু (মাত্র ১ বার)</b><br>'
-    + '• আগামীকাল সকালে নিচে আপনার <b>৩টি ক্যাশ ড্রয়ার, IP রিজার্ভ বক্স ও বিকাশ/নগদ/ব্যাংকের</b> <b>«১. শুরুতে ছিল»</b> ঘরে কোনটাতে কত টাকা আছে বসান এবং <b>«🌅 সকালে শুধু শুরুর ব্যালেন্স সেভ করুন»</b> চাপুন।<br>'
-    + '• <b>আগের সব ডাটা অক্ষত থাকবে</b>—পুরনো কোনো হিসাব আজকের সাথে মিশবে না। পরের দিন থেকে আগের রাতের ক্লোজিং নিজে থেকেই সকালে বসে যাবে!'
+    + '<b>🌅 ২. দ্বিতীয় কাজ — ক্যাশ ড্রয়ার ও বিকাশ/ব্যাংকের শুরুর ব্যালেন্স (Opening) বসানো:</b><br>'
+    + '• কাল সকালে আপনার ক্যাশ ড্রয়ারে নগদ যত টাকা আছে এবং বিকাশ/নগদ/ব্যাংকে যত টাকা আছে, তা নিচের বক্সগুলোর <b>«১. শুরুতে ছিল (Opening ৳)»</b> ঘরে বসিয়ে <b>«🌅 সকালে শুধু শুরুর ব্যালেন্স (Opening) সেভ করুন»</b> চাপুন।<br>'
+    + '• এটি মাত্র প্রথম দিনই বসাতে হবে (আগের পুরনো কোনো ফাইল আজকের হিসাবের সাথে মিশবে না)। পরের দিন থেকে আগের রাতের ক্লোজিং নিজে থেকেই সকালে বসে যাবে!'
     + '</div>'
     + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--good)">'
-    + '<b>☀️ ধাপ ২: সারাদিনের কাজ (ড্রয়ার সিলেক্ট করতে হবে না!)</b><br>'
-    + '• <b>টাকা আসবে (+):</b> কাস্টমার পাসপোর্ট/ডকুমেন্ট/ভিসার টাকা জমা দিলে, কাউন্টারের কাজ করলে, বা কেউ বাকি শোধ করলে অটো যোগ হবে (+)<br>'
-    + '• <b>টাকা যাবে (−):</b> পাসপোর্ট চালান করলে, ভিসা খরচ মার্ক করলে, ডকুমেন্ট খরচ করলে, দোকান/ব্যক্তিগত খরচ করলে, কেউ বাকি নিলে বা ফেরত দিলে অটো বিয়োগ হবে (−)।'
-    + '</div>'
-    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid var(--warn)">'
-    + '<b>🛡️ ধাপ ৩: IP রিজার্ভ বক্স যেভাবে কাজ করে</b><br>'
-    + '• <b>রিজার্ভে টাকা রাখা:</b> দিন শেষে ক্যাশ ড্রয়ার থেকে IP-এর টাকা তুলে <b>IP Reserve Box</b>-এ রাখুন এবং বক্সের <b>«দিন শেষে আছে»</b> ঘরে নতুন ব্যালেন্সটি লিখুন (ক্যাশ ড্রয়ারে কমবে আর রিজার্ভ বক্সে বাড়বে, তাই মোট হিসাব অটো মিলে থাকবে!)।<br>'
-    + '• <b>রিজার্ভ থেকে IP দেওয়া:</b> যেদিন IP পরিশোধ করবেন, সেদিন <b>«📤 রিজার্ভ থেকে IP দিলাম»</b> বাটনে চাপ দিয়ে টাকা লিখবেন—তখন রিজার্ভ থেকে টাকা কমে যাবে (−)।'
-    + '</div>'
-    + '<div class="ipbox" style="background:var(--bg);border-left:4px solid #8b5cf6">'
-    + '<b>✈️ ধাপ ৪: ভিসা খরচ ও ↩️ রিটার্ন/ফেরত নিয়ম</b><br>'
-    + '• <b>ভিসার ২টি খরচ:</b> ফাইল Appointed/Delivered হলে ভিসা কার্ডে <b>«✓ খরচ হয়েছে»</b> চাপুন—<b>১. ভিসা ফি</b> ও <b>২. সফটওয়্যার চার্জ</b> অটো বাদ যাবে।<br>'
-    + '• <b>রিটার্ন হিসাব:</b> কেউ ২০০০ জমা দিলে ৫০০ চার্জ রাখলে শুধু <b>রাখা চার্জ ৫০০</b> লিখুন—সফটওয়্যার নিজেই <b>ফেরত ১৫০০</b> বসিয়ে ক্যাশ থেকে ১৫০০ কমাবে (ভুলে ২০০০ ফেরত + ৫০০ চার্জ হবে না!)।'
-    + '</div>'
-    + '</div>'
-    + '<div class="ipbox" style="background:var(--soft);border:1.5px solid var(--acc)">'
-    + '<b>🌙 ধাপ ৫: রাতে দিন শেষে মেলানো ও গরমিল হলে করণীয়</b><br>'
-    + '• রাতে প্রতিটি ড্রয়ার, IP রিজার্ভ বক্স ও বিকাশ/নগদ/ব্যাংকে কত টাকা আছে তা <b>«২. দিন শেষে আছে (Ending)»</b> ঘরগুলোতে বসান।<br>'
-    + '• <b>ছোট গরমিল (বিকাশ/নগদ কমিশন বা চার্জ):</b> এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু কম-বেশি হলে সরাসরি <b>«💾 রাতে দিন শেষের হিসাব সেভ করুন»</b> চাপুন (আসল ব্যালেন্সই কালকের ওপেনিং হবে), অথবা ১-ক্লিকে <b>«⚡ বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিন»</b> চাপুন।<br>'
-    + '• <b>বড় গরমিল হলে:</b> নিচে লাল রঙের <b>«🚨 বড় গরমিল ডিটেক্টিভ»</b> বক্স নিজে থেকেই বলে দেবে কোন ফাইলের জমা, চালান, ভিসা খরচ বা বাকি তোলা বাদ পড়েছে! আর রাতে কারণ মনে না পড়লে <b>«📌 পরে মিলাব (Suspense)»</b> বাটনে চেপে রেখে দিন।'
+    + '<b>☀️ ৩. সারাদিনের এন্ট্রি ও 🌙 রাতের ক্লোজিং:</b><br>'
+    + '• <b>সারাদিন:</b> পাসপোর্ট/ডকুমেন্ট/ভিসায় টাকা জমা নিলে ও কাউন্টারের নগদ ক্যাশ লিখলে অটো যোগ (+) হবে; আর চালান, ভিসা ফি, দোকান/ব্যক্তিগত খরচ বা কাউকে নগদ ধার দিলে অটো বিয়োগ (−) হবে। (কাউন্টারে কেউ ফটোকপি বাকি নিলে তা বাকি তালিকায় থাকবে, নগদ ক্যাশে ভেজাল করবে না)।<br>'
+    + '• <b>দিন শেষে IP সরানো ও ক্লোজিং:</b> আজ নতুন ফাইলের জন্য যত IP জমেছে, রাতে ক্যাশ ড্রয়ার থেকে সেই টাকাটা তুলে <b>IP Reserve Box</b>-এ রাখুন। এরপর প্রতিটি বক্সের <b>«২. দিন শেষে আছে (Ending ৳)»</b> ঘরে বর্তমানে কত টাকা আছে তা বসিয়ে <b>«💾 রাতে দিন শেষের হিসাব (Closing) সেভ করুন»</b> চাপুন!'
     + '</div>'
     + '</div>';
 }
@@ -3411,7 +3724,7 @@ function gormilActionGuideHtml(R) {
   const isShort = R.tHasAct && R.tDiff <= -0.5;
   const isExtra = R.tHasAct && R.tDiff >= 0.5;
   const absD = Math.round(Math.abs(R.tDiff || 0));
-  return '<div class="card stack" style="gap:10px;border:2px solid ' + (isShort ? 'var(--bad)' : (isExtra ? 'var(--warn)' : 'var(--line)')) + '">'
+  return '<details class="card stack fold" style="gap:10px;border:2px solid ' + (isShort ? 'var(--bad)' : (isExtra ? 'var(--warn)' : 'var(--line)')) + '" open><summary class="row between wrapr" style="cursor:pointer;gap:6px"><b>🛠️ গরমিল হলে বা ভুল ধরতে কী করবেন? (কম বা বেশি হলে চেক করার পূর্ণাঙ্গ গাইডলাইন)</b>' + (isShort ? '<span class="pill bad">এখন কম: ' + money(absD) + '</span>' : (isExtra ? '<span class="pill warn">এখন বেশি: +' + money(absD) + '</span>' : '<span class="pill good">সমাধান গাইড</span>')) + '</summary>'
     + '<div class="row between wrapr" style="gap:6px">'
     + '<div><b style="font-size:15.5px">🛠️ গরমিল হলে কী করবেন? (বিকাশ/নগদ কমিশন-চার্জ ও বাদ পড়া এন্ট্রি গাইড)</b>'
     + '<div class="sm mut">বিকাশ/নগদে ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকা স্বাভাবিক — সেটি ১-ক্লিকে মেলাতে পারেন অথবা নিচের তালিকা দেখে কোনো বড় এন্ট্রি বাদ পড়েছে কিনা চেক করতে পারেন:</div></div>'
@@ -3439,7 +3752,7 @@ function gormilActionGuideHtml(R) {
     + '<div class="gormil-item"><div class="row between"><b class="sm">গ) ভিসার কাস্টমার টাকা জমা দিয়েছে কিন্তু তোলেননি?</b><button type="button" class="btn sm good" onclick="quickDhEntry(\'visa_dep\')">+ ভিসা জমা তুলুন</button></div><div class="sm mut">করণীয়: ভিসা অ্যাপে অথবা এখানে <b>"+ ভিসা জমা তুলুন"</b> বাটনে চেপে জমা লিখুন।</div></div>'
     + '<div class="gormil-item"><div class="row between"><b class="sm">ঘ) কেউ আগের বাকি টাকা ফেরত দিয়েছে কিন্তু তোলেননি?</b><button type="button" class="btn sm good" onclick="go(\'loan\')">+ বাকি আদায় তুলুন</button></div><div class="sm mut">করণীয়: বাকি খাতায় গিয়ে ওই ব্যক্তির নামের নিচে <b>"সে ফেরত দিল"</b> বাটনে চাপ দিন।</div></div>'
     + '</div>'
-    + '</div></div>';
+    + '</div></details>';
 }
 
 function dhShift(k) { UI.dhd = addD(UI.dhd || today(), k); if (UI.dhd === today()) UI.dhd = ''; render(); }
@@ -3471,8 +3784,8 @@ function totalMathDetailHtml(R) {
     }).join('');
   };
 
-  return '<div class="card stack" style="gap:12px;border:1.5px solid var(--acc)">'
-    + '<div class="row between"><b>🧮 সফটওয়্যার কীভাবে ' + money(R.tExpected) + ' হিসাব করলো? (সম্পূর্ণ ব্রেকডাউন)</b><span class="pill">মোট ' + R.extTxs.length + 'টি এন্ট্রি</span></div>'
+  return '<div id="dh_full_math_box" class="card stack" style="gap:12px;border:2px solid var(--acc)">'
+    + '<div class="row between"><b>🧮 সফটওয়্যার কীভাবে ' + money(R.tExpected) + ' হিসাব করলো? (প্রতিটি এন্ট্রির সম্পূর্ণ খতিয়ান — ভুল ধরতে এখানে চেক করুন)</b><span class="pill">মোট ' + R.extTxs.length + 'টি এন্ট্রি</span></div>'
     + '<div class="sm mut" style="margin-top:-6px">প্রতিটি খাতে কোথা থেকে কত টাকা এসেছে (+) এবং কোথায় কত টাকা গেছে (−) তার বিস্তারিত নিচে দেওয়া হলো। যেকোনো লাইনে ট্যাপ করলে সরাসরি সেই এন্ট্রি খুলে এডিট বা ঠিক করতে পারবেন:</div>'
 
     + '<div class="ipbox row between" style="background:var(--soft);border-color:var(--acc);cursor:pointer" onclick="totOpenBalSheet(\'' + R.D + '\')">'
@@ -3591,6 +3904,7 @@ function vDhisab() {
       + '<div><small>৩. আজ মোট গেছে (−)</small><b class="bad">−' + Math.round(R.extOut) + '</b></div>'
       + '<div><small>৪. দিন শেষে থাকার কথা</small><b id="lbl_tot_exp" style="color:var(--acc)">' + Math.round(R.tExpected) + '</b></div>'
       + '</div>'
+      + dhInlineMathExplainHtml(R)
       + '<input type="hidden" id="dh_ext_in_v" value="' + Math.round(R.extIn) + '">'
       + '<input type="hidden" id="dh_ext_out_v" value="' + Math.round(R.extOut) + '">'
       + '<div class="stack" style="gap:6px;background:var(--bg);padding:10px 12px;border-radius:10px;border:1.5px solid var(--line)">'
@@ -4309,6 +4623,25 @@ function dhHelpInject(k) { const b = document.querySelector('#sheet .sh-b'); if 
 /* ====================================================================
    ★ নতুন আপডেট ১: ফটোকপি ও কাউন্টারের বাকি + দৈনিক হিসাবের নিখুঁত সমন্বয়
    ==================================================================== */
+
+function dhInlineMathExplainHtml(R) {
+  const inCats = Object.values(R.inByCat).sort((a, b) => b.sum - a.sum);
+  const outCats = Object.values(R.outByCat).sort((a, b) => b.sum - a.sum);
+  const inFormula = inCats.length ? inCats.map(g => esc(g.cat) + ' <b>+' + money(g.sum) + '</b> (' + g.items.length + 'টি)').join(' &nbsp;+&nbsp; ') : 'আজ কোনো জমা নেই (৳০)';
+  const outFormula = outCats.length ? outCats.map(g => esc(g.cat) + ' <b>−' + money(g.sum) + '</b> (' + g.items.length + 'টি)').join(' &nbsp;−&nbsp; ') : 'আজ কোনো খরচ নেই (৳০)';
+  return '<div class="ipbox stack" style="gap:6px;background:var(--soft);border:1.5px solid var(--acc);font-size:13px;line-height:1.55">'
+    + '<div class="row between wrapr" style="gap:6px"><b>🧮 সফটওয়্যার কীভাবে দিন শেষে থাকার কথা (' + money(R.tExpected) + ') হিসাব করলো? (ভুল ধরার সূত্র):</b><a href="#dh_full_math_box" onclick="const el=$(\'dh_full_math_box\');if(el)el.scrollIntoView({behavior:\'smooth\'});return false" class="pill" style="text-decoration:none;background:var(--acc);color:#fff">🔍 নিচে প্রতিটি এন্ট্রির তালিকা দেখুন ↓</a></div>'
+    + '<div style="background:var(--card);padding:7px 10px;border-radius:8px;border:1px solid var(--line)">'
+    + '<div><b>১. সকালে শুরুতে ছিল (Opening):</b> <b class="num">' + money(R.tOpen) + '</b></div>'
+    + '<div style="margin-top:3px"><b class="good">➕ ২. আজ যোগ হয়েছে (+' + money(R.extIn) + '):</b> ' + inFormula + '</div>'
+    + '<div style="margin-top:3px"><b class="bad">➖ ৩. আজ বিয়োগ হয়েছে (−' + money(R.extOut) + '):</b> ' + outFormula + '</div>'
+    + '<div style="margin-top:4px;padding-top:4px;border-top:1px dashed var(--line)"><b>🟰 ৪. ফলাফল (থাকার কথা):</b> ' + money(R.tOpen) + ' + ' + money(R.extIn) + ' − ' + money(R.extOut) + ' = <b class="num" style="color:var(--acc);font-size:15px">' + money(R.tExpected) + '</b>'
+    + (R.tHasAct ? (' &nbsp;|&nbsp; <b>আপনি গুনে পেয়েছেন: ' + money(R.tActual) + '</b> ➔ ' + (Math.abs(R.tDiff) < 0.5 ? '<b class="good">✓ হুবহু মিলেছে!</b>' : '<b class="bad">পার্থক্য: ' + (R.tDiff < 0 ? 'কম ' : 'বেশি +') + money(Math.abs(R.tDiff)) + '</b>')) : '')
+    + '</div></div>'
+    + '<div class="sm mut">💡 কোনো হিসাবে গরমিল মনে হলে নিচে <b>«🧮 সফটওয়্যার কীভাবে হিসাব করলো? (সম্পূর্ণ ব্রেকডাউন)»</b> বক্সে দেখুন কোন নামের পাশে কত টাকা লেখা হয়েছে—যেকোনো লাইনে ট্যাপ করলেই সেটি খুলে ঠিক করতে পারবেন!</div>'
+    + '</div>';
+}
+
 function cntDueDhCardHtml(D) {
   const allDue = Object.values(S.cnt).filter(c => cntCalc(c).due > 0.001).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.createdAt || 0) - (a.createdAt || 0));
   const todayDue = allDue.filter(c => c.date === D);
@@ -4327,80 +4660,57 @@ function cntDueDhCardHtml(D) {
     + '</div>';
 }
 
-window._csTab = 'cash';
 window._csSvc = 'ফটোকপি';
-function counterSmartSheet(defTab) {
+function counterSmartSheet(focusPart) {
   const D = UI.dhd || UI.cd || today();
-  window._csTab = defTab || 'cash';
   const svcs = S.settings.services && S.settings.services.length ? S.settings.services : [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }];
   if (!window._csSvc) window._csSvc = svcs[0].n;
-  pkInit('cs_by', ME, true);
-  sheet('🖨️ কাউন্টার / ফটোকপি আয় ও বাকি (দৈনিক হিসাব গরমিল রোধী)',
-    '<div class="seg" style="margin-bottom:4px">'
-    + '<button type="button" id="cst_due" class="' + (window._csTab === 'due' ? 'on' : '') + '" onclick="setCsTab(\'due\')">🧾 ১. কেউ বাকি নিল</button>'
-    + '<button type="button" id="cst_split" class="' + (window._csTab === 'split' ? 'on' : '') + '" onclick="setCsTab(\'split\')">🧮 ২. মোট কাজ − বাকি</button>'
-    + '<button type="button" id="cst_cash" class="' + (window._csTab === 'cash' ? 'on' : '') + '" onclick="setCsTab(\'cash\')">💵 ৩. সরাসরি নগদ আয়</button>'
+  sheet('🖨️ কাউন্টার হিসাব: ১. নগদ ক্যাশ + ২. বাকি (আলাদা লিখুন)',
+    '<div class="sm" style="background:var(--soft);padding:9px 11px;border-radius:10px;border:1.5px solid var(--acc);line-height:1.55">'
+    + '<b>💡 একদম সহজ নিয়ম (উদাহরণ: নগদ ৬০০ + বাকি ৪০০ = মোট আয় ১,০০০):</b><br>'
+    + '• <b>ঘর ১ (নগদ ক্যাশ):</b> ক্যাশ গুনে যত পেলেন (যেমন <b>৬০০ টাকা</b>) তা ১ নম্বর ঘরে লিখুন — এটি সরাসরি আজকের <b>দৈনিক হিসাবে (+৬০০)</b> যাবে।<br>'
+    + '• <b>ঘর ২ (বাকি):</b> কেউ বাকি নিলে (যেমন <b>৪০০ টাকা</b>) তা ২ নম্বর ঘরে আলাদা লিখুন — এটি আজকের ক্যাশে যাবে না, কিন্তু <b>মোট আয়ে যোগ হয়ে ১,০০০ টাকা আয় দেখাবে</b> এবং বাকি তালিকায় থাকবে!<br>'
+    + '<span class="mut">(শুধু নগদ লিখতে চাইলে ১ নম্বর ঘর ভরুন, আর শুধু বাকি লিখতে চাইলে ২ নম্বর ঘর ভরুন)</span>'
     + '</div>'
 
-    // TAB 1: Someone took photocopy/counter work on due (or partial payment)
-    + '<div id="cs_pane_due"' + (window._csTab === 'due' ? '' : ' hidden') + ' class="stack" style="gap:10px">'
-    + '<div class="sm" style="background:var(--soft);padding:8px 10px;border-radius:9px;border:1px solid var(--acc);line-height:1.5">'
-    + '<b>🧾 নিয়ম ১ (আলাদা বাকি লেখা):</b> কেউ ফটোকপি বা অনলাইন কাজ করে টাকা বাকি রাখলে এখানে লিখুন। <b>আজ যতটুকু নগদ দিল শুধু সেটাই আজকের ক্যাশে (+) যোগ হবে</b>, আর বাকিটা কাউন্টার বাকি খাতায় থাকবে (ড্রয়ার থেকে নগদ কমবে না)।'
+    + '<div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div>'
+
+    // BOX 1: নগদ ক্যাশ (যেমন ৬০০)
+    + '<div class="ipbox stack" style="gap:8px;border:1.5px solid var(--good);background:var(--card)">'
+    + '<div class="row between"><b class="good" style="font-size:14.5px">💵 ১. নগদ ক্যাশ গুনে কত পেলেন? (আলাদা লিখুন)</b><span class="pill good">দৈনিক ক্যাশে + যাবে</span></div>'
+    + '<div class="grid2">'
+    + '<div class="field"><label for="qe_amt">নগদ ক্যাশ টাকার অংক (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="যেমন: 600" oninput="csCalcCombined()"></div>'
+    + '<div class="field"><label for="qe_client">নগদ কাজের বিবরণ (ঐচ্ছিক)</label><input id="qe_client" value="কাউন্টার নগদ ক্যাশ আয়" placeholder="যেমন: ফটোকপি ও অনলাইন নগদ"></div>'
     + '</div>'
-    + '<div class="field"><label>কোন কাজ / সার্ভিস</label><div class="chips" id="cs_svc_chips">' + csSvcChipsHtml() + '</div></div>'
-    + '<div class="grid2"><div class="field"><label for="cs_date">তারিখ</label><input id="cs_date" type="date" value="' + D + '"></div>'
-    + '<div class="field"><label for="cs_qty">পরিমাণ (কপি/বার)</label><input id="cs_qty" type="number" inputmode="numeric" min="1" value="1"></div></div>'
-    + '<div class="grid2"><div class="field"><label for="cs_bill">মোট কাজের বিল (৳) *</label><input id="cs_bill" type="number" inputmode="decimal" placeholder="যেমন: 100" oninput="csCalcDue()"></div>'
-    + '<div class="field"><label for="cs_paid">আজ নগদ কত দিল? (৳, খালি বা ০ = পুরোটাই বাকি)</label><input id="cs_paid" type="number" inputmode="decimal" placeholder="0" oninput="csCalcDue()"></div></div>'
-    + '<div class="card sm" style="box-shadow:none;background:var(--bg)" id="cs_due_prev">মোট বিল লিখলে এখানে হিসাব দেখাবে</div>'
-    + '<div class="grid2"><div class="field"><label for="cs_name">কাস্টমারের নাম (বাকি থাকলে আবশ্যক) *</label><input id="cs_name" placeholder="যার কাছে বাকি"></div>'
-    + '<div class="field"><label for="cs_phone">ফোন নম্বর (ঐচ্ছিক)</label><input id="cs_phone" type="tel" inputmode="tel" placeholder="01XXXXXXXXX"></div></div>'
-    + wFieldHtml('cs_w', lastW('cs_w', 'w_counter'), 'নগদ অংশটুকু কোন ড্রয়ার / বিকাশে নিলেন')
-    + pkField('cs_by', 'কে করেছে (স্টাফ)')
-    + '<div class="field"><label for="cs_note">📝 নোট (ঐচ্ছিক)</label><input id="cs_note" placeholder="যেমন: ৫০ পাতা ফটোকপি ও অনলাইন ফর্ম"></div>'
-    + '<button type="button" class="btn block" onclick="saveCsDueEntry()">✅ কাউন্টার বাকি / এন্ট্রি সেভ করুন</button>'
+    + wFieldHtml('qe_w', lastW('qe_w', 'w_counter'), 'নগদ টাকা কোন ড্রয়ারে আছে')
     + '</div>'
 
-    // TAB 2: Total Day's Counter Work Minus Due (Auto-Split)
-    + '<div id="cs_pane_split"' + (window._csTab === 'split' ? '' : ' hidden') + ' class="stack" style="gap:10px">'
-    + '<div class="sm" style="background:var(--warnbg);padding:8px 10px;border-radius:9px;border:1px solid var(--warn);line-height:1.5">'
-    + '<b>🧮 নিয়ম ২ (সারাদিনের মোট কাজ থেকে বাকি বাদ):</b> ধরুন সারাদিনে ফটোকপি ও কাউন্টারে মোট <b>৳৫০০</b>-এর কাজ হয়েছে, কিন্তু তার মধ্যে রহিম <b>৳১০০ বাকি</b> রেখেছে। ভুলে পুরো ৫০০ টাকা ক্যাশ আয়ে লিখলে রাতে ড্রয়ারে ১০০ টাকা কম (Short) পড়বে! তাই নিচে মোট কাজ ও বাকি লিখুন—সফটওয়্যার নিজেই আজ ক্যাশে <b>+৳৪০০</b> ধরবে এবং রহিমের নামে <b>৳১০০ বাকি</b> লিখে রাখবে!'
+    // BOX 2: কাউন্টার বাকি (যেমন ৪০০)
+    + '<div class="ipbox stack" style="gap:8px;border:1.5px solid var(--warn);background:var(--card)">'
+    + '<div class="row between"><b class="warnc" style="font-size:14.5px">📝 ২. কেউ বাকি নিয়েছে কি? (আলাদা লিখুন)</b><span class="pill warn">আয়ে যোগ হবে · বাকি খাতায় থাকবে</span></div>'
+    + '<div class="field"><label>কোন কাজের বাকি?</label><div class="chips" id="cs_svc_chips">' + csSvcChipsHtml() + '</div></div>'
+    + '<div class="grid2">'
+    + '<div class="field"><label for="cs_due_amt">বাকির টাকার অংক (৳)</label><input id="cs_due_amt" type="number" inputmode="decimal" placeholder="যেমন: 400" oninput="csCalcCombined()"></div>'
+    + '<div class="field"><label for="cs_name">কাস্টমারের নাম (বাকি থাকলে) *</label><input id="cs_name" placeholder="যার কাছে বাকি (যেমন: রহিম)"></div>'
     + '</div>'
-    + '<div class="grid2"><div class="field"><label for="csp_date">তারিখ</label><input id="csp_date" type="date" value="' + D + '"></div>'
-    + '<div class="field"><label for="csp_gross">১. সারাদিনে মোট কত টাকার কাজ হয়েছে? (৳)</label><input id="csp_gross" type="number" inputmode="decimal" placeholder="যেমন: 500" oninput="csCalcSplit()"></div></div>'
-    + '<div class="grid2"><div class="field"><label for="csp_due">২. এর মধ্যে কাস্টমার বাকি রেখেছে কত? (৳)</label><input id="csp_due" type="number" inputmode="decimal" placeholder="যেমন: 100" oninput="csCalcSplit()"></div>'
-    + '<div class="field"><label for="csp_cash">৩. তাহলে আজ নগদ ক্যাশ এসেছে (অটো ৳)</label><input id="csp_cash" type="number" inputmode="decimal" readonly style="background:var(--bg);font-weight:800;color:var(--good)"></div></div>'
-    + '<div class="card sm" style="box-shadow:none;background:var(--bg)" id="cs_split_prev">মোট কাজ ও বাকি লিখলে এখানে হিসাব দেখাবে</div>'
-    + '<div class="grid2"><div class="field"><label for="csp_name">কে বাকি নিল? (কাস্টমারের নাম) *</label><input id="csp_name" placeholder="যেমন: রহিম ভাই"></div>'
-    + '<div class="field"><label for="csp_phone">ফোন নম্বর (ঐচ্ছিক)</label><input id="csp_phone" type="tel" inputmode="tel" placeholder="01XXXXXXXXX"></div></div>'
-    + '<div class="grid2"><div class="field"><label for="csp_svc">কী কাজের বাকি?</label><input id="csp_svc" value="ফটোকপি" placeholder="যেমন: ফটোকপি ও প্রিন্ট"></div>'
-    + '<div class="field"><label for="csp_note">📝 নোট (ঐচ্ছিক)</label><input id="csp_note" placeholder="ঐচ্ছিক"></div></div>'
-    + wFieldHtml('csp_w', lastW('csp_w', 'w_counter'), 'নগদ টাকা কোন ড্রয়ারে আছে')
-    + '<button type="button" class="btn block" onclick="saveCsSplitEntry()">✅ নগদ আয় (+ক্যাশ) ও বাকি একসাথে সেভ করুন</button>'
-    + '</div>'
-
-    // TAB 3: Direct Cash Counter Revenue (Existing simple mode)
-    + '<div id="cs_pane_cash"' + (window._csTab === 'cash' ? '' : ' hidden') + ' class="stack" style="gap:10px">'
-    + '<div class="mut sm">ফটোকপি, প্রিন্ট, অনলাইন আবেদন, CV, ফর্ম পূরণ বা যেকোনো এক্সট্রা সার্ভিসের নগদ টাকা যা সরাসরি আপনার হাতে এসেছে (Revenue):</div>'
-    + '<div class="grid2"><div class="field"><label for="qe_date">তারিখ</label><input id="qe_date" type="date" value="' + D + '"></div><div class="field"><label for="qe_amt">নগদ প্রাপ্ত টাকার অংক (৳)</label><input id="qe_amt" type="number" inputmode="decimal" placeholder="৳"></div></div>'
-    + wFieldHtml('qe_w', lastW('qe_w','w_counter'), 'কোন ড্রয়ার / বিকাশ / ব্যাংকে টাকা রাখলেন')
-    + '<div class="field"><label for="qe_client">কী কাজের টাকা / বিবরণ</label><input id="qe_client" placeholder="যেমন: দিন শেষের কাউন্টার এক্সট্রা সার্ভিস / ফটোকপি ও অনলাইন"></div>'
+    + '<div class="grid2">'
+    + '<div class="field"><label for="cs_phone">ফোন নম্বর (ঐচ্ছিক)</label><input id="cs_phone" type="tel" inputmode="tel" placeholder="01XXXXXXXXX"></div>'
     + '<div class="field"><label for="qe_note">📝 নোট (ঐচ্ছিক)</label><input id="qe_note" placeholder="ঐচ্ছিক"></div>'
-    + '<button class="btn block" onclick="saveQuickWtx(\'in\',\'কাউন্টার এক্সট্রা সার্ভিস (আয়)\',true)">সেভ করুন</button>'
     + '</div>'
+    + '</div>'
+
+    // LIVE COMBINED PREVIEW (600 + 400 = 1000 Income, +600 Daily Cash, 400 Due)
+    + '<div class="card stack" style="gap:4px;box-shadow:none;background:var(--soft);border:1.5px solid var(--acc)" id="cs_comb_prev"></div>'
+
+    + '<button type="button" class="btn block" onclick="saveCombinedCounterEntry()">✅ সেভ করুন</button>'
   );
-  csCalcDue();
-  csCalcSplit();
+  csCalcCombined();
+  setTimeout(() => {
+    const target = $(focusPart === 'due' ? 'cs_due_amt' : 'qe_amt');
+    if (target) target.focus();
+  }, 60);
 }
 
-function setCsTab(t) {
-  window._csTab = t;
-  ['due', 'split', 'cash'].forEach(k => {
-    const b = $('cst_' + k), p = $('cs_pane_' + k);
-    if (b) b.className = k === t ? 'on' : '';
-    if (p) p.hidden = k !== t;
-  });
-}
 function csSvcChipsHtml() {
   const svcs = S.settings.services && S.settings.services.length ? S.settings.services : [{ n: 'ফটোকপি', r: 0 }, { n: 'প্রিন্ট', r: 0 }, { n: 'স্ক্যান', r: 0 }, { n: 'টাইপিং', r: 0 }, { n: 'CV', r: 0 }, { n: 'অনলাইন আবেদন', r: 0 }, { n: 'অন্যান্য', r: 0 }];
   return svcs.map(x => chipB(x.n, x.n === window._csSvc, "pickCsSvc(this.dataset.v)", x.n)).join('');
@@ -4410,97 +4720,65 @@ function pickCsSvc(v) {
   const el = $('cs_svc_chips');
   if (el) el.innerHTML = csSvcChipsHtml();
 }
-function csCalcDue() {
-  const bill = Math.max(0, n(val('cs_bill')));
-  const paid = Math.max(0, n(val('cs_paid')));
-  const due = Math.max(0, bill - paid);
-  const el = $('cs_due_prev');
+function csCalcCombined() {
+  const cash = Math.max(0, n(val('qe_amt')));
+  const due = Math.max(0, n(val('cs_due_amt')));
+  const tot = cash + due;
+  const el = $('cs_comb_prev');
   if (!el) return;
-  if (bill <= 0) {
-    el.innerHTML = 'মোট কাজের বিল লিখলে আজ ক্যাশে কত যোগ হবে এবং কত বাকি থাকবে তা এখানে দেখাবে।';
+  el.innerHTML = '<div class="row between"><span class="sm">১. আজ দৈনিক হিসাবে ক্যাশ বাড়বে (+):</span><b class="num good">+' + money(cash) + '</b></div>'
+    + '<div class="row between"><span class="sm">২. কাস্টমারের নামে বাকি তালিকায় থাকবে:</span><b class="num ' + (due > 0 ? 'bad' : 'mut') + '">' + money(due) + '</b></div>'
+    + '<div class="row between" style="border-top:1px dashed var(--line);padding-top:4px;margin-top:2px"><b style="font-size:14.5px">📊 মোট কাউন্টার আয় দেখাবে (১ + ২):</b><b class="num" style="font-size:16.5px;color:var(--acc)">' + money(tot) + '</b></div>';
+}
+function saveCombinedCounterEntry() {
+  const cash = Math.max(0, n(val('qe_amt')));
+  const due = Math.max(0, n(val('cs_due_amt')));
+  if (cash <= 0 && due <= 0) {
+    toast('১ নম্বর ঘরে নগদ ক্যাশ অথবা ২ নম্বর ঘরে বাকির টাকার অংক লিখুন');
     return;
   }
-  el.innerHTML = 'মোট বিল: <b>' + money(bill) + '</b> · আজ নগদ ক্যাশে যোগ হবে (+): <b class="good">+' + money(paid) + '</b> · কাস্টমারের কাছে বাকি থাকবে: <b class="' + (due > 0 ? 'bad' : 'good') + '">' + money(due) + '</b>'
-    + (due > 0 ? '<div class="sm mut" style="margin-top:4px">✓ এই ' + money(due) + ' বাকি আপনার ড্রয়ার থেকে নগদ বিয়োগ করবে না, তাই আজকের দৈনিক হিসাব শতভাগ মিলে থাকবে!</div>' : '');
-}
-function csCalcSplit() {
-  const gross = Math.max(0, n(val('csp_gross')));
-  let due = Math.max(0, n(val('csp_due')));
-  if (gross > 0 && due > gross) {
-    due = gross;
-    if ($('csp_due')) $('csp_due').value = due;
-  }
-  const cash = Math.max(0, gross - due);
-  if ($('csp_cash')) $('csp_cash').value = gross > 0 ? cash : '';
-  const el = $('cs_split_prev');
-  if (!el) return;
-  if (gross <= 0) {
-    el.innerHTML = 'সারাদিনের মোট কাজ এবং বাকির অংক লিখলে এখানে অটো হিসাব দেখাবে।';
+  const nm = val('cs_name').trim();
+  const ph = val('cs_phone').trim();
+  if (due > 0 && !nm && !ph) {
+    toast('বাকি থাকলে ২ নম্বর ঘরে কাস্টমারের নাম বা ফোন নম্বর লিখুন');
+    if ($('cs_name')) $('cs_name').focus();
     return;
   }
-  el.innerHTML = 'সারাদিনের মোট কাজ: <b>' + money(gross) + '</b> − কাস্টমার বাকি: <b class="bad">' + money(due) + '</b> = আজ নগদ ক্যাশ আয়ে যোগ হবে: <b class="good">+' + money(cash) + '</b>';
-}
-function saveCsDueEntry() {
-  const bill = n(val('cs_bill'));
-  const paid = n(val('cs_paid'));
-  if (bill <= 0) { toast('মোট কাজের বিল (৳) লিখুন'); return; }
-  if (paid > bill) { toast('নগদ প্রাপ্ত টাকা মোট বিলের চেয়ে বেশি হতে পারে না'); return; }
-  const due = Math.max(0, bill - paid);
-  const nm = val('cs_name').trim(), ph = val('cs_phone').trim();
-  if (due > 0 && !nm && !ph) { toast('বাকি থাকলে কাস্টমারের নাম বা ফোন নম্বর দিন'); return; }
-  const dt = val('cs_date') || today();
-  const by = PK.cs_by || ME || actor();
-  const w = val('cs_w') || 'w_counter';
-  const svc = window._csSvc || 'ফটোকপি';
-  const qty = Math.max(1, n(val('cs_qty')));
-  const nt = val('cs_note').trim();
-  const id = uid();
-  const rec = {
-    id, date: dt, svc, qty, total: bill, cost: 0,
-    name: nm, phone: ph, note: nt, by, standalone: true,
-    payments: paid > 0 ? [{ id: uid(), date: dt, amt: paid, w, by, note: nt }] : [],
-    createdAt: Date.now(), createdBy: by, log: []
-  };
-  commit('cnt', rec, null, ['নতুন কাউন্টার এন্ট্রি (বিল ' + money(bill) + ', বাকি ' + money(due) + ')']);
-  closeSheet();
-  toast(due > 0 ? ('✅ ' + (nm || svc) + '-এর বাকি ' + money(due) + ' কাউন্টার বাকি খাতায় জমা হয়েছে' + (paid > 0 ? ' এবং নগদ +' + money(paid) + ' ক্যাশে যোগ হয়েছে!' : '!')) : ('✅ +' + money(bill) + ' কাউন্টার আয় সেভ হয়েছে!'));
-}
-function saveCsSplitEntry() {
-  const gross = n(val('csp_gross'));
-  const due = n(val('csp_due'));
-  if (gross <= 0) { toast('সারাদিনে মোট কত টাকার কাজ হয়েছে তা লিখুন'); return; }
-  if (due > gross) { toast('বাকির টাকা মোট কাজের চেয়ে বেশি হতে পারে না'); return; }
-  const nm = val('csp_name').trim(), ph = val('csp_phone').trim();
-  if (due > 0 && !nm && !ph) { toast('কে বাকি নিল তার নাম বা ফোন নম্বর দিন'); return; }
-  const cash = Math.max(0, gross - due);
-  const dt = val('csp_date') || today();
-  const w = val('csp_w') || 'w_counter';
-  const svc = val('csp_svc').trim() || 'ফটোকপি';
-  const nt = val('csp_note').trim();
+  const dt = val('qe_date') || today();
+  const w = val('qe_w') || 'w_counter';
+  const nt = val('qe_note').trim();
   const by = ME || actor();
+
   if (cash > 0) {
     const wid = uid();
     S.wtx[wid] = {
       id: wid, type: 'simple', dir: 'in', cat: 'কাউন্টার এক্সট্রা সার্ভিস (আয়)', isRev: true,
       date: dt, amt: cash, w,
-      client: 'সারাদিনের নগদ কাউন্টার আয় (মোট ' + money(gross) + (due > 0 ? ' − বাকি ' + money(due) : '') + ')',
-      note: nt || (due > 0 ? (nm + '-এর ' + money(due) + ' বাকি বাদ দিয়ে নগদ অংশ') : ''),
-      by, createdAt: Date.now()
+      client: val('qe_client').trim() || 'কাউন্টার নগদ ক্যাশ আয়',
+      note: nt, by, createdAt: Date.now()
     };
     save('wtx', wid);
   }
   if (due > 0) {
     const cid = uid();
+    const svc = window._csSvc || 'ফটোকপি';
     const rec = {
-      id: cid, date: dt, svc, qty: 1, total: due, cost: 0,
-      name: nm, phone: ph, note: nt || ('সারাদিনের মোট ' + money(gross) + ' কাজের মধ্য থেকে বাকি'),
-      by, standalone: true, payments: [],
+      id: cid, serial: nextSerialNum('cnt'), date: dt, svc, qty: 1, total: due, cost: 0,
+      name: nm, phone: ph, note: nt, by, standalone: true,
+      payments: [],
       createdAt: Date.now(), createdBy: by, log: []
     };
-    commit('cnt', rec, null, ['সারাদিনের কাজ থেকে বাকি আলাদা করা হলো: ' + money(due)]);
+    commit('cnt', rec, null, ['কাউন্টার বাকি এন্ট্রি: ' + money(due)]);
   }
   closeSheet();
-  toast('✅ আজ নগদ কাউন্টার আয় +' + money(cash) + ' ক্যাশে যোগ হয়েছে' + (due > 0 ? ' এবং ' + esc(nm) + '-এর নামে ' + money(due) + ' বাকি লেখা হয়েছে!' : '!'));
+  const tot = cash + due;
+  if (cash > 0 && due > 0) {
+    toast('✅ নগদ +' + money(cash) + ' দৈনিক ক্যাশে ও ' + money(due) + ' বাকি খাতায় গেছে (মোট আয় ' + money(tot) + ')!');
+  } else if (cash > 0) {
+    toast('✅ নগদ +' + money(cash) + ' দৈনিক ক্যাশ ও আয়ে যোগ হয়েছে!');
+  } else {
+    toast('✅ ' + nm + '-এর ' + money(due) + ' বাকি লেখা হয়েছে (আয়ে যোগ হয়েছে, আজকের ক্যাশে যাবে না)!');
+  }
 }
 
 /* ====================================================================
