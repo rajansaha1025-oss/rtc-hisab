@@ -249,6 +249,7 @@ details.fold[open]>summary::after{content:"▴"}
 .drv-extras{display:flex;flex-wrap:wrap;gap:5px}
 .drv-ext-pill{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:3px 8px;font-size:11.5px;font-weight:700;color:var(--acc);cursor:pointer}
 .cnt-baki-banner{background:var(--warnbg);border:1.5px solid var(--warn);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.dhbar{position:sticky;bottom:10px;z-index:30;display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--bg);border:2px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:0 6px 22px rgba(0,0,0,.2)}.dhbar.dirty{border-color:var(--warn)}.dhbar .btn{min-width:130px}
 </style>
 </head>
 <body>
@@ -341,7 +342,8 @@ const n = v => parseFloat(v) || 0;
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const money = v => { v = Math.round(n(v)); return (v < 0 ? '−' : '') + '৳' + Math.abs(v).toLocaleString('en-US'); };
 const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-const today = () => ymd(new Date());
+const dayCutoffHrs = () => { try { const v = S && S.settings && S.settings.dayCutoff; return (v === undefined || v === '' || isNaN(+v)) ? 4 : +v; } catch (e) { return 4; } };
+const today = () => ymd(new Date(Date.now() - dayCutoffHrs() * 3600000));   // রাত ১২টার পর নির্দিষ্ট ঘণ্টা পর্যন্ত আগের দিনই 'আজ'
 const pd = s => new Date(s + 'T00:00:00');
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fd = s => { if (!s) return ''; const d = pd(s); return d.getDate() + ' ' + MON[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : ''); };
@@ -600,6 +602,7 @@ const initial = s => esc((String(s || '?').trim()[0] || '?').toUpperCase());
 
 const TITLES = { home: 'RTC হিসাব', dhisab: 'দৈনিক হিসাব মেলানো', cash: 'দিন শেষের ক্যাশ', pass: 'পাসপোর্ট ফাইল', ref: 'রেফারেন্স হিসাব', doc: 'ডকুমেন্ট কাজ', cnt: 'কাউন্টার', exp: 'খরচ ও আয়', more: 'রিপোর্ট ও ব্যাকআপ', loan: 'বাকি খাতা', visa: 'ভিসা ফাইল', vjoma: 'ভিসা জমা', set: 'সেটিংস', today: 'আজকের কাজ', alog: 'অ্যাক্টিভিটি লগ' };
 function render() {
+  const _sy = window.scrollY, _pt = window.__lt;
   SERC = {};
   document.body.classList.toggle('nonav', MODE === '');
   if (MODE === '') { $('side').innerHTML = ''; renderLogin(); return; }
@@ -611,6 +614,9 @@ function render() {
   $('app').innerHTML = '<header class="top"><div class="wrap pad hd"><button class="ib hamb" onclick="navToggle()" aria-label="মেনু খুলুন">' + ic('menu') + '</button><img class="logo" src="' + LOGO + '" alt="RTC"><h1>' + TITLES[tab] + '<small>' + esc(subs[tab]) + '</small></h1><span id="syncPill" class="sync"></span>'
     + (isStaff() ? '<button class="ib" onclick="unlockSheet()" aria-label="মালিক মোড">' + ic('lock') + '</button>' : '<button class="ib" onclick="go(\'set\')" aria-label="সেটিংস">' + ic('gear') + '</button>') + '</div></header><main class="wrap pad stack">' + body + '</main>';
   setSync(MODE === 'local' ? 'local' : syncSt);
+  if (_pt === tab) window.scrollTo(0, _sy);
+  window.__lt = tab;
+  if (tab === 'dhisab') { dhInjectBar(); dhApplyDraft(); }
 }
 
 
@@ -3715,7 +3721,7 @@ function saveOpeningOnlySimple(D) {
     by: actor(),
     updatedAt: Date.now()
   });
-  save('dclose', D);
+  save('dclose', D); dhDraftClear(D);
   render();
   toast('🌅 ' + fd(D) + ' তারিখের শুরুর ব্যালেন্স (' + money(totOpenVal) + ') সেভ হয়েছে! আগের সব ডাটা অক্ষত রেখে এখান থেকেই হিসাব চলবে।');
 }
@@ -3724,7 +3730,7 @@ function gormilActionGuideHtml(R) {
   const isShort = R.tHasAct && R.tDiff <= -0.5;
   const isExtra = R.tHasAct && R.tDiff >= 0.5;
   const absD = Math.round(Math.abs(R.tDiff || 0));
-  return '<details class="card stack fold" style="gap:10px;border:2px solid ' + (isShort ? 'var(--bad)' : (isExtra ? 'var(--warn)' : 'var(--line)')) + '" open><summary class="row between wrapr" style="cursor:pointer;gap:6px"><b>🛠️ গরমিল হলে বা ভুল ধরতে কী করবেন? (কম বা বেশি হলে চেক করার পূর্ণাঙ্গ গাইডলাইন)</b>' + (isShort ? '<span class="pill bad">এখন কম: ' + money(absD) + '</span>' : (isExtra ? '<span class="pill warn">এখন বেশি: +' + money(absD) + '</span>' : '<span class="pill good">সমাধান গাইড</span>')) + '</summary>'
+  return '<details class="card stack fold" style="gap:10px;border:2px solid ' + (isShort ? 'var(--bad)' : (isExtra ? 'var(--warn)' : 'var(--line)')) + '"><summary class="row between wrapr" style="cursor:pointer;gap:6px"><b>🛠️ গরমিল হলে বা ভুল ধরতে কী করবেন? (কম বা বেশি হলে চেক করার পূর্ণাঙ্গ গাইডলাইন)</b>' + (isShort ? '<span class="pill bad">এখন কম: ' + money(absD) + '</span>' : (isExtra ? '<span class="pill warn">এখন বেশি: +' + money(absD) + '</span>' : '<span class="pill good">সমাধান গাইড</span>')) + '</summary>'
     + '<div class="row between wrapr" style="gap:6px">'
     + '<div><b style="font-size:15.5px">🛠️ গরমিল হলে কী করবেন? (বিকাশ/নগদ কমিশন-চার্জ ও বাদ পড়া এন্ট্রি গাইড)</b>'
     + '<div class="sm mut">বিকাশ/নগদে ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকা স্বাভাবিক — সেটি ১-ক্লিকে মেলাতে পারেন অথবা নিচের তালিকা দেখে কোনো বড় এন্ট্রি বাদ পড়েছে কিনা চেক করতে পারেন:</div></div>'
@@ -3824,7 +3830,9 @@ function vDhisab() {
     + '<div class="row between wrapr" style="gap:8px;padding-top:8px;border-top:1px dashed var(--line)">'
     + '<span class="sm mut">কাল বা আজ থেকে নতুন ওপেনিং ব্যালেন্স দিয়ে শুরু করবেন?</span>'
     + '<button type="button" class="btn sm good" onclick="freshStartSheet(\'' + D + '\')">🚀 নতুন শুরুর ব্যালেন্স সেট করুন</button>'
-    + '</div></div>';
+    + '</div>'
+    + '<div class="row between wrapr" style="gap:8px;padding-top:8px;border-top:1px dashed var(--line)"><span class="sm mut">🌙 রাত ১২টার পরও আগের দিনের হিসাব চলবে — কয়টা পর্যন্ত?<br>(অন্য দিনের হিসাব দেখতে উপরের তারিখ বদলান)</span>'
+    + '<select onchange="setCutoff(this.value)" style="max-width:150px">' + [0, 1, 2, 3, 4, 5, 6].map(h => '<option value="' + h + '"' + (h === dayCutoffHrs() ? ' selected' : '') + '>' + (h === 0 ? 'রাত ১২টায়ই নতুন দিন' : 'ভোর ' + h + 'টা পর্যন্ত') + '</option>').join('') + '</select></div></div>';
 
   // Pending Visa Base Fee / Software Fee Section (1-click per expense)
   const visaPendHtml = pendVisaFees.length ? ('<h2>⏳ ভিসা ফি বা সফটওয়্যার ফি এখনো দেওয়া বাকি (' + pendVisaFees.length + 'টি ফাইল)</h2>'
@@ -3889,7 +3897,7 @@ function vDhisab() {
     const matchCard = '<div class="card stack" style="gap:12px;border-left:5px solid ' + (!R.tHasAct ? 'var(--acc)' : (ok ? 'var(--good)' : 'var(--bad)')) + '">'
       + '<div class="row between wrapr" style="gap:8px">'
       + '<div><b style="font-size:17px">🏦 ৩টি ড্রয়ার ও সব অ্যাকাউন্টের বক্স + টোটাল মেথড (একসাথে)</b>'
-      + '<div class="sm mut">সকালে <b>১. শুরুতে ছিল</b> ঘরে ওপেনিং ব্যালেন্স বসিয়ে দিন (আগের সব ডাটা অক্ষত থাকবে, পুরনো হিসাব এর সাথে মিশবে না)। আর রাতে <b>২. দিন শেষে আছে</b> ঘরে ব্যালেন্স বসিয়ে সেভ করলেই সেটি কালকের ওপেনিং হয়ে যাবে!</div></div>'
+      + '<div class="sm" style="line-height:1.7">① <b>শুরুতে ছিল</b> — আগের রাতের সেভ থেকে নিজে বসে যায়<br>② রাতে <b>দিন শেষে আছে</b> ঘরে গুনে লিখুন<br>③ নিচের <b>💾 সেভ করুন</b> চাপুন — এটাই কালকের শুরু হবে ✓</div></div>'
       + '<div class="row wrapr" style="gap:6px"><button type="button" class="btn sm warnb" onclick="copyUnchangedOpenToEnd()" title="যে অ্যাকাউন্টগুলোতে আজ লেনদেন হয়নি সেগুলোতে ১ ক্লিকে সকালের ব্যালেন্স বসিয়ে দিন">⚡ খালি বক্সে সকালের ব্যালেন্স কপি করুন</button><button type="button" class="btn sm ghost" onclick="walletManageSheet()">⚙️ নতুন বিকাশ/ব্যাংক যোগ</button></div>'
       + '</div>'
       + '<div class="acct-box-grid">' + acctRowsHtml
@@ -3904,7 +3912,7 @@ function vDhisab() {
       + '<div><small>৩. আজ মোট গেছে (−)</small><b class="bad">−' + Math.round(R.extOut) + '</b></div>'
       + '<div><small>৪. দিন শেষে থাকার কথা</small><b id="lbl_tot_exp" style="color:var(--acc)">' + Math.round(R.tExpected) + '</b></div>'
       + '</div>'
-      + dhInlineMathExplainHtml(R)
+      + '<details class="fold"><summary class="sm" style="cursor:pointer">🧮 হিসাবটা কীভাবে হলো? (দেখতে চাপুন)</summary>' + dhInlineMathExplainHtml(R) + '</details>'
       + '<input type="hidden" id="dh_ext_in_v" value="' + Math.round(R.extIn) + '">'
       + '<input type="hidden" id="dh_ext_out_v" value="' + Math.round(R.extOut) + '">'
       + '<div class="stack" style="gap:6px;background:var(--bg);padding:10px 12px;border-radius:10px;border:1.5px solid var(--line)">'
@@ -3916,7 +3924,7 @@ function vDhisab() {
       + '<button type="button" class="btn sm ghost" onclick="autoAdjustMfsDiff(\'' + D + '\')">⚡ বিকাশ/নগদ চার্জ বা কমিশন হিসেবে মিলিয়ে দিন</button>'
       + '<button type="button" class="btn sm ghost" onclick="$(\'dc_tot_act\').value=$(\'lbl_tot_exp\').textContent;dhTotLiveDiff()">✓ যা থাকার কথা তাই আছে</button>'
       + '</div></div>'
-      + '<div class="sm mut">💡 <b>বিকাশ/নগদ নোট:</b> এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকলে কোনো সমস্যা নেই—আপনি সরাসরি নিচে <b>"💾 দিন শেষের হিসাব সেভ করুন"</b> চাপলেই আপনার <b>"দিন শেষে আছে"</b> ঘরের আসল ব্যালেন্সই কালকের ওপেনিং হয়ে যাবে!</div>'
+      + '<div class="sm mut" hidden>💡 <b>বিকাশ/নগদ নোট:</b> এজেন্ট ক্যাশ-ইন/আউট কমিশন বা পেমেন্ট চার্জের কারণে ডেইলি একটু গরমিল থাকলে কোনো সমস্যা নেই—আপনি সরাসরি নিচে <b>"💾 দিন শেষের হিসাব সেভ করুন"</b> চাপলেই আপনার <b>"দিন শেষে আছে"</b> ঘরের আসল ব্যালেন্সই কালকের ওপেনিং হয়ে যাবে!</div>'
       + '</div>'
       + smartHintsForTotal(R)
       + '<div class="field"><label for="dh_close_note">📝 দিন শেষের নোট (ঐচ্ছিক)</label><input id="dh_close_note" value="' + esc(R.curClose.note || '') + '" placeholder="যেমন: বিকাশ কমিশনসহ সব ড্রয়ার ও ব্যাংক ক্লোজিং সেভ করা হলো"></div>'
@@ -4187,10 +4195,10 @@ function saveDayClosingSimple(D, silent) {
     by: actor(),
     updatedAt: Date.now()
   });
-  save('dclose', D);
+  save('dclose', D); dhDraftClear(D);
   if (!silent) {
     render();
-    toast('✅ দিন শেষের হিসাব (' + money(totAct) + ') সেভ হয়েছে! প্রতিটি বক্সের Ending কালকের Opening ব্যালেন্স হয়ে যাবে।');
+    toast('✅ সেভ হয়েছে! দিন শেষে মোট ' + money(totAct) + ' — এটাই ' + fd(addD(D, 1)) + ' তারিখের শুরুর ব্যালেন্স (Opening) হবে।');
   }
 }
 
@@ -4226,9 +4234,9 @@ function saveDayClosing(D) {
   });
   const wnotes = Object.assign({}, prev.wnotes || {}); wallets().forEach(w => { const e = $('dc_n_' + w.id); if (e) { const v = e.value.trim(); if (v) wnotes[w.id] = v; else delete wnotes[w.id]; } });
   S.dclose[D] = { id: D, date: D, wnotes, counts, totActual: any ? tot : prev.totActual, totCustomOpen: prev.totCustomOpen, totOpenNote: prev.totOpenNote, customOpen: prev.customOpen || {}, openNote: prev.openNote || {}, note: val('dh_close_note').trim(), by: actor(), updatedAt: Date.now() };
-  save('dclose', D);
+  save('dclose', D); dhDraftClear(D);
   render();
-  toast('✅ দিন শেষের হিসাব সেভ হয়েছে!');
+  toast('✅ দিন শেষের হিসাব সেভ হয়েছে! কালকের শুরুর ব্যালেন্স এটাই হবে।');
 }
 
 /* ---------- বিকাশ/নগদ ক্যাশ-ইন/আউট ও এক্সট্রা চার্জ শিট ---------- */
@@ -5262,6 +5270,34 @@ async function testDriveConnection() {
     toast('❌ কানেকশন এরর: ইন্টারনেট বা Drive URL চেক করুন');
   }
 }
+
+/* ---------- দৈনিক হিসাব: না-সেভ লেখা হারানো ঠেকানো (ড্রাফট) + সেভ বার + রাত ১২টার নিয়ম ---------- */
+const DH_ID = /^(tot_open_w_|tot_end_w_|dc_tot_open|dc_tot_act|dh_close_note|dc_w_|dc_n_)/;
+const dhDKey = D => 'rtc_dh_draft_' + D;
+function dhDraftGet() { try { return JSON.parse(localStorage.getItem(dhDKey(UI.dhd || today())) || '{}'); } catch (e) { return {}; } }
+function dhDraftClear(D) { try { localStorage.removeItem(dhDKey(D)); } catch (e) { } dhMarkDirty(false); }
+function dhMarkDirty(f) { const b = $('dhSaveBar'), t = $('dhSaveSt'); if (b) b.classList.toggle('dirty', !!f); if (t) t.textContent = f ? '✏️ লেখা আছে — এখনো সেভ হয়নি' : '✓ সব সেভ আছে'; }
+document.addEventListener('input', e => {
+  const t = e.target; if (tab !== 'dhisab' || !t || !t.id || !DH_ID.test(t.id)) return;
+  const d = dhDraftGet(); d[t.id] = t.value;
+  try { localStorage.setItem(dhDKey(UI.dhd || today()), JSON.stringify(d)); } catch (x) { }
+  dhMarkDirty(true);
+});
+function dhApplyDraft() {
+  const d = dhDraftGet(), ks = Object.keys(d); if (!ks.length) return;
+  ks.forEach(k => { if (!/^(dc_tot_open|dc_tot_act)$/.test(k) && $(k)) $(k).value = d[k]; });
+  if ($('dh_ext_in_v')) syncTotAcctBoxes(n(val('dh_ext_in_v')), n(val('dh_ext_out_v')));
+  ['dc_tot_open', 'dc_tot_act'].forEach(k => { if (d[k] !== undefined && $(k)) $(k).value = d[k]; });
+  if ($('dc_tot_act')) dhTotLiveDiff();
+  try { const R = dayReconcile(UI.dhd || today()); R.ws.forEach(w => { if ($('dc_w_' + w.id)) dhLiveDiff(w.id, R.byW[w.id].expected); }); } catch (e) { }
+  dhMarkDirty(true);
+}
+function dhInjectBar() {
+  const m = document.querySelector('#app main'); if (!m) return; const D = UI.dhd || today();
+  m.insertAdjacentHTML('beforeend', '<div id="dhSaveBar" class="dhbar"><span id="dhSaveSt" class="sm">✓ সব সেভ আছে</span><button type="button" class="btn" onclick="dhSaveNow(\'' + D + '\')">💾 সেভ করুন</button></div>');
+}
+function dhSaveNow(D) { if (isMultiW()) saveDayClosing(D); else saveDayClosingSimple(D); }
+function setCutoff(v) { S.settings.dayCutoff = +v; saveSettings(); UI.dhd = ''; render(); toast(+v === 0 ? 'রাত ১২টায় নতুন দিন শুরু হবে' : 'ভোর ' + v + 'টা পর্যন্ত আগের দিনের হিসাব চলবে'); }
 
 /* ---------- শুরু ---------- */
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js').catch(function () { });
