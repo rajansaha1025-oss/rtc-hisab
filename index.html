@@ -539,6 +539,21 @@ function ipEngine() {
   const fs = []; weeks.forEach(w => w.ip.forEach(f => fs.push(f)));
   return { fs, alloc, total, paid: paidIn, left, advance: pool + extra, given: explicit + legacyPool + legacy, W, weeks };
 }
+/* IP পেমেন্টের উৎস: এক পেমেন্ট রিজার্ভ বক্স + অন্য ড্রয়ার/বিকাশ — দুই জায়গা থেকেই হতে পারে (p.split = [{w, amt}]). পুরনো পেমেন্টে split নেই, তখন পুরো টাকা p.w থেকে ধরা হয়। */
+function ipSplits(p) { const sp = arr(p && p.split).filter(x => x && n(x.amt) > 0); if (sp.length) return sp.map(x => ({ w: x.w || 'w_ipres', amt: n(x.amt) })); return n(p && p.amt) > 0 ? [{ w: (p && p.w) || 'w_ipres', amt: n(p.amt) }] : []; }
+function ipFromReserve(p) { return ipSplits(p).filter(x => x.w === 'w_ipres').reduce((t, x) => t + x.amt, 0); }
+function ipSrcHtml(p) { const sp = ipSplits(p); if (!sp.length) return ''; return '<div class="sm" style="color:var(--ink)">' + sp.map(x => (x.w === 'w_ipres' ? '🛡️ রিজার্ভ থেকে ' : '🗄️ ' + esc(wName(x.w).replace(/\s*\(.*\)\s*$/, '')) + ' থেকে ') + '<b>' + money(x.amt) + '</b>').join(' + ') + '</div>'; }
+function ipResBal(d) { const c = (window._ipBalC = window._ipBalC || {}); if (c[d] === undefined) { try { const x = dayReconcile(d).byW['w_ipres']; c[d] = x ? x.expected : null; } catch (e) { c[d] = null; } } let b = c[d]; if (b === null) return null; const q = window._ipEditP; if (q && q.date === d) b += ipFromReserve(q); return Math.round(b); }
+function ipSplitChg(src) {
+  if (!$('ip_res')) return;
+  const a = Math.max(0, n(val('ip_amt')));
+  if (src === 'all' || (src === 'amt' && !window._ipResTouched)) $('ip_res').value = a || '';
+  let r = n(val('ip_res')); if (r > a) { r = a; $('ip_res').value = a || ''; } if (r < 0) { r = 0; $('ip_res').value = 0; }
+  const o = Math.max(0, a - r);
+  const eo = $('ip_oth'); if (eo) eo.textContent = money(o);
+  const ef = $('ip_w2f'); if (ef) ef.style.display = o > 0.001 ? '' : 'none';
+  const eb = $('ip_resbal'); if (eb) { const b = ipResBal(val('ip_date') || today()); eb.innerHTML = b === null ? '' : '🛡️ রিজার্ভ বক্সে হিসাব অনুযায়ী আছে: <b>' + money(b) + '</b>' + (r > b + 0.5 ? ' · <b class="bad">⚠ রিজার্ভে ' + money(r - b) + ' কম আছে</b>' : ' · দেওয়ার পর থাকবে: <b class="good">' + money(b - r) + '</b>'); }
+}
 function ipSt(f, E) { if (!f.ipOn) return 'none'; if (!f.jomaDate) return 'nojoma'; const a = (E || ipEngine()).alloc[f.id] || 0; return a >= n(f.ipAmt) - 0.001 ? 'paid' : (a > 0 ? 'part' : 'due'); }
 function ipGroups() {
   const E = ipEngine(); const noJoma = [];
@@ -754,6 +769,7 @@ function ipTotals() {
   const E = ipEngine();
   return '<div class="card stack" style="gap:10px"><div class="row between"><b>সব মিলিয়ে IP</b><span class="sm mut">joma হওয়া ' + E.fs.length + 'টি ফাইল</span></div><div class="mini num" style="grid-template-columns:repeat(3,1fr)"><div><small>মোট দিতে হবে</small><b>' + money(E.total) + '</b></div><div><small>দিয়েছি</small><b class="good">' + money(E.given) + '</b></div><div><small>এখনও বাকি</small><b class="' + (E.left > 0.001 ? 'bad' : 'good') + '">' + money(E.left) + '</b></div></div>'
     + (E.advance > 0.001 ? '<div class="sm good">অগ্রিম দেওয়া আছে ' + money(E.advance) + ' (সপ্তাহের হিসাবে বেশি দেওয়া)</div>' : '')
+    + (function () { const rs = Object.values(S.ipPays).reduce((t, x) => t + ipFromReserve(x), 0); return rs > 0.001 ? '<div class="sm" style="color:var(--ink)">🛡️ এর মধ্যে IP রিজার্ভ বক্স থেকে দেওয়া হয়েছে <b>' + money(rs) + '</b></div>' : ''; })()
     + '<button class="btn block" onclick="ipPaySheet()">' + ic('coin') + ' IP এর টাকা দিলাম</button></div>';
 }
 function weekLabel(k) { const d = Math.round((pd(k) - pd(wkStart(today()))) / 6048e5); return d === 0 ? 'এই সপ্তাহ' : (d === -1 ? 'গত সপ্তাহ' : (d === 1 ? 'আগামী সপ্তাহ' : (d < 0 ? -d + ' সপ্তাহ আগে' : d + ' সপ্তাহ পরে'))); }
@@ -766,7 +782,7 @@ function weekBlock(w, E, open) {
   if (w.ip.length) h += '<div><b class="sm mut">IP আছে (' + w.ip.length + 'টি)</b>' + w.ip.map(f => fRow(f, true)).join('') + '</div>';
   if (w.other.length) h += '<div><b class="sm mut">IP ছাড়া (' + w.other.length + 'টি)</b>' + w.other.map(f => fRow(f, false)).join('') + '</div>';
   if (!w.ip.length && !w.other.length) h += '<div class="mut sm" style="text-align:center;padding:6px">এই সপ্তাহে কোনো ফাইল নেই</div>';
-  if (w.pays.length) h += '<div><b class="sm mut">এই সপ্তাহের IP পেমেন্ট</b>' + w.pays.map(p => '<div class="kv" style="align-items:center;cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)"><b>' + fd(p.date) + '</b>' + (p.note ? '<div class="mut sm">' + esc(p.note) + '</div>' : '') + '</span><b class="num good">' + money(p.amt) + '</b></div>').join('') + '</div>';
+  if (w.pays.length) h += '<div><b class="sm mut">এই সপ্তাহের IP পেমেন্ট</b>' + w.pays.map(p => '<div class="kv" style="align-items:center;cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)"><b>' + fd(p.date) + '</b>' + ipSrcHtml(p) + (p.note ? '<div class="mut sm">' + esc(p.note) + '</div>' : '') + '</span><b class="num good">' + money(p.amt) + '</b></div>').join('') + '</div>';
   if (w.extra > 0.001) h += '<div class="sm good">বেশি দেওয়া আছে ' + money(w.extra) + '</div>';
   if (w.left > 0.001) h += '<button class="btn block" onclick="ipPaySheet(' + Math.round(w.left) + ',null,\'' + w.wk + '\')">এই সপ্তাহের IP দিলাম (' + money(w.left) + ')</button>';
   else if (w.ip.length) h += '<button class="btn ghost block" onclick="ipPaySheet(0,null,\'' + w.wk + '\')">+ পেমেন্ট যোগ করুন</button>';
@@ -1033,25 +1049,45 @@ function ipPaySheet(defAmt, editId, wk0) {
   const left = wk && window._ipW[wk] ? window._ipW[wk].left : Math.round(E.left);
   const amt = p ? n(p.amt) : (defAmt != null ? defAmt : left);
   const dv = p ? p.date : (wk ? payDayFor(wk) : today());
+  window._ipEditP = p || null; window._ipBalC = {};
+  const resPart = p ? ipFromReserve(p) : amt; window._ipResTouched = p ? (Math.abs(resPart - n(p.amt)) > 0.5 ? 1 : 0) : 0;
+  const othW = p ? ((ipSplits(p).find(x => x.w !== 'w_ipres') || {}).w || 'w_passdoc') : 'w_passdoc';
+  const splitHtml = isMultiW()
+    ? '<div class="card stack" style="gap:8px;background:var(--soft);border:1px solid var(--acc)"><b>🛡️ টাকাটা কোথা থেকে দিলেন?</b><div class="sm mut" id="ip_resbal"></div>'
+      + '<div class="field"><label for="ip_res">IP রিজার্ভ বক্স থেকে কত দিলেন (৳)</label><input id="ip_res" type="number" inputmode="decimal" value="' + (resPart || '') + '" oninput="window._ipResTouched=1;ipSplitChg(\'res\')"></div>'
+      + '<div class="chips"><button type="button" class="chip" onclick="window._ipResTouched=0;ipSplitChg(\'all\')">পুরোটা রিজার্ভ থেকে</button><button type="button" class="chip" onclick="$(\'ip_res\').value=0;window._ipResTouched=1;ipSplitChg(\'res\')">রিজার্ভ থেকে কিছুই না</button></div>'
+      + '<div id="ip_w2f"><div class="sm" style="margin-bottom:4px">রিজার্ভের বাইরে থেকে দিয়েছেন: <b id="ip_oth" class="bad">৳0</b></div><div class="field"><label for="ip_w2">বাকিটা কোন ড্রয়ার / বিকাশ থেকে দিলেন</label>' + wSelectHtml('ip_w2', othW, '', true) + '</div></div></div>'
+    : '<input type="hidden" id="ip_w" value="' + esc(p && p.w ? p.w : 'w_ipres') + '">';
   sheet(p ? 'IP পেমেন্ট এডিট' : 'IP এর টাকা দিলাম',
     '<div class="mut sm">যে সপ্তাহের IP দিচ্ছেন সেটা বাছুন, টাকা ওই সপ্তাহের হিসাবেই কাটবে। তারিখ ডিফল্ট পেমেন্ট-দিন (' + DAYS[S.settings.payDay] + '), দরকারে বদলান।</div>'
     + '<div class="field"><label for="ip_wk">কোন সপ্তাহের IP</label><select id="ip_wk" onchange="ipWkChg()">' + opts + '</select></div>'
-    + '<div class="grid2"><div class="field"><label for="ip_date">কবে দিয়েছেন</label><input id="ip_date" type="date" value="' + dv + '"></div><div class="field"><label for="ip_amt">কত টাকা (৳)</label><input id="ip_amt" type="number" inputmode="decimal" value="' + (amt || '') + '"></div></div>'
-    + '<div class="chips"><button type="button" class="chip" onclick="ipWkChg()">সপ্তাহের পুরো বাকি</button><button type="button" class="chip" onclick="$(\'ip_date\').value=today()">আজকের তারিখ</button></div>'
-    + wFieldHtml('ip_w', p && p.w ? p.w : 'w_ipres', 'কোন বক্স / ড্রয়ার থেকে IP দিলেন (ডিফল্ট: IP Reserve Box)') + '<div class="field"><label for="ip_note">নোট (ঐচ্ছিক)</label><input id="ip_note" value="' + esc(p ? p.note : '') + '" placeholder="যেমন: আংশিক দিলাম"></div>'
+    + '<div class="grid2"><div class="field"><label for="ip_date">কবে দিয়েছেন</label><input id="ip_date" type="date" value="' + dv + '" onchange="ipSplitChg(\'init\')"></div><div class="field"><label for="ip_amt">মোট কত টাকা IP দিলেন (৳)</label><input id="ip_amt" type="number" inputmode="decimal" value="' + (amt || '') + '" oninput="ipSplitChg(\'amt\')"></div></div>'
+    + '<div class="chips"><button type="button" class="chip" onclick="ipWkChg()">সপ্তাহের পুরো বাকি</button><button type="button" class="chip" onclick="$(\'ip_date\').value=today();ipSplitChg(\'init\')">আজকের তারিখ</button></div>'
+    + splitHtml + '<div class="field"><label for="ip_note">নোট (ঐচ্ছিক)</label><input id="ip_note" value="' + esc(p ? p.note : '') + '" placeholder="যেমন: আংশিক দিলাম"></div>'
     + '<button class="btn block" onclick="saveIpPay(\'' + (editId || '') + '\')">সেভ করুন</button>' + (p ? '<button class="btn danger block" onclick="arm(this,function(){delIpPay(\'' + editId + '\')})">মুছে ফেলুন</button>' : ''));
+  ipSplitChg('init');
 }
-function ipWkChg() { const w = (window._ipW || {})[val('ip_wk')]; if (!w) return; $('ip_date').value = w.pay; $('ip_amt').value = w.left || ''; }
+function ipWkChg() { const w = (window._ipW || {})[val('ip_wk')]; if (!w) return; $('ip_date').value = w.pay; $('ip_amt').value = w.left || ''; ipSplitChg('amt'); }
 function saveIpPay(editId) {
   const a = n(val('ip_amt')); if (a <= 0) { toast('টাকার অংক দিন'); return; }
-  const id = editId || uid(); S.ipPays[id] = { id, date: val('ip_date') || today(), amt: a, wk: val('ip_wk'), w: val('ip_w') || 'w_ipres', note: val('ip_note').trim(), createdAt: (S.ipPays[id] && S.ipPays[id].createdAt) || Date.now() };
-  save('ipPays', id); closeSheet(); toast('IP পেমেন্ট সেভ হয়েছে');
+  const id = editId || uid(); const old = S.ipPays[id];
+  let split;
+  if ($('ip_res')) {
+    const r = Math.min(Math.max(0, n(val('ip_res'))), a), o = a - r; const w2 = val('ip_w2') || 'w_passdoc';
+    split = [];
+    if (r > 0.001) split.push({ w: 'w_ipres', amt: r });
+    if (o > 0.001) { const same = split.find(x => x.w === w2); if (same) same.amt += o; else split.push({ w: w2, amt: o }); }
+  } else { split = [{ w: val('ip_w') || 'w_ipres', amt: a }]; }
+  S.ipPays[id] = { id, date: val('ip_date') || today(), amt: a, wk: val('ip_wk'), w: split[0].w, split, note: val('ip_note').trim(), createdAt: (old && old.createdAt) || Date.now() };
+  save('ipPays', id); closeSheet();
+  const rr = ipFromReserve(S.ipPays[id]);
+  toast('IP পেমেন্ট সেভ হয়েছে' + (rr > 0 ? ' · রিজার্ভ থেকে ' + money(rr) : ''));
 }
 function delIpPay(id) { remove('ipPays', id); closeSheet(); toast('মুছে গেছে'); }
 function ipHistory() {
   const ps = Object.values(S.ipPays).sort((a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 15);
   if (!ps.length) return '<div class="card sm mut" style="text-align:center">এখনও কোনো IP পেমেন্ট লেখা হয়নি। উপরে "IP এর টাকা দিলাম" চাপুন।</div>';
-  return '<div class="card"><b>IP পরিশোধের ইতিহাস</b>' + ps.map(p => '<div class="kv" style="align-items:center;cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)"><b>' + fd(p.date) + '</b><div class="mut sm">' + (p.wk ? fd(p.wk) + ' – ' + fd(wkEnd(p.wk)) + ' সপ্তাহ' : 'পুরনো হিসাব') + '</div>' + (p.note ? '<div class="mut sm">' + esc(p.note) + '</div>' : '') + '</span><span class="num good b">' + money(p.amt) + '</span></div>').join('') + '</div>';
+  return '<div class="card"><b>IP পরিশোধের ইতিহাস</b>' + ps.map(p => '<div class="kv" style="align-items:center;cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)"><b>' + fd(p.date) + '</b><div class="mut sm">' + (p.wk ? fd(p.wk) + ' – ' + fd(wkEnd(p.wk)) + ' সপ্তাহ' : 'পুরনো হিসাব') + '</div>' + ipSrcHtml(p) + (p.note ? '<div class="mut sm">' + esc(p.note) + '</div>' : '') + '</span><span class="num good b">' + money(p.amt) + '</span></div>').join('') + '</div>';
 }
 function chalW(f) {
   if (!isMultiW()) return '<input type="hidden" id="f_chw" value="' + esc(f.challanW || 'w_passdoc') + '">';
@@ -2389,6 +2425,7 @@ function vToday() {
     if (f.challan && f.challanDate === D && n(f.passFee) > 0) pChalToday.push({ f, c, amt: n(f.passFee) });
   });
   const ipPaidToday = Object.values(S.ipPays).filter(p => p && p.date === D);
+  const ipResToday = sum(ipPaidToday, p => ipFromReserve(p));
   const pBillToday = sum(pNew, x => x.c.bill) + sum(pRet, x => x.c.kept);
   const pInToday = sum(pPaysToday, x => x.amt);
   const pOutToday = sum(pChalToday, x => x.amt) + sum(pRefsToday, x => x.amt) + sum(ipPaidToday, p => n(p.amt));
@@ -2533,7 +2570,7 @@ function vToday() {
     + (pPaysToday.length ? '<div><b class="sm good">💵 আজ পাসপোর্টে কাস্টমার জমা দিয়েছে (' + pPaysToday.length + 'টি):</b>' + pPaysToday.map(x => '<div class="kv" style="cursor:pointer" onclick="fileForm(\'' + x.f.id + '\')"><span style="color:var(--ink)">' + serNo('files', x.f.id) + ' <b>' + esc(x.f.name) + '</b>' + (x.p.note ? ' · <span class="sm mut">📝 ' + esc(x.p.note) + '</span>' : '') + '</span><b class="num good">+' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
     + (pChalToday.length ? '<div><b class="sm bad">📤 আজ পাসপোর্ট চালান সম্পন্ন হয়েছে (' + pChalToday.length + 'টি):</b>' + pChalToday.map(x => '<div class="kv" style="cursor:pointer" onclick="fileForm(\'' + x.f.id + '\')"><span style="color:var(--ink)">' + serNo('files', x.f.id) + ' <b>' + esc(x.f.name) + '</b></span><b class="num bad">−' + money(x.amt) + '</b></div>').join('') + '</div>' : '')
     + (pJoma.length ? '<div class="sm mut">🛡️ আজ ফাইল joma হয়েছে: <b>' + pJoma.length + 'টি</b> (মোট IP জমেছে: <b>' + money(sum(pJoma, x => x.f.ipOn ? n(x.f.ipAmt) : 0)) + '</b>)</div>' : '')
-    + (ipPaidToday.length ? '<div><b class="sm bad">📤 আজ IP পরিশোধ করা হয়েছে:</b>' + ipPaidToday.map(p => '<div class="kv"><span style="color:var(--ink)">IP পেমেন্ট' + (p.note ? ' · ' + esc(p.note) : '') + '</span><b class="num bad">−' + money(p.amt) + '</b></div>').join('') + '</div>' : '')
+    + (ipPaidToday.length ? '<div><b class="sm bad">📤 আজ IP পরিশোধ করা হয়েছে:</b>' + ipPaidToday.map(p => '<div class="kv" style="cursor:pointer" onclick="ipPaySheet(null,\'' + p.id + '\')"><span style="color:var(--ink)">IP পেমেন্ট' + (p.wk ? ' · ' + fd(p.wk) + ' সপ্তাহের' : '') + (p.note ? ' · ' + esc(p.note) : '') + ipSrcHtml(p) + '</span><b class="num bad">−' + money(p.amt) + '</b></div>').join('') + (ipResToday > 0.001 ? '<div class="sm" style="color:var(--ink);margin-top:2px">🛡️ আজ IP রিজার্ভ বক্স থেকে মোট গেছে: <b class="bad">−' + money(ipResToday) + '</b></div>' : '') + '</div>' : '')
     + (!pNew.length && !pRet.length && !pPaysToday.length && !pChalToday.length && !ipPaidToday.length ? '<div class="sm mut">এই দিনে পাসপোর্ট সেকশনে কোনো নতুন ফাইল বা লেনদেন নেই।</div>' : '')
     + '</div>';
 
@@ -2935,7 +2972,10 @@ function allTxForDate(D) {
 
   // ২. পাসপোর্ট IP পেমেন্ট (−)
   Object.values(S.ipPays).forEach(p => {
-    if (p && p.date === D) push(p.w || 'w_ipres', 'out', p.amt, 'পাসপোর্ট IP পেমেন্ট (রিজার্ভ থেকে)', 'IP পরিশোধ', (p.wk ? fd(p.wk) + ' সপ্তাহের IP' : '') + (p.note ? ' · 📝 ' + p.note : ''), false, "ipPaySheet(null,'" + p.id + "')");
+    if (!p || p.date !== D) return;
+    const sp = ipSplits(p), mixed = sp.length > 1;
+    sp.forEach(x => push(x.w, 'out', x.amt, x.w === 'w_ipres' ? 'পাসপোর্ট IP পেমেন্ট (রিজার্ভ থেকে)' : 'পাসপোর্ট IP পেমেন্ট (অন্য ড্রয়ার থেকে)', 'IP পরিশোধ',
+      (mixed ? 'মোট IP দিয়েছেন ' + money(p.amt) + ' (রিজার্ভ থেকে ' + money(ipFromReserve(p)) + ') · ' : '') + (p.wk ? fd(p.wk) + ' সপ্তাহের IP' : '') + (p.note ? ' · 📝 ' + p.note : ''), false, "ipPaySheet(null,'" + p.id + "')"));
   });
 
   // ৩. ডকুমেন্ট কাজ: ক্লায়েন্ট জমা (+), ফেরত (−), কাজের খরচ (−)
@@ -3879,8 +3919,9 @@ function vDhisab() {
         const todayIpFiles = Object.values(S.files).filter(f => f && !f.ret && f.ipOn && (f.jomaDate === D || (!f.jomaDate && f.appDate === D)));
         const todayIpSum = todayIpFiles.reduce((s, f) => s + n(f.ipAmt), 0);
         const todayIpPaid = Object.values(S.ipPays).filter(p => p && p.date === D).reduce((s, p) => s + n(p.amt), 0);
+        const todayIpRes = Object.values(S.ipPays).filter(p => p && p.date === D).reduce((s, p) => s + ipFromReserve(p), 0);
         ipHint = '<div class="sm" style="margin-top:4px;padding:5px 8px;background:var(--soft);border-radius:7px;border:1px solid var(--acc);color:var(--ink)">'
-          + '🛡️ <b>IP রিজার্ভ তথ্য:</b> আজ ফাইলে IP জমেছে: <b class="good">' + money(todayIpSum) + '</b> (' + todayIpFiles.length + 'টি) · আজ IP দেওয়া হয়েছে: <b class="bad">' + money(todayIpPaid) + '</b> · মোট বকেয়া IP: <b>' + money(Eip.left) + '</b>'
+          + '🛡️ <b>IP রিজার্ভ তথ্য:</b> আজ ফাইলে IP জমেছে: <b class="good">' + money(todayIpSum) + '</b> (' + todayIpFiles.length + 'টি) · আজ রিজার্ভ থেকে IP দেওয়া হয়েছে: <b class="bad">' + money(todayIpRes) + '</b>' + (todayIpPaid - todayIpRes > 0.5 ? ' <span class="mut">(মোট IP দেওয়া ' + money(todayIpPaid) + ')</span>' : '') + ' · মোট বকেয়া IP: <b>' + money(Eip.left) + '</b>'
           + '<div class="row wrapr" style="gap:6px;margin-top:4px"><button type="button" class="btn sm good" style="padding:3px 9px;font-size:11.5px" onclick="ipReserveDepositSheet(\'' + D + '\')">📥 রিজার্ভে টাকা রাখলাম</button><button type="button" class="btn sm warnb" style="padding:3px 9px;font-size:11.5px" onclick="ipPaySheet()">📤 রিজার্ভ থেকে IP দিলাম</button></div>'
           + '</div>';
       }
